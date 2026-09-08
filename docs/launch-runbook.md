@@ -1,18 +1,18 @@
 # Hittumst launch runbook
 
-Updated 2026-09-07. Status: local improvement pass complete; public launch blocked.
+Updated 2026-09-08. Status: private source control, initial Linux CI and local clean/upgrade checks verified; public launch blocked.
 The current name is Hittumst. Existing package/database identifiers may still say RúmMál.
 
 ## Verification commands
 
-- `npm ci`
+- `npx --yes npm@11.19.1 ci`
 - `npm run check` — type checks, unit/regression tests, release-policy tests and real lint.
 - `npm run build --workspace @rummal/admin`
 - `npm run build:web --workspace @rummal/mobile -- --output-dir dist-launch`
 - `npm run db:test` — requires the local Supabase database to be running.
 - `npm run release:preflight` — fails until production configuration, native assets and documented launch evidence exist.
 
-The browser export uses this checkout's development configuration. Passing the export does not validate native OAuth, push notifications, camera permissions, signing, or a production database.
+Use explicit synthetic staging configuration for verification exports. Passing an export does not validate native OAuth, push notifications, camera permissions, signing or a production database.
 
 ## Backend migration rehearsal — release blocker
 
@@ -28,7 +28,7 @@ Read-only inspection found the hosted project has the initial public schema with
 8. Rehearse backup restore and incident rollback, retain sanitized results, and have the backend owner sign the evidence in `docs/launch-readiness.json`.
 9. Schedule the production migration only after staging passes and the intended project and backup are confirmed. Verify post-migration capabilities before enabling corresponding UI features.
 
-The local test attempt parsed the corrected CLI configuration but could not connect to 127.0.0.1:54322. Docker and a running local database were unavailable. Hosted SQL was read-only; no remote migration was made in this work.
+Docker and the local Supabase stack are now working. Clean installation and a synthetic upgrade under the hosted project's stricter grants both pass 371 database assertions and lint. The catalog comparison and preservation evidence are recorded in `docs/database-reconciliation.md`. Hosted SQL remains read-only; no hosted migration has been recorded or applied.
 
 ## Safety and privacy operations
 
@@ -38,7 +38,7 @@ Document report triage, evidence access, appeals, spam handling, child-safety es
 
 Complete a DPIA with the privacy owner before public rollout; map the Article 6 basis and applicable Article 9 condition for each sensitive processing purpose, consent withdrawal and vendor disclosures. Review sexual-orientation inference, location-cell ordering, minimum-density behavior and reidentification in small Icelandic communities. No advertising SDK or audience export should be enabled without this review.
 
-Public person-voting controls are hidden outside development. Server-side exposure and removal/deprecation of the ratings feature still require review. Hiding a UI is not backend enforcement.
+Permanent groups, voice, person ratings and explicit adult-event categories remain disabled by independent application and server controls. Verify direct API denial again after enabling Hittingar in staging.
 
 ## Physical device and release evidence
 
@@ -65,8 +65,8 @@ Track consented activation, reciprocal conversations, repeat participation, repo
 
 - Close hosted schema drift and prove database/storage authorization in staging.
 - Validate native login callbacks, push-token lifecycle, delivery and notification privacy.
-- Page older chat history and remove inbox N+1 queries before large-scale rollout.
+- Verify implemented inbox/history pagination, stable retries and reconnect delivery on physical devices and under the staging workload.
 - Add rate limits and abuse monitoring across every writable surface; verify moderation staffing/tooling.
-- Review the 15 remaining moderate dependency findings and replace or upgrade the affected Expo tooling paths without unsupported forced overrides.
+- Recheck the documented uuid build-tool findings before release; the navigation-decoder vulnerability is fixed and regression-tested. See `docs/dependency-security.md`.
 - Complete export/deletion lifecycle, operational telemetry, restore drills and incident runbooks.
 - Native icons have been generated from the established vector mark; validate them on devices, prepare splash/store assets and finish privacy/store metadata.

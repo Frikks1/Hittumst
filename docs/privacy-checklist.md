@@ -12,9 +12,9 @@
 - Treat private-album media, album access history, reactions, reports, and profile tags as sensitive
   profile data in the DPIA and retention schedule.
 - Add recurring series, RSVP visibility, self-reported attendance, occurrence-room messages and
-  memberships, peer conflicts, protected online credentials, social graphs, groups, profile-wall
-  content, anonymous rating records, and starred items to the DPIA, export, deletion, legal-hold,
-  and retention review.
+  memberships, peer conflicts and protected online credentials to the DPIA, export, deletion,
+  legal-hold and retention review. Include any existing data held by deferred social features in
+  account lifecycle review while keeping those features disabled.
 - Verify that pending album requests reveal no thumbnail or media metadata, accepted media links
   expire within 60 seconds, revocation takes effect immediately in the app, and browser users see
   the mandatory screenshot/privacy warning before viewing.
@@ -30,9 +30,9 @@
   does not restore participation.
 - Confirm Public-location publishing has a separate confirmation and Open + Protected clearly warns
   that an address already shown cannot be recalled from memory or screenshots.
-- Confirm adult-explicit meetups are absent from marker clusters, counts, search, lists, and
-  notifications until a member separately opts in; never infer this preference from sensitive-data
-  consent.
+- Confirm explicit adult-event categories cannot be created or published and remain absent from
+  clusters, counts, search, lists and notifications for every member. Historical opt-in values must
+  not bypass this release restriction.
 - Restrict MapTiler keys, use its EU endpoint, complete the Icelandic geocoding bake-off, and obtain
   written permission to persist selected coordinates and user-confirmed venue labels.
 - Confirm push previews are neutral and that deep links reauthorize against current server state.

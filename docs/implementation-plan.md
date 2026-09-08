@@ -1,23 +1,26 @@
 # Hittumst implementation and release plan
 
-Updated 2026-09-07. Scope: Iceland-first, 18+ LGBTQ+ dating/social, Icelandic and English, iOS and Android.
+Updated 8 September 2026. Launch scope is the existing Icelandic/English adults-only app with profiles, nearby discovery, messaging, private images and short videos, Hittingar social/dating meetups, blocking, reporting and account controls. Target: 1,000 accounts and 100 simultaneous users. Preserve current application identifiers and visual identity.
 
-1. Competitor/policy research and repository/hosted-schema audit — COMPLETE.
-2. Evidence synthesis and prioritized product direction — COMPLETE; see research report and launch runbook.
-3. Local safeguards and UX improvements — COMPLETE for this pass: environment validation, startup gates, paged discovery, recoverable chat delivery, inbox states, actual export and accessible bilingual preferences, plus native icon packaging from the existing vector mark.
-4. Local verification — type checks, regression tests, lint, admin build and demo browser export verified. Physical-device and database tests remain blocked/unverified.
-5. Public launch — BLOCKED pending backend reconciliation, safety/privacy operations, native validation, assets and store/advertising review.
+Permanent groups, voice, explicit adult-event categories and person ratings remain outside this release. Hittingar has independent release controls.
 
-This is a substantial local improvement pass, not enterprise or launch certification. No hosted schema mutation, store submission or paid campaign occurred.
+## Current checkpoint
 
-## Order of remaining work
+The private Frikks1/Hittumst repository is established and the initial Linux CI run passed. The app has paginated inbox/history, stable message retries and quotas, Hittingar occurrence rooms and confirmation deadlines, protected-access safeguards, staff MFA, a retryable deletion queue and bilingual public preparation pages. Clean installation and a synthetic upgrade under the hosted permission baseline pass 371 database assertions. Application checks include 128 tests and both website/mobile web builds.
 
-P0: Establish staging and reconcile migration history. Run database/security tests and two-user privacy tests. Verify deletion and storage lifecycle.
-P0: Confirm operator/domain/monitored contacts; publish legal, child-safety and web deletion pages; complete DPIA and moderation staffing.
-P0: Produce signed native candidates and validate authentication, permissions, notifications, accessibility and recovery on devices.
-P0: Resolve or document dependency findings; verify monitoring, backup restore and incident response.
-P1: Finish original store assets, age restrictions, metadata and review credentials; obtain relevant advertising eligibility.
-P1: Run an adult local pilot with stop conditions and measured product hypotheses.
-P2: Optimize inbox/history queries and add differentiated community features only after usage supports them.
+These results are implementation evidence. They do not prove hosted operation, native releases, recovery or capacity. The authoritative workstream ledger is `docs/implementation-status.md`; production gates remain closed in `docs/launch-readiness.json`.
 
-The detailed procedures and evidence requirements are in `docs/launch-runbook.md`. Release gating is recorded in `docs/launch-readiness.json`. Do not change a gate to verified without actual evidence and an accountable reviewer.
+## Remaining sequence
+
+1. Confirm the staging organization and current provider costs. Establish isolated staging, apply the reviewed migration sequence there and verify direct API, Storage and Realtime access.
+2. Complete authenticated media reservations/finalization, quarantine, durable processing, file/duration validation, metadata removal, thumbnails, 720p video, Frankfurt image/full-video moderation and appeals. Verify AWS content-use opt-out before media processing.
+3. Finish core private push delivery, native login callbacks, account export and actual deletion cleanup. Complete Hittingar map/list pagination, provider setup, Icelandic location benchmark, concurrency and full recurrence/notification workflows.
+4. Confirm publisher, domain, monitored support, moderation coverage and retention decisions. Finalize public policies, DPIA, processor disclosures, staff procedures and redacted monitoring.
+5. Implement and rehearse separate encrypted media backups, manifests, restore and post-backup deletion/revocation replay. Demonstrate the 24-hour data-loss and eight-hour recovery targets in staging.
+6. Run the 1,000-account/200-occurrence staging workload with 100 simultaneous users for 30 minutes. Verify the stated latency/error targets and block release on any authorization failure.
+7. Produce properly signed iOS/Android builds and test physical devices/tablets, accessibility, Icelandic labels, poor networks, permissions, media and background behavior. Finish store accounts, declarations, assets and reviewer access.
+8. Pilot with 25 adults, then 100 for 14 days. Complete applicable store testing requirements, confirm support coverage and prepare original advertising assets and campaign eligibility before acquisition.
+
+The approved planning allowance is approximately $130–150 monthly before overages, taxes, advertising, developer accounts and human operations. Provider usage alerts, map spending controls and AWS upload-volume estimates must be configured and verified before scaling.
+
+Completion requires verified core services and Hittingar, signed store releases, working support/moderation, proven backups/capacity and an advertising package ready for approved use. Do not mark a gate passed using code or unit tests alone.

@@ -19,7 +19,7 @@ The local database was reset to the original migration, then given the observed 
 
 All nine subsequent migrations applied successfully. The preservation check confirmed existing account IDs, selected profile fields, photo metadata, reports, conversations, message content, blocks and the boundary were unchanged. All 371 database assertions and database lint then passed under the stricter privileges. This is a schema/permission rehearsal using synthetic fixtures, not a restoration of real production data or proof of every hosted platform configuration.
 
-Linux CI runs both clean installation and this upgrade path. Reproduce the upgrade on a disposable local Supabase stack with:
+Linux CI runs both clean installation and this upgrade path. All four jobs in [run 34182753406](https://github.com/Frikks1/Hittumst/actions/runs/34182753406) passed, including the clean and upgrade database jobs. Reproduce the upgrade on a disposable local Supabase stack with:
 
 ```sh
 supabase db reset --local --version 20260831150105

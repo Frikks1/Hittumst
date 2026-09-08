@@ -2,8 +2,9 @@
 
 Hittumst is split into a native mobile client, a protected moderation console, shared domain
 contracts, and a Supabase backend. Clients use only a publishable key. Database policies and narrow
-RPCs are the authorization boundary; privileged moderation is authorized from
-`auth.users.raw_app_meta_data`.
+RPCs are the authorization boundary; privileged moderation requires current protected roles from
+`auth.users.raw_app_meta_data` and an MFA-authenticated session. Pending account deletion immediately
+restricts authorization even while an old access token remains valid.
 
 ## Location privacy
 
@@ -22,7 +23,8 @@ moderation state, the host's release policy, and the event access window on ever
 Map rendering uses MapLibre with MapTiler's EU endpoint. Basemap requests disclose the normal
 network information needed to serve a tile; address search is sent through a server-side proxy so
 member identifiers are not sent to the geocoder. Production keys must be restricted by bundle ID
-or domain. Public OpenStreetMap tiles and public Nominatim are not production dependencies.
+or domains where supported; confirm the provider's supported restrictions for each platform.
+Public OpenStreetMap tiles and public Nominatim are not production dependencies.
 
 ## Data classification
 
@@ -40,13 +42,14 @@ No application log should include coordinates, message bodies, access tokens, or
 member and event; only that member and the host can read it. Capacity counts active joined or
 approved rows and excludes the host. All state changes run through atomic RPCs, with the meetup row
 locked before capacity is checked. Changing Open/Private never silently rewrites earlier member
-decisions, and a block permanently revokes the affected participation.
+decisions. Host blocking permanently revokes affected participation; peer conflicts pause room
+access for host resolution without silently changing RSVP status.
 
 Protected locations may release immediately or 24 hours before the start. Eligible participants
 can retrieve them until `effective_end + 2 hours`; missing end times use start plus 12 hours. A later
 block, removal, or cancellation stops future retrieval but cannot erase a location already seen or
-captured. Adult-explicit events are filtered before discovery aggregation unless the member has
-separately opted in.
+captured. Explicit adult-event categories are rejected by the server and excluded from discovery
+for this release, irrespective of historical opt-in fields.
 
 `notifications` is the authoritative user-scoped inbox. A private idempotent outbox may deliver a
 generic Expo push; push payloads never contain coordinates, venues, instructions, explicit
@@ -72,18 +75,17 @@ updates, and HTTP(S) links, close posting two hours after effective end, and clo
 hours. A peer block pauses both room memberships without changing RSVP or protected-access state.
 
 Attendance confirmation is occurrence-specific. The lifecycle job requests confirmation 24 hours
-before start, releases unconfirmed capacity two hours before start, and creates a completion prompt
-two hours after effective end. Only a member's `attended` claim may appear in visible profile
-history; upcoming RSVP visibility uses global, event, and participant precedence, with explicit
-events requiring a separate per-event visible opt-in.
+before start and releases unconfirmed capacity at the confirmation deadline. Late admissions receive
+fifteen minutes, capped by effective end; normal admissions use start minus two hours. Authorization
+enforces the deadline without waiting for the job. A completion prompt follows two hours after
+effective end. Attendance claims default to private; visible history requires an explicit choice.
 
 ## Social layer
 
-Friendships, private starred lists, permanent groups, profile-wall comments, aggregate anonymous
-ratings, and emoji reactions are additive to nearby discovery. Starred items can be shared with
-everyone, friends, or nobody. Group roles and blocks are stored separately from messages. Voice
-session and participant records model authorization and presence only; a production real-time audio
-transport remains a separate, gated integration.
+The codebase includes earlier social-feature scaffolding. Permanent groups, voice and person ratings
+remain disabled independently of Hittingar. Their tables are not permission to expose those features.
+Occurrence rooms belong to meetups and do not enable permanent groups. Any future social expansion
+requires its own release controls, privacy review and verification.
 
 ## Private albums
 

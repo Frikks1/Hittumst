@@ -8,7 +8,7 @@ This ledger distinguishes implementation from deployed and observed release evid
 | Workstream | State | Required evidence |
 |---|---|---|
 | Existing Supabase project | Restored; ACTIVE_HEALTHY | Hosted baseline has seven public tables and no migration history; no hosted migrations applied |
-| Source control and CI | Private Frikks1/Hittumst repository and Linux CI verified | Initial source merged after all three CI jobs passed; clean/upgrade CI coverage is being expanded |
+| Source control and CI | Private Frikks1/Hittumst repository and Linux CI verified | Source and reconciliation changes merged after application, functions, clean-install and upgrade jobs passed |
 | Migration reconciliation | Clean install and synthetic upgrade verified | Hosted catalog compared; stricter grants reproduced locally; ten migrations, preservation checks, 371 assertions and lint pass. Isolated hosted staging and rollout remain |
 | Inbox and history pagination | Implemented and database-tested | 30 conversations / 50 messages, stable cursors, quotas, read clamping, send IDs; native reconnect checks remain |
 | Upload processing and moderation | Pending | Quarantine, real processing and failure tests |
