@@ -1,0 +1,77 @@
+{
+  "expo": {
+    "name": "Hittumst",
+    "slug": "rummal",
+    "scheme": "rummal",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "is.rummal.app",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Hittumst notar staðsetningu þína á meðan appið er opið til að staðfesta að þú sért á Íslandi og raða nálægum prófílum. Nákvæm staðsetning er ekki birt.",
+        "NSPhotoLibraryUsageDescription": "Veldu myndir fyrir prófílinn þinn eða samtöl.",
+        "NSCameraUsageDescription": "Taktu mynd fyrir prófílinn þinn eða samtöl.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "is.rummal.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#10201B",
+        "foregroundImage": "./assets/brand/adaptive-foreground.png",
+        "monochromeImage": "./assets/brand/monochrome.png"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Hittumst notar staðsetningu þína á meðan appið er opið til að staðfesta að þú sért á Íslandi."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Veldu myndir fyrir prófílinn þinn eða samtöl.",
+          "cameraPermission": "Taktu mynd fyrir prófílinn þinn eða samtöl."
+        }
+      ],
+      "expo-video",
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "hittingar",
+          "icon": "./assets/brand/notification.png"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "9e54a92a-8f66-458f-924d-7a66c468fb5a"
+      }
+    },
+    "owner": "vibesssa",
+    "icon": "./assets/brand/icon.png",
+    "web": {
+      "favicon": "./assets/brand/favicon.png"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_DEV_BYPASS_AUTH": "true",
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "true"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "false",
+        "EXPO_NO_DOTENV": "1"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "false",
+        "EXPO_NO_DOTENV": "1"
+      }
+    }
+  },
+  "cli": {
+    "appVersionSource": "remote"
+  }
+}

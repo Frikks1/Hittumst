@@ -1,0 +1,11 @@
+<svg width="620" height="140" viewBox="0 0 620 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Hittumst wordmark</title>
+  <g transform="translate(8 12) scale(.45)">
+    <rect width="256" height="256" rx="64" fill="#10201B"/>
+    <path d="M52 65C52 54.5066 60.5066 46 71 46H185C195.493 46 204 54.5066 204 65V153C204 163.493 195.493 172 185 172H129L85 210V172H71C60.5066 172 52 163.493 52 153V65Z" fill="#78DFC1"/>
+    <path d="M82 91C82 82.7157 88.7157 76 97 76H105C113.284 76 120 82.7157 120 91V99C120 107.284 113.284 114 105 114H98V137H77V99C77 96.2386 79.2386 94 82 94V91Z" fill="#10201B"/>
+    <path d="M141 91C141 82.7157 147.716 76 156 76H164C172.284 76 179 82.7157 179 91V99C179 107.284 172.284 114 164 114H157V137H136V99C136 96.2386 138.239 94 141 94V91Z" fill="#D75B3D"/>
+  </g>
+  <text x="145" y="92" fill="#10201B" font-family="Inter, Arial, sans-serif" font-size="66" font-weight="750" letter-spacing="-3">Hittumst</text>
+  <circle cx="590" cy="79" r="9" fill="#D75B3D"/>
+</svg>

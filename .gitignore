@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Expo / React Native
+.expo/
+dist/
+dist-ci/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Next.js
+.next/
+out/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# Test and build artifacts
+coverage/
+test-results/
+*.tsbuildinfo
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local review copies and generated native/build files
+tmp/
+output/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/app/build/
+
+apps/mobile/dist-launch/
+apps/mobile/dist-*/
+
+# Generated native projects, local artifacts and temporary review exports
+apps/mobile/android/
+apps/mobile/ios/
+artifacts/
+work/
+*.keystore
+*.apk
+*.aab
+*.ipa
+*.pem
