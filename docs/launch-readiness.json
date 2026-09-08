@@ -1,0 +1,31 @@
+{
+  "backend": {
+    "status": "blocked",
+    "reason": "Live project has 7 public tables; albums, meetups and groups are absent. Migration history is empty. Rehearse and reconcile schema before deployment."
+  },
+  "privacy": {
+    "status": "pending",
+    "reason": "Legal operator, DPIA, consent/retention review, public policies and verified deletion/export needed."
+  },
+  "moderation": {
+    "status": "pending",
+    "reason": "Named safety contact, child-safety standards, staffed queue and escalation drills needed."
+  },
+  "deviceTesting": {
+    "status": "pending",
+    "reason": "Physical iOS/Android, auth, reconnect, large text and assistive technology tests needed."
+  },
+  "storeMetadata": {
+    "status": "pending",
+    "reason": "Native icons are configured; device appearance, splash/store assets, support/privacy/deletion URLs, content rating and reviewer access remain unverified."
+  },
+  "recovery": {
+    "status": "pending",
+    "reason": "Monitoring, backup restoration, incident response and rollback rehearsal needed."
+  },
+  "hittingar": { "status": "pending", "reason": "Meetup and room database tests pass locally; maps, protected online access, recurrence, notifications, concurrency and physical-device evidence remain." },
+  "capacity": { "status": "pending", "reason": "1,000 synthetic accounts, 200 occurrences and the 100-user 30-minute staging workload have not been run." },
+  "media": { "status": "blocked", "reason": "Quarantine, durable normalization, full-video moderation, AWS opt-out verification and appeals remain incomplete." },
+  "accountLifecycle": { "status": "pending", "reason": "Deletion job and old-token restrictions pass local database tests; deployed worker cleanup, complete export and storage retry rehearsal remain." },
+  "operations": { "status": "blocked", "reason": "Publisher, domain, monitored support, moderation coverage, retention approval, provider budgets and verified recovery are required." }
+}
