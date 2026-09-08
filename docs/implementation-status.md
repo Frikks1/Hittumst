@@ -8,8 +8,8 @@ This ledger distinguishes implementation from deployed and observed release evid
 | Workstream | State | Required evidence |
 |---|---|---|
 | Existing Supabase project | Restored; ACTIVE_HEALTHY | Hosted baseline has seven public tables and no migration history; no hosted migrations applied |
-| Source control and CI | Local Git and private Frikks1/Hittumst repository established | Source upload and the first remote Linux CI run are being verified |
-| Migration reconciliation | Clean local installation verified | All ten migrations pass a clean reset; 371 assertions and database lint pass. Hosted baseline comparison and upgrade rehearsal remain |
+| Source control and CI | Private Frikks1/Hittumst repository and Linux CI verified | Initial source merged after all three CI jobs passed; clean/upgrade CI coverage is being expanded |
+| Migration reconciliation | Clean install and synthetic upgrade verified | Hosted catalog compared; stricter grants reproduced locally; ten migrations, preservation checks, 371 assertions and lint pass. Isolated hosted staging and rollout remain |
 | Inbox and history pagination | Implemented and database-tested | 30 conversations / 50 messages, stable cursors, quotas, read clamping, send IDs; native reconnect checks remain |
 | Upload processing and moderation | Pending | Quarantine, real processing and failure tests |
 | Hittingar and independent release gates | Database fixes, room delivery and confirmation deadlines implemented | 150 meetup, 19 room and 25 deadline assertions pass; maps, recurring workflows, concurrency, notifications and physical devices still need full verification |

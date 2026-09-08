@@ -7,3 +7,4 @@
 *.ttf binary
 *.woff binary
 *.woff2 binary
+*.patch whitespace=-space-before-tab

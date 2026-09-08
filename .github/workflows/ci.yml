@@ -45,13 +45,35 @@ jobs:
 
   database:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        installation: [clean, upgrade]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: matrix.installation == 'upgrade'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --global npm@11.19.1
+        if: matrix.installation == 'upgrade'
+      - run: npm ci
+        if: matrix.installation == 'upgrade'
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
       - run: supabase start
-      - run: supabase db reset
+      - run: supabase db reset --local
+        if: matrix.installation == 'clean'
+      - run: supabase db reset --local --version 20260831150105
+        if: matrix.installation == 'upgrade'
+      - run: node scripts/rehearse-baseline-upgrade.mjs prepare
+        if: matrix.installation == 'upgrade'
+      - run: supabase migration up --local
+        if: matrix.installation == 'upgrade'
+      - run: node scripts/rehearse-baseline-upgrade.mjs verify
+        if: matrix.installation == 'upgrade'
       - run: supabase test db
       - run: supabase db lint --local --schema public,private --level error --fail-on error

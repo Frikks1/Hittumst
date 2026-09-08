@@ -4,7 +4,7 @@ This is a development checkpoint, not launch approval. Production Hittingar rema
 
 ## Verified
 
-- The existing Supabase project `yztxwdhajgoqvtsqmcdw` was restored and observed ACTIVE_HEALTHY. Its inspected baseline has seven public tables and no recorded migrations. No hosted schema migration was applied.
+- The existing Supabase project `yztxwdhajgoqvtsqmcdw` was restored and observed ACTIVE_HEALTHY. Its inspected baseline has seven public tables and no recorded migrations. A read-only catalog comparison and local upgrade under the stricter hosted grants passed; see [database-reconciliation.md](database-reconciliation.md). No hosted schema migration was applied.
 - Supabase CLI 2.117.0 started a disposable local stack in WSL with PostgreSQL image 17.6.1.167. A clean reset applied all ten migrations, including room delivery, staff MFA and Hittingar confirmation deadlines.
 - Nine pgTAP files pass **371 assertions**: account deletion 17, albums 50, Hittingar 150, expansion 48, inbox/messages 20, room delivery 19, baseline security 34, staff MFA 8 and confirmation deadlines 25.
 - `npm run check` passes **128 checks**: admin 35, mobile 64, shared 22, release policy 4 and dependency security 3, plus TypeScript and lint.
@@ -31,9 +31,9 @@ The old pgTAP fixtures also used incorrect overloads and attempted direct reads 
 
 ## Evidence limitations and next gates
 
-The WSL connection was recovered. The final ten-migration reset, all nine pgTAP files and lint ran through the Linux Supabase CLI successfully. `scripts/db-local-test.mjs` remains a fallback against fixed localhost port 54322, refuses non-synthetic accounts, and rolls tests back. Local clean installation does not replace a hosted-baseline upgrade rehearsal.
+The WSL connection was recovered. The final ten-migration reset, all nine pgTAP files and lint ran through the Linux Supabase CLI successfully. The subsequent synthetic upgrade rehearsal preserved existing records and passed the same 371 assertions and lint under the observed hosted grants. `scripts/db-local-test.mjs` remains a fixed-localhost fallback. Hosted staging, real API/Storage/Realtime and restoration checks are still required.
 
-The private repository **Frikks1/Hittumst** exists and the connected account has push access. The first source upload and remote Linux CI run are being verified. Staging organization confirmation and hosted baseline reconciliation are pending.
+The private repository [Frikks1/Hittumst](https://github.com/Frikks1/Hittumst) contains the verified source. All 255 initial uploaded files matched local Git tree `cdedb6e1efe138f7e304683d5cd14ad0c387f09f`. [CI run 34182079978](https://github.com/Frikks1/Hittumst/actions/runs/34182079978) passed the application/build, database and Deno-function jobs; [PR 1](https://github.com/Frikks1/Hittumst/pull/1) was merged. The local pre-import history is preserved separately from GitHub's initial import history; do not force-push it over the hosted branch. Staging organization confirmation remains pending.
 
 The media moderation pipeline, provider setup, public operational contacts, complete export, actual deletion worker, backup restoration, 100-user staging load run, native device tests, store releases and pilot remain open. Local database success cannot establish these gates.
 
