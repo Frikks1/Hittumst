@@ -41,7 +41,7 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "db:test:local": "node scripts/db-local-test.mjs",
-    "test:release": "node --test scripts/release-policy.test.mjs scripts/release-evidence.test.mjs scripts/staging-operations.test.mjs scripts/rehearse-backup-restore.test.mjs scripts/staging-workload.test.mjs scripts/generated-types.test.mjs scripts/media-recovery.test.mjs",
+    "test:release": "node --test scripts/release-policy.test.mjs scripts/release-evidence.test.mjs scripts/staging-operations.test.mjs scripts/rehearse-backup-restore.test.mjs scripts/staging-workload.test.mjs scripts/generated-types.test.mjs scripts/media-recovery.test.mjs scripts/edge-functions.test.mjs",
     "test:services": "node scripts/test-service-workflows.mjs",
     "operations:staging": "node scripts/staging-operations.mjs",
     "recovery:local": "node scripts/rehearse-backup-restore.mjs",
