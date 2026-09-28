@@ -15,6 +15,7 @@ export async function createClient() {
     config.supabaseUrl,
     config.supabasePublishableKey,
     {
+      global: { fetch: (input, init) => fetch(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) }) },
       cookies: {
         getAll() {
           return cookieStore.getAll();

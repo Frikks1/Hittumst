@@ -1,3 +1,7 @@
+import { normalizeGender, diagnosisIdSchema } from '@rummal/shared';
+import type { MeetupSponsorship } from '@rummal/shared';
+import { queueMediaUpload } from './mediaUpload';
+import { parseNotificationTarget } from './notificationTarget';
 import { validMessageBody } from '@/utils/chatDelivery';
 import { decodeMessageCursor } from '@/utils/messagePagination';
 import * as Crypto from 'expo-crypto';
@@ -9,12 +13,16 @@ import type {
   LocationVerification, MeetupDraftInput, MeetupFilters, MeetupPlaceSearchOptions, MeetupReinstateStatus,
   MeetupReportInput, MeetupUpdateInput, OwnProfile, ProfileSocial, ProfileTag, ProfileTagCategory,
   PublicProfile, Page, PushPlatform, ReportCategory, SocialPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType,
-  FriendSummary, GroupMessage, GroupSummary, GroupVoiceSession, ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType
+  FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession, ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType
 } from '@/types/domain';
 import type { Database, Json } from '@/types/database';
 import type { OnboardingPayload, RummalApi } from './types';
 import { LiveMeetupService } from './meetupLive';
 import { supabase } from './supabase';
+import { entitlementSchema, financeCommandSchema, type FinanceCommand, type FinanceSnapshot, type TierId } from '@rummal/shared';
+import { runtimeEnv } from './env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sendFinancialCommand, pendingFinancialCommand, FinancialCommandRejected } from './financialOutbox';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type PhotoRow = Database['public']['Tables']['profile_photos']['Row'];
@@ -63,8 +71,9 @@ function fromDatabaseRegion(region: string | null | undefined): IcelandRegion {
   }
 }
 
-function safeDistance(value: string): DistanceBand {
-  return ['under1', '1to3', '3to10', '10to25', '25plus'].includes(value) ? value as DistanceBand : '25plus';
+function safeDistance(value: unknown): DistanceBand | null {
+  const values: Record<string, DistanceBand> = { '<1 km': 'under1', '1-3 km': '1to3', '3-10 km': '3to10', '10-30 km': '10to30', '30+ km': '30plus' };
+  return typeof value === 'string' ? values[value] ?? (['under1','1to3','3to10','10to25','25plus','10to30','30plus'].includes(value) ? value as DistanceBand : null) : null;
 }
 
 const socialPlatforms: SocialPlatform[] = ['instagram', 'tiktok', 'x', 'discord', 'steam', 'youtube', 'website'];
@@ -110,7 +119,8 @@ async function mapMessage(row: MessageRow): Promise<ChatMessage> {
   if (row.image_path) imageUrl = (await signedUrls('message-images', [row.image_path])).get(row.image_path);
   return {
     id: row.id, conversationId: row.conversation_id, senderId: row.sender_id,
-    body: row.deleted_at ? undefined : row.body ?? undefined,
+    body: row.deleted_at || row.media_status === 'pending' || row.media_status === 'rejected' ? undefined : row.body ?? undefined,
+    mediaStatus: row.media_status === 'pending' || row.media_status === 'approved' || row.media_status === 'rejected' ? row.media_status : undefined,
     imageUrl: row.deleted_at ? undefined : imageUrl,
     kind: (row.message_kind ?? (row.image_path ? 'image' : 'text')) as ChatMessage['kind'],
     albumShareId: row.album_share_id ?? undefined,
@@ -121,6 +131,37 @@ async function mapMessage(row: MessageRow): Promise<ChatMessage> {
 
 export class LiveRummalApi implements RummalApi {
   readonly isDemo = false;
+  private async commerceRequest(action: string, payload?: unknown): Promise<unknown> {
+    const { data } = await supabase!.auth.getSession();
+    if (!data.session || !runtimeEnv.websiteUrl) throw new Error('commerce_unavailable');
+    const response = await fetch(`${runtimeEnv.websiteUrl}/api/commerce`, { method: 'POST',
+      headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }) });
+    if (response.status === 422) {
+      const body = await response.json().catch(() => null);
+      throw new FinancialCommandRejected(typeof body?.code === 'string' ? body.code : 'financial_request_rejected');
+    }
+    if (!response.ok) throw new Error('commerce_unavailable');
+    return response.json();
+  }
+  async getEntitlement() {
+    const {data,error}=await supabase!.rpc('get_my_entitlement');
+    if(error)throw error;
+    return entitlementSchema.parse(data);
+  }
+  async setSandboxTier(tier: TierId) { return entitlementSchema.parse(await this.commerceRequest('sandbox_tier', { tier })); }
+  async getWallet() { return await this.commerceRequest('wallet') as FinanceSnapshot; }
+  async getPendingFinanceCommand() { return pendingFinancialCommand(AsyncStorage,await requireUserId()); }
+  async walletCommand(command: FinanceCommand) {
+    command=financeCommandSchema.parse(command);
+    if (['pool_info', 'checkin_code', 'quote', 'contribution_quote'].includes(command.action)) return this.commerceRequest('command', command);
+    const accountId=await requireUserId();
+    return sendFinancialCommand(AsyncStorage,accountId,command,pending=>this.commerceRequest('command',pending));
+  }
+  async listMediaUploads(albumId: string) { const response = await supabase!.rpc('list_media_uploads', { album_id: albumId }); if (response.error) throw response.error; return response.data as { id: string; status: string; createdAt: string; reason: string | null }[]; }
+  async appealMediaUpload(id: string) { const response = await supabase!.rpc('appeal_media_upload', { upload_id: id }); if (response.error) throw response.error; }
+  async getPremiumProfile(id: string) { const response = await supabase!.rpc('get_premium_profile', { profile_id: id }); if (response.error) throw response.error; return response.data as {effect:boolean;badge:boolean;months:number}; }
+  async setPremiumProfile(effect:boolean,badge:boolean) { const response = await supabase!.rpc('set_premium_profile', {effect,badge}); if(response.error)throw response.error; }
   private readonly meetupService = new LiveMeetupService();
 
   async discover(filters: DiscoveryFilters, cursor?: string | null) {
@@ -128,7 +169,7 @@ export class LiveRummalApi implements RummalApi {
     const { data, error } = await supabase!.rpc('discover_nearby', {
       filters: {
         min_age: filters.ageMin, max_age: filters.ageMax, identities: filters.identities,
-        intents: filters.intents, tags: filters.tags, online_only: filters.onlineOnly, limit: 40
+        intents: filters.intents, tags: filters.tags, activity: filters.activity, radiusKm: filters.radiusKm, genders: filters.genders, social: filters.social, diagnosisIds: filters.diagnosisIds, limit: 40
       },
       cursor: parsedCursor
     });
@@ -169,16 +210,27 @@ export class LiveRummalApi implements RummalApi {
       socials: mapSocials(row.socials),
       customTags: Array.isArray(row.custom_tags) ? row.custom_tags.filter((item): item is string => typeof item === 'string') : [],
       interests: Array.isArray(row.interests) ? row.interests.filter((item): item is string => typeof item === 'string') : [],
+      coverPhotoId: typeof row.cover_photo_id === 'string' ? row.cover_photo_id : null,
+      conversationPrompt: typeof row.conversation_prompt === 'string' ? row.conversation_prompt : '',
       bio: typeof row.bio === 'string' ? row.bio : '', region: fromDatabaseRegion(typeof row.region === 'string' ? row.region : null),
-      isOnline: row.is_online === true, distanceBand: safeDistance('25plus'),
+      isOnline: row.is_online === true, distanceBand: safeDistance(row.distance_band),
+      gender: normalizeGender(typeof row.gender === 'string' ? row.gender : null),
+      diagnosisIds: diagnosisIdSchema.array().catch([]).parse(row.diagnosis_ids),
       commentWallEnabled: row.comment_wall_enabled !== false,
-      anonymousRatingsEnabled: row.anonymous_ratings_enabled !== false,
+      anonymousRatingsEnabled: false,
       photos: photoEntries.map((entry, index) => {
         const path = typeof entry === 'string' ? entry : String((entry as Record<string, Json | undefined>).path);
         const rawTags = typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? (entry as Record<string, Json | undefined>).tags : [];
         return { id: typeof entry === 'object' && entry !== null && !Array.isArray(entry) && entry.id ? String(entry.id) : `${id}-${index}`, url: urls.get(path) ?? '', status: 'approved' as const, tags: Array.isArray(rawTags) ? rawTags.filter((tag): tag is string => typeof tag === 'string') : [] };
       })
     };
+  }
+
+  async hasCompletedOnboarding() {
+    const id = await requireUserId();
+    const { data, error } = await supabase!.from('profiles').select('onboarding_completed_at').eq('id', id).maybeSingle();
+    if (error) throw error;
+    return Boolean(data?.onboarding_completed_at);
   }
 
   async getOwnProfile(): Promise<OwnProfile> {
@@ -198,6 +250,8 @@ export class LiveRummalApi implements RummalApi {
     ]);
     return {
       id: row.id, displayName: row.display_name ?? 'Hittumst', age: row.date_of_birth ? calculateAge(row.date_of_birth) ?? 18 : 18,
+      gender: normalizeGender(row.gender),
+      friendsOfFriendsDiscovery: row.friends_of_friends_discovery === true,
       dateOfBirth: row.date_of_birth ?? undefined, pronouns: row.pronouns ?? undefined,
       identity: row.identity_tags as Identity[], lookingFor: row.looking_for as Intent[], bio: row.bio ?? '',
       tags: row.profile_tags,
@@ -206,13 +260,15 @@ export class LiveRummalApi implements RummalApi {
       socials: mapSocials(row.socials),
       customTags: row.custom_tags,
       interests: row.interests,
+      coverPhotoId: row.cover_photo_id ?? null,
+      conversationPrompt: row.conversation_prompt ?? '',
       region: fromDatabaseRegion(row.region), isOnline: false, isHidden: !row.is_profile_visible,
       showOnline: row.is_online_status_visible, locationSharing: row.is_location_sharing_enabled,
       adultProfileTagsEnabled: (row as unknown as Record<string, unknown>).adult_profile_tags_enabled === true,
       starredProfileAudience: ((row as unknown as Record<string, unknown>).starred_profile_audience as OwnProfile['starredProfileAudience']) ?? 'no_one',
       meetupRsvpVisibilityDefault: ((row as unknown as Record<string, unknown>).meetup_rsvp_visibility_default as OwnProfile['meetupRsvpVisibilityDefault']) ?? 'private',
       commentWallEnabled: (row as unknown as Record<string, unknown>).comment_wall_enabled !== false,
-      anonymousRatingsEnabled: (row as unknown as Record<string, unknown>).anonymous_ratings_enabled !== false,
+      anonymousRatingsEnabled: false,
       photos: photosResult.data.map((item) => ({
         id: item.id, url: paths.get(item.storage_path) ?? '', status: item.approval_status as OwnProfile['photos'][number]['status'], tags: item.tags
       }))
@@ -231,6 +287,8 @@ export class LiveRummalApi implements RummalApi {
     if (profile.customTags !== undefined) update.custom_tags = profile.customTags;
     if (profile.socials !== undefined) update.socials = profile.socials as unknown as Json;
     if (profile.interests !== undefined) update.interests = profile.interests;
+    if (profile.coverPhotoId !== undefined) update.cover_photo_id = profile.coverPhotoId;
+    if (profile.conversationPrompt !== undefined) update.conversation_prompt = profile.conversationPrompt.trim().slice(0, 160);
     if (profile.bio !== undefined) update.bio = profile.bio;
     if (profile.region !== undefined) update.region = toDatabaseRegion(profile.region);
     if (profile.isHidden !== undefined) update.is_profile_visible = !profile.isHidden;
@@ -238,7 +296,8 @@ export class LiveRummalApi implements RummalApi {
     if (profile.starredProfileAudience !== undefined) (update as unknown as Record<string, unknown>).starred_profile_audience = profile.starredProfileAudience;
     if (profile.meetupRsvpVisibilityDefault !== undefined) (update as unknown as Record<string, unknown>).meetup_rsvp_visibility_default = profile.meetupRsvpVisibilityDefault;
     if (profile.commentWallEnabled !== undefined) (update as unknown as Record<string, unknown>).comment_wall_enabled = profile.commentWallEnabled;
-    if (profile.anonymousRatingsEnabled !== undefined) (update as unknown as Record<string, unknown>).anonymous_ratings_enabled = profile.anonymousRatingsEnabled;
+    if (profile.gender !== undefined) update.gender = profile.gender;
+    if (profile.friendsOfFriendsDiscovery !== undefined) update.friends_of_friends_discovery = profile.friendsOfFriendsDiscovery;
     if (profile.showOnline !== undefined) update.is_online_status_visible = profile.showOnline;
     if (profile.locationSharing !== undefined) update.is_location_sharing_enabled = profile.locationSharing;
     const { error } = await supabase!.from('profiles').update(update).eq('id', id);
@@ -253,32 +312,12 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async uploadProfilePhoto(uri: string, mimeType = 'image/jpeg') {
-    const id = await requireUserId();
-    const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-    const path = `${id}/${Crypto.randomUUID()}.${extension}`;
-    const payload = await (await fetch(uri)).arrayBuffer();
-    const uploaded = await supabase!.storage.from('profile-photos').upload(path, payload, { contentType: mimeType, upsert: false });
-    if (uploaded.error) throw uploaded.error;
-    const { count, error: countError } = await supabase!.from('profile_photos').select('id', { count: 'exact', head: true }).eq('profile_id', id);
-    if (countError) throw countError;
-    const inserted = await supabase!.from('profile_photos').insert({ profile_id: id, storage_path: path, position: Math.min((count ?? 0) + 1, 6), approval_status: 'pending' });
-    if (inserted.error) throw inserted.error;
+    await queueMediaUpload('profile_photo', await requireUserId(), uri, 'image', mimeType);
   }
 
   async uploadProfileVideo(uri: string, mimeType = 'video/mp4', durationMs = 0, tags: string[] = []) {
-    const id = await requireUserId();
     if (durationMs < 1 || durationMs > 10_000) throw new Error('profile_video_limit');
-    const payload = await (await fetch(uri)).arrayBuffer();
-    if (payload.byteLength > 50 * 1024 * 1024) throw new Error('profile_video_size_limit');
-    const videoId = Crypto.randomUUID();
-    const extension = mimeType === 'video/quicktime' ? 'mov' : mimeType === 'video/webm' ? 'webm' : 'mp4';
-    const path = `${id}/${videoId}.${extension}`;
-    const uploaded = await supabase!.storage.from('profile-videos').upload(path, payload, { contentType: mimeType, upsert: false });
-    if (uploaded.error) throw uploaded.error;
-    const { count, error: countError } = await supabase!.from('profile_videos').select('id', { count: 'exact', head: true }).eq('profile_id', id);
-    if (countError) throw countError;
-    const inserted = await supabase!.from('profile_videos').insert({ id: videoId, profile_id: id, storage_path: path, position: Math.min((count ?? 0) + 1, 3), tags, byte_size: payload.byteLength, duration_ms: durationMs });
-    if (inserted.error) { await supabase!.storage.from('profile-videos').remove([path]); throw inserted.error; }
+    await queueMediaUpload('profile_video', await requireUserId(), uri, 'video', mimeType, tags);
   }
   async updateProfileMediaTags(mediaType: 'photo' | 'video', mediaId: string, tags: string[]) {
     const table = mediaType === 'photo' ? 'profile_photos' : 'profile_videos';
@@ -287,23 +326,17 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async listFeedback(targetType: ContentTargetType, targetId: string) {
-    const [ratingsResult, commentsResult, reactionsResult] = await Promise.all([
-      supabase!.rpc('list_content_rating_counts', { target_type: targetType, target_id: targetId }),
+    const [commentsResult, reactionsResult] = await Promise.all([
       supabase!.from('content_comments').select('*, profiles:author_id(display_name)').eq('target_type', targetType).eq('target_id', targetId).eq('status', 'visible').order('created_at', { ascending: false }),
       supabase!.rpc('list_content_reactions', { target_type: targetType, target_id: targetId }),
     ]);
-    if (ratingsResult.error) throw ratingsResult.error;
     if (commentsResult.error) throw commentsResult.error;
     if (reactionsResult.error) throw reactionsResult.error;
     const reactionRows = (reactionsResult.data ?? []) as unknown as Array<{ emoji: ContentReaction['emoji']; count: number; reacted?: boolean; reacted_by_viewer?: boolean }>;
     return {
-      ratings: (() => {
-        const counts = (ratingsResult as unknown as { data?: { likes?: number; dislikes?: number } }).data ?? {};
-        return [
-          ...Array.from({ length: Number(counts.likes ?? 0) }, (_, index) => ({ id: `like-${index}`, targetType, targetId, userId: 'anonymous', value: 1 as const, isAnonymous: true })),
-          ...Array.from({ length: Number(counts.dislikes ?? 0) }, (_, index) => ({ id: `dislike-${index}`, targetType, targetId, userId: 'anonymous', value: -1 as const, isAnonymous: true })),
-        ];
-      })(),
+      // Person ratings are outside release scope; their RPC is deliberately revoked.
+      // Comments and emoji reactions remain independently available.
+      ratings: [],
       comments: commentsResult.data.map((row) => {
         const item = row as unknown as { profiles?: { display_name?: string }; is_anonymous?: boolean };
         const anonymous = item.is_anonymous === true;
@@ -365,7 +398,7 @@ export class LiveRummalApi implements RummalApi {
     if (error) throw error;
     return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({
       id: String(row.id), name: String(row.name), bio: String(row.bio ?? ''), avatarUrl: typeof (row.avatarUrl ?? row.avatar_url) === 'string' ? String(row.avatarUrl ?? row.avatar_url) : undefined,
-      role: row.role as GroupSummary['role'], memberCount: Number(row.memberCount ?? row.member_count), isVoiceActive: (row.isVoiceActive ?? row.is_voice_active) === true, updatedAt: String(row.updatedAt ?? row.updated_at),
+      role: row.role as GroupSummary['role'], membershipStatus: row.membershipStatus as GroupSummary['membershipStatus'], status: row.status as GroupSummary['status'], memberCount: Number(row.memberCount ?? row.member_count), isVoiceActive: (row.isVoiceActive ?? row.is_voice_active) === true, updatedAt: String(row.updatedAt ?? row.updated_at),
     }));
   }
   async createGroup(name: string, bio = '') {
@@ -378,11 +411,30 @@ export class LiveRummalApi implements RummalApi {
     if (error) throw error;
     return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), groupId: String(row.groupId ?? row.group_id), senderId: String(row.senderId ?? row.sender_id), senderName: String(row.senderName ?? row.sender_name), body: String(row.body), createdAt: String(row.createdAt ?? row.created_at) }));
   }
-  async sendGroupMessage(groupId: string, body: string): Promise<GroupMessage> {
-    const { data, error } = await supabase!.rpc('send_group_message', { group_id: groupId, body });
+  async listGroupMessagePage(groupId: string, cursor?: string | null): Promise<Page<GroupMessage>> {
+    const { data, error } = await supabase!.rpc('list_group_messages_page' as never, { group_id: groupId, cursor: cursor ? JSON.parse(cursor) : null, page_size: 50 } as never);
     if (error) throw error;
-    const messages = await this.listGroupMessages(groupId);
-    return messages.find((item) => item.id === String((data as unknown as { id?: string } | null)?.id ?? data)) ?? messages[0]!;
+    const page = data as unknown as { items: GroupMessage[]; nextCursor: Json | null };
+    return { items: page.items, nextCursor: page.nextCursor ? JSON.stringify(page.nextCursor) : null };
+  }
+  async listGroupMembers(groupId: string): Promise<GroupMember[]> {
+    const { data, error } = await supabase!.rpc('list_group_members' as never, { group_id: groupId } as never);
+    if (error) throw error;
+    return data as unknown as GroupMember[];
+  }
+  async inviteGroupMember(groupId: string, profileId: string) {
+    const { error } = await supabase!.rpc('add_group_member', { group_id: groupId, profile_id: profileId, role: 'member' });
+    if (error) throw error;
+  }
+  async groupAction(groupId: string, action: GroupAction, input: Record<string, string> = {}) {
+    const { error } = await supabase!.rpc('group_action' as never, { group_id: groupId, action, input } as never);
+    if (error) throw error;
+  }
+  async sendGroupMessage(groupId: string, body: string, clientMessageId = Crypto.randomUUID()): Promise<GroupMessage> {
+    if (!validMessageBody(body)) throw new Error('invalid_message_body');
+    const { data, error } = await supabase!.rpc('send_group_message_receipt' as never, { group_id: groupId, body: body.trim(), client_message_id: clientMessageId } as never);
+    if (error) throw error;
+    return data as unknown as GroupMessage;
   }
   async startGroupVoice(groupId: string): Promise<GroupVoiceSession> {
     const { data, error } = await supabase!.rpc('start_group_voice', { group_id: groupId });
@@ -391,13 +443,8 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async completeOnboarding(payload: OnboardingPayload) {
-    const { error } = await supabase!.rpc('complete_onboarding', {
-      date_of_birth: payload.dateOfBirth, display_name: payload.displayName, pronouns: payload.pronouns,
-      identity_tags: payload.identity, looking_for: payload.lookingFor, bio: payload.bio, region: toDatabaseRegion(payload.region),
-      videos: payload.videos ?? [], socials: payload.socials ?? [], interests: payload.interests ?? [],
-      terms_version: '2026-08-31', guidelines_version: '2026-08-31',
-      privacy_version: '2026-08-31',
-      sensitive_data_consent: payload.sensitiveDataConsent, locale: payload.locale
+    const { error } = await supabase!.rpc('complete_onboarding_profile', {
+      input: { ...payload, region: toDatabaseRegion(payload.region), videos: payload.videos ?? [], socials: payload.socials ?? [], interests: payload.interests ?? [] },
     });
     if (error) throw error;
   }
@@ -461,17 +508,11 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async sendImage(conversationId: string, uri: string, mimeType = 'image/jpeg') {
-    const senderId = await requireUserId();
-    const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-    const path = `${senderId}/${conversationId}/${Crypto.randomUUID()}.${extension}`;
-    const payload = await (await fetch(uri)).arrayBuffer();
-    const uploaded = await supabase!.storage.from('message-images').upload(path, payload, { contentType: mimeType, upsert: false });
-    if (uploaded.error) throw uploaded.error;
-    const { data, error } = await supabase!.from('messages').insert({ conversation_id: conversationId, sender_id: senderId, image_path: path }).select().single();
-    if (error) throw error;
-    return mapMessage(data);
+    const id = await queueMediaUpload('message', conversationId, uri, 'image', mimeType);
+    const result = await supabase!.from('messages').select('*').eq('id', id).single();
+    if (result.error) throw result.error;
+    return mapMessage(result.data);
   }
-
   async listMyAlbums(): Promise<Album[]> {
     const ownerId = await requireUserId();
     const [albumsResult, itemsResult] = await Promise.all([
@@ -526,23 +567,13 @@ export class LiveRummalApi implements RummalApi {
     const path = `${ownerId}/${albumId}/${itemId}.${extension}`;
     const payload = await (await fetch(uploadUri)).arrayBuffer();
     if (payload.byteLength > 30 * 1024 * 1024) throw new Error('invalid_album_media');
-    const uploaded = await supabase!.storage.from('album-media').upload(path, payload, { contentType: mimeType, upsert: false, cacheControl: '0' });
+    const reservation = await supabase!.rpc('reserve_album_upload', { album_id: albumId, media_type: input.mediaType });
+    if (reservation.error) throw reservation.error;
+    const reserved = reservation.data as { id: string; path: string; bucket: string };
+    const uploaded = await supabase!.storage.from('media-quarantine').upload(reserved.path, payload, { contentType: mimeType, upsert: false, cacheControl: '0' });
     if (uploaded.error) throw uploaded.error;
-    const positions = await supabase!.from('album_items').select('position').eq('album_id', albumId).is('deleted_at', null);
-    if (positions.error) throw positions.error;
-    const usedPositions = new Set(positions.data.map((item) => item.position));
-    const position = Array.from({ length: 11 }, (_, index) => index + 1).find((candidate) => !usedPositions.has(candidate));
-    if (!position) throw new Error('album_item_limit_reached');
-    const { data, error } = await supabase!.from('album_items').insert({
-      id: itemId, album_id: albumId, owner_id: ownerId, storage_path: path, media_type: input.mediaType,
-      position, byte_size: payload.byteLength, duration_ms: input.durationMs ?? null,
-    }).select().single();
-    if (error) {
-      await supabase!.storage.from('album-media').remove([path]);
-      throw error;
-    }
-    const url = (await signedUrls('album-media', [path], 60)).get(path);
-    return { id: data.id, albumId, mediaType: input.mediaType, position: data.position, storagePath: path, url, byteSize: data.byte_size, durationMs: data.duration_ms ?? undefined };
+    // Uninspected bytes never receive a viewing URL. The worker publishes the verified item.
+    return { id: reserved.id, albumId, mediaType: input.mediaType, position: 0, storagePath: path, byteSize: payload.byteLength, durationMs: input.durationMs };
   }
 
   async deleteAlbumItem(itemId: string) {
@@ -593,17 +624,33 @@ export class LiveRummalApi implements RummalApi {
     const { error } = await supabase!.rpc('respond_to_album_share', { share_id: shareId, accept }); if (error) throw error;
   }
   async revokeAlbumShare(shareId: string) { const { error } = await supabase!.rpc('revoke_album_share', { share_id: shareId }); if (error) throw error; }
-  async openAlbumShare(shareId: string): Promise<AlbumViewer> {
-    const { data, error } = await supabase!.rpc('open_album_share', { share_id: shareId });
-    if (error || !data || typeof data !== 'object' || Array.isArray(data)) throw error ?? new Error('album_share_locked');
+  async openAlbumShare(shareId: string, requestId = Crypto.randomUUID()): Promise<AlbumViewer> {
+    const { data, error } = await supabase!.rpc('open_album_share_once', { share_id: shareId, request_id: requestId });
+    if (error) throw error;
+    return this.albumViewer(shareId, data);
+  }
+  async refreshAlbumShare(shareId: string, sessionId?: string): Promise<AlbumViewer> {
+    const { data, error } = await supabase!.rpc('refresh_album_share', { share_id: shareId, session_id: sessionId ?? undefined });
+    if (error) throw error;
+    return this.albumViewer(shareId, data);
+  }
+  private async albumViewer(shareId: string, data: Json): Promise<AlbumViewer> {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('album_share_locked');
     const value = data as Record<string, Json | undefined>;
     const rawItems = Array.isArray(value.items) ? value.items.filter((item): item is Record<string, Json | undefined> => typeof item === 'object' && item !== null && !Array.isArray(item)) : [];
     const paths = rawItems.map((item) => String(item.storage_path));
-    const urls = await signedUrls('album-media', paths, 60);
+    const accessExpiresAt = typeof value.access_expires_at === 'string' ? value.access_expires_at : undefined;
+    const remaining = accessExpiresAt ? Math.floor((Date.parse(accessExpiresAt) - Date.now()) / 1000) : 60;
+    if (!Number.isFinite(remaining) || remaining < 1) throw new Error('album_share_locked');
+    const seconds = Math.min(60, remaining);
+    const urlsExpireAt = new Date(Date.now() + seconds * 1000).toISOString();
+    const urls = await signedUrls('album-media', paths, seconds);
+    if (paths.some(path => !urls.has(path))) throw new Error('album_media_unavailable');
     return {
       shareId, albumId: String(value.album_id), name: String(value.name), contentVersion: Number(value.content_version),
       sessionId: value.session_id ? String(value.session_id) : undefined,
       sessionExpiresAt: value.session_expires_at ? String(value.session_expires_at) : undefined,
+      accessExpiresAt, urlsExpireAt,
       items: rawItems.map((item) => ({
         id: String(item.id), albumId: String(value.album_id), mediaType: String(item.media_type) as AlbumItem['mediaType'],
         position: Number(item.position), storagePath: String(item.storage_path), url: urls.get(String(item.storage_path)),
@@ -616,15 +663,13 @@ export class LiveRummalApi implements RummalApi {
   async sendAlbumReply(shareId: string, itemId: string, body: string) { const { error } = await supabase!.rpc('send_album_reply', { share_id: shareId, item_id: itemId, body }); if (error) throw error; }
 
   subscribeMessages(conversationId: string, callback: (message: ChatMessage) => void, onReconnect?: () => void) {
-    let subscribed = false;
     let active = true;
     const channel = supabase!.channel(`conversation:${conversationId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
         void mapMessage(payload.new as MessageRow).then(message => { if (active) callback(message); }).catch(() => { if (active) onReconnect?.(); });
       }).subscribe(status => {
         if (status === 'SUBSCRIBED') {
-          if (subscribed && active) onReconnect?.();
-          subscribed = true;
+          if (active) onReconnect?.();
         }
       });
     return () => { active = false; void supabase!.removeChannel(channel); };
@@ -661,9 +706,23 @@ export class LiveRummalApi implements RummalApi {
   async listMyMeetups() { return this.meetupService.listMine(); }
   async listMeetupRequests(id: string) { return this.meetupService.listRequests(id); }
   async listMeetupParticipants(id: string) { return this.meetupService.listParticipants(id); }
+  async getMeetupGender(id: string) { return this.meetupService.getGender(id); }
+  async setMeetupGender(id: string, gender: string | null) { return this.meetupService.setGender(id, gender); }
+  async listMeetupMedia(id: string) { return this.meetupService.listMedia(id); }
+  async uploadMeetupMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string) { return this.meetupService.uploadMedia(id, uri, kind, mimeType); }
+  async removeMeetupMedia(id: string, mediaId: string) { return this.meetupService.removeMedia(id, mediaId); }
+  async listMeetupReviews(id: string) { return this.meetupService.listReviews(id); }
+  async saveMeetupReview(id: string, rating: number, body: string) { return this.meetupService.saveReview(id, rating, body); }
+  async deleteMeetupReview(id: string) { return this.meetupService.deleteReview(id); }
+  async listMeetupInvitations(id: string) { return this.meetupService.listInvitations(id); }
+  async setMeetupInvitation(id: string, profileId: string, invited: boolean) { return this.meetupService.setInvitation(id, profileId, invited); }
   async createMeetupDraft(input: MeetupDraftInput) { return this.meetupService.createDraft(input); }
   async updateMeetup(id: string, input: MeetupUpdateInput) { return this.meetupService.update(id, input); }
-  async publishMeetup(id: string) { return this.meetupService.publish(id); }
+  async publishMeetup(id: string, sponsorship?: MeetupSponsorship) {
+    if (!sponsorship) return this.meetupService.publish(id);
+    await this.walletCommand({ action: 'publish_sponsored', meetupId: id, ...sponsorship });
+    return this.meetupService.get(id);
+  }
   async deleteMeetupDraft(id: string) { return this.meetupService.deleteDraft(id); }
   async joinMeetup(id: string) { return this.meetupService.join(id); }
   async requestMeetupAccess(id: string) { return this.meetupService.requestAccess(id); }
@@ -692,6 +751,11 @@ export class LiveRummalApi implements RummalApi {
   async sendMeetupRoomMessage(roomId: string, body: string, clientMessageId?: string) { return this.meetupService.sendRoomMessage(roomId, body, clientMessageId); }
   subscribeMeetupRoom(roomId: string, onInvalidate: () => void) { return this.meetupService.subscribeRoom(roomId, onInvalidate); }
   async setAdultContentPreference(enabled: boolean) { return this.meetupService.setAdultPreference(enabled); }
+  async resolveNotification(notificationId: string) {
+    const { data, error } = await supabase!.rpc('resolve_notification', { notification_id: notificationId });
+    if (error) throw error;
+    return parseNotificationTarget(data);
+  }
   async listMeetupNotifications(limit?: number) { return this.meetupService.listNotifications(limit); }
   async markMeetupNotificationRead(notificationId: string) {
     return this.meetupService.markNotificationRead(notificationId);

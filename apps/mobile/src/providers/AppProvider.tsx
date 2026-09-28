@@ -1,3 +1,5 @@
+import { diagnosisReleaseEnabled } from '@/services/diagnoses';
+import { clearSubscriptionIdentity } from '@/services/subscriptions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { type Href, useRouter } from 'expo-router';
@@ -17,6 +19,7 @@ import { hittingarFeature } from '@/features/hittingar/config';
 import {
   unregisterStoredHittingarPushToken,
   useGlobalHittingarNotifications,
+  usePushTokenRegistration,
 } from '@/features/hittingar/notifications';
 import {
   clearHittingarLocalDraft,
@@ -24,13 +27,21 @@ import {
 } from '@/features/hittingar/draftStorage';
 import { api, authService, runtimeEnv } from '@/services';
 import type { AuthUser } from '@/services/types';
-import { defaultFilters, type DiscoveryFilters } from '@/types/domain';
+import {
+  defaultMeetupFilters,
+  type MeetupFilters,
+  defaultFilters,
+  type DiscoveryFilters,
+  type NotificationTarget,
+} from '@/types/domain';
 import { resolveTheme, type AppTheme, type ThemeMode } from '@/theme/tokens';
 import { evaluateLocationFix, isLocationFresh } from '@/utils/location';
+import { useAppearance } from './AppearanceProvider';
+import { useSavedFilters } from './useSavedFilters';
 
 const PREFERENCES_KEY = 'rummal.preferences.v1';
 
-type AppContextValue = {
+type AppContextValue = ReturnType<typeof useSavedFilters> & {
   ready: boolean;
   startupError: boolean;
   retryStartup: () => void;
@@ -42,12 +53,15 @@ type AppContextValue = {
   theme: AppTheme;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
   demo: boolean;
+  discoveryEnabled: boolean;
   locationVerifiedAt: string | null;
   locationAllowed: boolean;
   verifyLocation: () => Promise<
     'verified' | 'denied' | 'poor_accuracy' | 'outside_iceland' | 'error'
   >;
   clearLocation: () => void;
+  meetupFilters: MeetupFilters;
+  setMeetupFilters: (filters: MeetupFilters) => void;
   discoveryFilters: DiscoveryFilters;
   setDiscoveryFilters: (filters: DiscoveryFilters) => void;
   signOut: () => Promise<void>;
@@ -56,18 +70,33 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { appearance, ready: appearanceReady } = useAppearance();
   const systemScheme = useColorScheme() as ColorSchemeName;
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [startupError, setStartupError] = useState(false);
   const [startupAttempt, setStartupAttempt] = useState(0);
-  const retryStartup = useCallback(() => setStartupAttempt(value => value + 1), []);
+  const retryStartup = useCallback(() => setStartupAttempt((value) => value + 1), []);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const savedDiscovery = useSavedFilters(user?.id);
   const [locale, setLocaleState] = useState<Locale>('is');
   const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
   const [locationVerifiedAt, setLocationVerifiedAt] = useState<string | null>(null);
   const [clock, setClock] = useState(Date.now());
+  const [meetupFilters, setMeetupFilters] = useState<MeetupFilters>(defaultMeetupFilters);
   const [discoveryFilters, setDiscoveryFilters] = useState<DiscoveryFilters>(defaultFilters);
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(api.isDemo);
+  useEffect(() => {
+    let active = true;
+    setDiscoveryEnabled(api.isDemo);
+    if (user && !api.isDemo)
+      void diagnosisReleaseEnabled().then((enabled) => {
+        if (active) setDiscoveryEnabled(enabled);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
   const previousUserId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -76,29 +105,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let authRevision = 0;
     setReady(false);
     setStartupError(false);
-    if (runtimeEnv.configurationIssue) { setReady(true); return; }
-    const unsubscribe = authService.onAuthStateChange(current => {
+    if (runtimeEnv.configurationIssue) {
+      setReady(true);
+      return;
+    }
+    const unsubscribe = authService.onAuthStateChange((current) => {
       authRevision++;
       if (mounted) setUser(current);
     });
     const revisionAtStart = authRevision;
-    void Promise.allSettled([AsyncStorage.getItem(PREFERENCES_KEY), authService.getUser()])
-      .then(([stored, auth]) => {
+    void Promise.allSettled([AsyncStorage.getItem(PREFERENCES_KEY), authService.getUser()]).then(
+      ([stored, auth]) => {
         if (!mounted) return;
         if (stored.status === 'fulfilled' && stored.value) {
           try {
             const preferences = JSON.parse(stored.value);
-            if (preferences.locale === 'is' || preferences.locale === 'en') setLocaleState(preferences.locale);
-            if (['system', 'dark', 'light'].includes(preferences.themeMode)) setThemeModeState(preferences.themeMode);
-          } catch { /* Corrupt preferences must not prevent account restoration. */ }
+            if (preferences.locale === 'is' || preferences.locale === 'en')
+              setLocaleState(preferences.locale);
+            if (['system', 'dark', 'light'].includes(preferences.themeMode))
+              setThemeModeState(preferences.themeMode);
+          } catch {
+            /* Corrupt preferences must not prevent account restoration. */
+          }
         }
         if (revisionAtStart === authRevision) {
           if (auth.status === 'fulfilled') setUser(auth.value);
           else setStartupError(true);
         }
         setReady(true);
-      });
-    return () => { mounted = false; unsubscribe(); };
+      },
+    );
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, [startupAttempt]);
 
   useEffect(() => {
@@ -108,23 +148,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       previousUserId.current = nextId;
       setLocationVerifiedAt(null);
       setDiscoveryFilters({ ...defaultFilters });
+      setMeetupFilters({ ...defaultMeetupFilters });
       if (oldId) void clearHittingarLocalDraft(oldId).catch(() => undefined);
     }
   }, [user?.id]);
 
   useEffect(() => {
     if (!ready) return;
-    void AsyncStorage.setItem(
-      PREFERENCES_KEY,
-      JSON.stringify({ locale, themeMode }),
-    ).catch(() => undefined);
+    void AsyncStorage.setItem(PREFERENCES_KEY, JSON.stringify({ locale, themeMode })).catch(
+      () => undefined,
+    );
   }, [locale, ready, themeMode]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         setClock(Date.now());
-        if (isLocationFresh(locationVerifiedAt)) void api.touchPresence().catch(() => undefined);
       }
     });
     const timer = setInterval(() => setClock(Date.now()), 30_000);
@@ -134,6 +173,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [locationVerifiedAt]);
 
+  useEffect(() => {
+    if (!user) return;
+    let last = 0;
+    let pending = false;
+    const touch = () => {
+      if (AppState.currentState !== 'active' || pending || Date.now() - last < 60_000) return;
+      last = Date.now();
+      pending = true;
+      void api
+        .touchPresence()
+        .catch(() => undefined)
+        .finally(() => {
+          pending = false;
+        });
+    };
+    touch();
+    const timer = setInterval(touch, 60_000);
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active') touch();
+    });
+    return () => {
+      clearInterval(timer);
+      listener.remove();
+    };
+  }, [user?.id]);
+
   const setLocale = useCallback((value: Locale) => setLocaleState(value), []);
   const setThemeMode = useCallback((value: ThemeMode) => setThemeModeState(value), []);
   const clearLocation = useCallback(() => setLocationVerifiedAt(null), []);
@@ -142,15 +207,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [router],
   );
 
+  const navigateToNotificationTarget = useCallback(
+    (target: NotificationTarget) => {
+      if (target.type === 'meetup') {
+        if (hittingarFeature.enabled) navigateToMeetupFromPush(target.id);
+      } else if (target.type === 'conversation') {
+        const query = target.profileId
+          ? '?profileId=' +
+            encodeURIComponent(target.profileId) +
+            '&name=' +
+            encodeURIComponent(target.displayName ?? '')
+          : '';
+        router.push(('/chat/' + target.id + query) as Href);
+      } else router.push(('/groups/' + target.id) as Href);
+    },
+    [router, navigateToMeetupFromPush],
+  );
+
+  usePushTokenRegistration({ api, locale, accountId: user?.id ?? null });
   useGlobalHittingarNotifications({
     api,
-    enabled: hittingarFeature.enabled && Boolean(user),
+    enabled: Boolean(user) && !api.isDemo,
+    accountId: user?.id ?? null,
+    navigateToTarget: navigateToNotificationTarget,
     navigateToMeetup: navigateToMeetupFromPush,
   });
 
   const verifyLocation = useCallback(async () => {
     if (runtimeEnv.bypassAuth) {
-      setLocationVerifiedAt(new Date().toISOString());
+      const now = Date.now();
+      setClock(now);
+      setLocationVerifiedAt(new Date(now).toISOString());
       return 'verified' as const;
     }
     try {
@@ -180,7 +267,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         capturedAt: capturedAt.toISOString(),
       });
       if (result.verified) {
-        setLocationVerifiedAt(result.verifiedAt ?? new Date().toISOString());
+        // Evaluate this fresh receipt immediately, not against the previous 30-second tick.
+        const now = Date.now();
+        setClock(now);
+        setLocationVerifiedAt(result.verifiedAt ?? new Date(now).toISOString());
         return 'verified' as const;
       }
       if (result.reason === 'outside_iceland') return 'outside_iceland' as const;
@@ -191,6 +281,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    if (!user && ready) void clearSubscriptionIdentity().catch(() => undefined);
+  }, [user, ready]);
+
   const signOut = useCallback(async () => {
     await unregisterStoredHittingarPushToken(api).catch(() => undefined);
     if (user?.id) await clearHittingarLocalDraft(user.id).catch(() => undefined);
@@ -200,9 +294,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     router.replace('/');
   }, [router, user?.id]);
 
-  const theme = useMemo(() => resolveTheme(themeMode, systemScheme), [systemScheme, themeMode]);
+  const theme = useMemo(
+    () => resolveTheme(themeMode, systemScheme, appearance),
+    [systemScheme, themeMode, appearance],
+  );
   const locationAllowed = useMemo(
-    () => Boolean(user) && (runtimeEnv.bypassAuth || isLocationFresh(locationVerifiedAt, new Date(clock))),
+    () =>
+      Boolean(user) &&
+      (runtimeEnv.bypassAuth || isLocationFresh(locationVerifiedAt, new Date(clock))),
     [clock, locationVerifiedAt, user],
   );
   const t = useCallback(
@@ -211,9 +310,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [locale],
   );
 
+  // Hide old account selections synchronously, before effects clear the backing state.
+  const accountFiltersReady = previousUserId.current === (user?.id ?? null);
   const value = useMemo<AppContextValue>(
     () => ({
-      ready,
+      ...savedDiscovery,
+      ready: ready && appearanceReady,
       startupError,
       retryStartup,
       user,
@@ -224,21 +326,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       theme,
       t,
       demo: api.isDemo,
+      discoveryEnabled,
       locationVerifiedAt,
       locationAllowed,
       verifyLocation,
       clearLocation,
-      discoveryFilters,
+      meetupFilters: accountFiltersReady ? meetupFilters : defaultMeetupFilters,
+      setMeetupFilters,
+      discoveryFilters: accountFiltersReady ? discoveryFilters : defaultFilters,
       setDiscoveryFilters,
       signOut,
     }),
     [
       clearLocation,
       discoveryFilters,
+      discoveryEnabled,
+      meetupFilters,
+      accountFiltersReady,
       locale,
       locationAllowed,
       locationVerifiedAt,
       ready,
+      appearanceReady,
+      savedDiscovery,
       startupError,
       retryStartup,
       setLocale,

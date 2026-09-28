@@ -1,0 +1,7 @@
+{"dsn":"https://private-secret.invalid/1","trace":{"user_segment":"private"}}
+{"type":"event","length":444}
+{"event_id":"11111111111111111111111111111111","platform":"cocoa","release":"private-release","environment":"private-env","user":{"id":"private-member","email":"private@example.test"},"breadcrumbs":[{"message":"private-message"}],"contexts":{"location":{"latitude":64.2}},"exception":{"values":[{"type":"private@email.test","value":"private-message","stacktrace":{"frames":[{"function":"private-name","vars":{"secret":"private-password"}}]}}]}}
+{"type":"attachment","filename":"private-native.dmp","length":22}
+PRIVATE_RAW_DUMP_SECRET
+{"type":"replay_recording","length":2}
+{}

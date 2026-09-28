@@ -1,0 +1,65 @@
+{
+  "status": "draft-unapproved",
+  "releaseVersion": "0.1.0",
+  "productName": "Hittumst",
+  "ios": {
+    "bundleIdentifier": "is.rummal.app",
+    "buildNumber": null,
+    "appStoreConnectId": null
+  },
+  "android": {
+    "package": "is.rummal.app",
+    "versionCode": null,
+    "playListing": null
+  },
+  "locales": {
+    "is": {
+      "name": "Hittumst",
+      "subtitle": "Tengsl og hittingar á Íslandi",
+      "shortDescription": "Kynnstu fólki, spjallaðu og finndu hittinga á Íslandi.",
+      "description": "Hittumst er félags- og stefnumótaapp fyrir LGBTQ+ samfélagið á Íslandi. Búðu til prófíl, kynnstu fólki, spjallaðu og taktu þátt í hittingum. Stilltu sýnileika þinn, stjórnaðu aðgangi að einkaalbúmum og notaðu verkfæri til að tilkynna eða loka á aðra. Aðeins fyrir fullorðna, 18 ára og eldri."
+    },
+    "en": {
+      "name": "Hittumst",
+      "subtitle": "Connections across Iceland",
+      "shortDescription": "Meet people, chat and find gatherings across Iceland.",
+      "description": "Hittumst is a social and dating app for the LGBTQ+ community in Iceland. Create your profile, meet people, chat and take part in gatherings. Control your visibility and private album access, with reporting and blocking tools available in the app. For adults aged 18 and over."
+    }
+  },
+  "publicDestinations": {
+    "website": null,
+    "privacyPolicy": null,
+    "support": null,
+    "accountDeletion": null,
+    "terms": null,
+    "childSafetyStandards": null
+  },
+  "publisher": {
+    "legalName": null,
+    "postalAddress": null,
+    "supportEmail": null,
+    "childSafetyContact": null
+  },
+  "assets": {
+    "appIcon": "apps/mobile/assets/brand/icon.png",
+    "androidAdaptiveForeground": "apps/mobile/assets/brand/adaptive-foreground.png",
+    "screenshots": [],
+    "featureGraphic": "apps/mobile/assets/store/feature-graphic-is.png",
+    "previewVideo": null
+  },
+  "review": {
+    "reviewerInstructions": "docs/store-submission-guide.md (complete and verify restricted credentials/location review arrangement before submission)",
+    "credentials": "Supply through restricted store review fields, never this file.",
+    "physicalDeviceEvidence": [],
+    "privacyLabelsApproved": false,
+    "dataSafetyApproved": false,
+    "ageRatingQuestionnaireApproved": false,
+    "legalCopyApproved": false,
+    "providerApprovals": []
+  },
+  "notes": [
+    "Descriptions are drafts. Reconcile them with final deployed functionality and owner approval before use.",
+    "Commerce, subscriptions and voice remain intended launch scope with incomplete provider/deployment evidence; do not remove these features from the readiness gate merely because the draft description does not enumerate them.",
+    "No store publication or submission is authorized by this file."
+  ]
+}

@@ -1,5 +1,7 @@
 # Hittumst
 
+Launch setup: [owner guide](docs/START-HERE.md), [current feature inventory](docs/feature-verification.md), [Android test APK instructions](docs/android-testing.md). Full launch remains gated on connected services, approved money providers, signed-device verification and store review.
+
 Hittumst is an original Iceland-first, 18+ LGBTQ+ social and dating MVP for iOS and Android. It
 combines an efficient nearby-profile grid with coarse location privacy, direct messaging, bilingual
 UX, privacy-aware Hittingar, private shareable albums, an official profile-tag catalog, and a staffed

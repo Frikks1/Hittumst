@@ -1,6 +1,12 @@
+import { discoveryEn, discoveryIs } from './discovery';
+import { meetupProfileIs, meetupProfileEn } from './meetupProfile';
 export type Locale = 'is' | 'en';
 
+import { customizationIs, customizationEn } from './customization';
 const is = {
+  ...discoveryIs,
+  ...customizationIs,
+  ...meetupProfileIs,
 "chat.older": "Eldri skilaboð",
 "startup.unavailable": "Hittumst er ekki tiltækt núna",
 "startup.help": "Ekki tókst að ræsa þjónustuna. Reyndu aftur eða opnaðu appið síðar.",
@@ -225,7 +231,7 @@ const is = {
   'filters.identity': 'Sjálfsmynd',
   'filters.intent': 'Leita að',
   'filters.onlineOnly': 'Aðeins fólk á netinu',
-  'filters.tags': 'My Tags',
+  'filters.tags': 'Áhugamál',
   'filters.searchTags': 'Leita í tögum',
   'filters.clear': 'Hreinsa síur',
   'filters.apply': 'Sýna niðurstöður',
@@ -251,7 +257,7 @@ const is = {
   'albums.addMedia': 'Bæta við mynd eða myndbandi',
   'albums.photos': 'myndir',
   'albums.video': 'myndband',
-  'albums.mediaHint': 'Allt að 10 myndir og eitt myndband, að hámarki 15 sekúndur og 30 MB.',
+  'albums.mediaHint': 'Fjöldi mynda og myndskeiða fer eftir áskrift. Hvert myndskeið má vera allt að 15 sekúndur og hver skrá 30 MiB.',
   'albums.consent': 'Ég staðfesti að allir á efninu séu 18 ára eða eldri, hafi veitt samþykki og að ég hafi rétt til að deila því.',
   'albums.delete': 'Eyða albúmi',
   'albums.deleteConfirm': 'Eyða þessu albúmi og afturkalla allar deilingar?',
@@ -570,7 +576,7 @@ const is = {
   'hittingar.create.reviewSafetyTitle': 'Farðu yfir öryggisatriðin',
   'hittingar.create.reviewSafetyBody': 'Ekki birta heimilisfang eða viðkvæmar leiðbeiningar opinberlega nema það sé nauðsynlegt og öruggt.',
   'hittingar.create.attestationTitle': 'Staðfesting á reglum',
-  'hittingar.create.attestationBody': 'Ég staðfesti að hittingurinn bjóði ekki greiðslur eða kynlífsþjónustu, mansal, misnotkun eða ólöglegt athæfi.',
+  'hittingar.create.attestationBody': 'Ég staðfesti að hittingurinn bjóði ekki kynlífsþjónustu, greiðslur fyrir kynlíf, mansal, misnotkun eða ólöglegt athæfi. Styrkir og umbun fara í gegnum styrktarkerfi appsins.',
   'hittingar.create.saveDraft': 'Vista drög',
   'hittingar.create.saveChanges': 'Vista breytingar',
   'hittingar.create.publish': 'Birta hitting',
@@ -641,7 +647,7 @@ const is = {
   'hittingar.notifications.kind.request_received': 'Ný aðgangsbeiðni',
   'hittingar.notifications.kind.access_requested': 'Ný aðgangsbeiðni',
   'hittingar.notifications.kind.joined': 'Nýr þátttakandi',
-  'hittingar.notifications.kind.request_approved': 'Aðgangsbeiðni var samþykkt',
+  'hittingar.notifications.kind.request_approved': 'Umsókn var samþykkt',
   'hittingar.notifications.kind.request_declined': 'Aðgangsbeiðni var afgreidd',
   'hittingar.notifications.kind.material_change': 'Upplýsingar um hitting breyttust',
   'hittingar.notifications.kind.cancelled': 'Hittingi var aflýst',
@@ -649,6 +655,10 @@ const is = {
   'hittingar.notifications.kind.participant_reinstated': 'Þátttökustaða breyttist',
   'hittingar.notifications.kind.moderated': 'Staða hittingar breyttist',
   'hittingar.notifications.kind.starts_soon': 'Hittingur hefst bráðlega',
+  'hittingar.notifications.kind.community_published': 'Nýr hittingur í eftirfylgni',
+  'hittingar.notifications.kind.community_announcement': 'Ný tilkynning gestgjafa',
+  'hittingar.notifications.kind.community_waitlist_offer': 'Þér býðst pláss á hitting',
+  'hittingar.notifications.kind.community_reminder': 'Áminning um hitting',
   'hittingar.report.event': 'Tilkynna hitting',
   'hittingar.report.host': 'Tilkynna gestgjafa',
   'hittingar.report.title': 'Tilkynna hitting',
@@ -669,7 +679,7 @@ const is = {
   'hittingar.report.reason.illegal_activity': 'Ólöglegt athæfi',
   'hittingar.report.reason.compensated_sexual_services': 'Kynlífsþjónusta gegn greiðslu',
   'hittingar.report.reason.other': 'Annað',
-  'demo.banner': 'Sýnishamur · gögn vistast aðeins tímabundið',
+  'demo.banner': 'Sýnihamur · prufugögn og tilbúnar fjárhæðir',
   'errors.network': 'Athugaðu nettenginguna og reyndu aftur.',
   'errors.permission': 'Þú hefur ekki heimild til að framkvæma þetta.',
   'errors.required': 'Þennan reit þarf að fylla út.'
@@ -678,6 +688,9 @@ const is = {
 export type TranslationKey = keyof typeof is;
 
 const en: Record<TranslationKey, string> = {
+  ...discoveryEn,
+  ...customizationEn,
+  ...meetupProfileEn,
 "chat.older": "Older messages",
 "startup.unavailable": "Hittumst is unavailable right now",
 "startup.help": "We couldn't start the service. Try again or reopen the app later.",
@@ -819,7 +832,7 @@ const en: Record<TranslationKey, string> = {
   'albums.empty': 'No private albums yet',
   'albums.emptyBody': 'Create an album for media you only want to share with specific people.',
   'albums.manage': 'Manage albums', 'albums.addMedia': 'Add photo or video', 'albums.photos': 'photos',
-  'albums.video': 'video', 'albums.mediaHint': 'Up to 10 photos and one video, no longer than 15 seconds or 30 MB.',
+  'albums.video': 'video', 'albums.mediaHint': 'Photo and video allowances depend on your tier. Each video may be up to 15 seconds and each file up to 30 MiB.',
   'albums.consent': 'I confirm everyone shown is 18 or older, consented, and I have the right to share this media.',
   'albums.delete': 'Delete album', 'albums.deleteConfirm': 'Delete this album and revoke every share?',
   'albums.select': 'Choose albums to share',
@@ -1053,7 +1066,7 @@ const en: Record<TranslationKey, string> = {
   'hittingar.create.reviewSafetyTitle': 'Review the safety choices',
   'hittingar.create.reviewSafetyBody': 'Do not expose a home address or sensitive arrival details publicly unless necessary and safe.',
   'hittingar.create.attestationTitle': 'Rules attestation',
-  'hittingar.create.attestationBody': 'I confirm this meetup does not offer payment or sexual services, trafficking, exploitation, or illegal activity.',
+  'hittingar.create.attestationBody': 'I confirm this meetup does not offer sexual services, payments for sexual activity, trafficking, exploitation or illegal conduct. Sponsorships and rewards use the app’s sponsorship system.',
   'hittingar.create.saveDraft': 'Save draft', 'hittingar.create.saveChanges': 'Save changes',
   'hittingar.create.publish': 'Publish meetup',
   'hittingar.create.saveStatus.saving': 'Saving…', 'hittingar.create.saveStatus.saved': 'Saved',
@@ -1112,7 +1125,7 @@ const en: Record<TranslationKey, string> = {
   'hittingar.notifications.kind.request_received': 'New access request',
   'hittingar.notifications.kind.access_requested': 'New access request',
   'hittingar.notifications.kind.joined': 'New participant',
-  'hittingar.notifications.kind.request_approved': 'Access request approved',
+  'hittingar.notifications.kind.request_approved': 'Application approved',
   'hittingar.notifications.kind.request_declined': 'Access request updated',
   'hittingar.notifications.kind.material_change': 'Meetup details changed',
   'hittingar.notifications.kind.cancelled': 'Meetup cancelled',
@@ -1120,6 +1133,10 @@ const en: Record<TranslationKey, string> = {
   'hittingar.notifications.kind.participant_reinstated': 'Participation status changed',
   'hittingar.notifications.kind.moderated': 'Meetup status changed',
   'hittingar.notifications.kind.starts_soon': 'Meetup starts soon',
+  'hittingar.notifications.kind.community_published': 'New gathering from your follows',
+  'hittingar.notifications.kind.community_announcement': 'New host announcement',
+  'hittingar.notifications.kind.community_waitlist_offer': 'A place is available for you',
+  'hittingar.notifications.kind.community_reminder': 'Event reminder',
   'hittingar.report.event': 'Report meetup', 'hittingar.report.host': 'Report host',
   'hittingar.report.title': 'Report meetup',
   'hittingar.report.body': 'Reports are confidential. Choose a reason and add only necessary context.',
@@ -1138,7 +1155,7 @@ const en: Record<TranslationKey, string> = {
   'hittingar.report.reason.illegal_activity': 'Illegal activity',
   'hittingar.report.reason.compensated_sexual_services': 'Compensated sexual services',
   'hittingar.report.reason.other': 'Other',
-  'demo.banner': 'Demo mode · data is only saved temporarily', 'errors.network': 'Check your connection and try again.',
+  'demo.banner': 'Demo mode · test data and simulated money', 'errors.network': 'Check your connection and try again.',
   'errors.permission': 'You do not have permission to do that.', 'errors.required': 'This field is required.'
 };
 

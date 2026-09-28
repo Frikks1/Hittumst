@@ -1,20 +1,23 @@
+import { Text } from '@/components/Typography';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Brand, Button, DemoBanner, Screen, textStyles } from '@/components/ui';
+import { StyleSheet, View } from 'react-native';
+import { Brand, Button, Screen, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { authService, runtimeEnv } from '@/services';
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { theme, t, demo, ready } = useApp();
+  const { theme, t, demo, ready, user } = useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
 
   if (ready && runtimeEnv.bypassAuth) {
     return <Redirect href="/(tabs)/discover" />;
   }
+
+  if (ready && user && !demo) return <Redirect href="/onboarding" />;
 
   const social = async (provider: 'apple' | 'google') => {
     if (busy) return;
@@ -26,7 +29,6 @@ export default function WelcomeScreen() {
 
   return (
     <Screen>
-      <DemoBanner />
       <LinearGradient colors={[theme.colors.canvas, theme.colors.accentSoft]} style={styles.page}>
         <View style={styles.top}>
           <Brand />

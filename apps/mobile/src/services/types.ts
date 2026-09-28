@@ -1,10 +1,11 @@
+import type { Entitlement, FinanceCommand, FinanceSnapshot, TierId, MeetupMedia, MeetupReview, MeetupSponsorship } from '@rummal/shared';
 import type {
-  Album, AlbumAccessMode, AlbumItem, AlbumShare, AlbumViewer, ChatMessage, ConversationSummary,
+  Album, AlbumAccessMode, AlbumItem, AlbumShare, AlbumViewer, ChatMessage, ConversationSummary, NotificationTarget,
   DiscoveryFilters, GeoCoordinate, LocationVerification, MeetupDetail, MeetupDraftInput,
   MeetupFilters, MeetupNotification, MeetupParticipation, MeetupPlaceResult,
   MeetupPlaceSearchOptions, MeetupProfileHistoryPage, MeetupProfileUpcomingPage, MeetupReinstateStatus, MeetupReportInput, MeetupRequest, MeetupRosterEntry, MeetupRoomMessage,
   MeetupPublicRosterPage, MeetupRoomMessagePage, MeetupRoomSummary, MeetupRsvpVisibility, MeetupSummary, MeetupUpdateInput,
-  ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupMessage, GroupSummary, GroupVoiceSession,
+  ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
   OwnProfile, Page, ProfileAudience, ProfileReactionEmoji, ProfileSocial, ProfileTag, PublicProfile, PushPlatform, ReportCategory,
   StarredItem, StarredTargetType
 } from '@/types/domain';
@@ -26,6 +27,8 @@ export type OnboardingPayload = {
   region: OwnProfile['region'];
   sensitiveDataConsent: boolean;
   privacyAccepted: boolean;
+  termsAccepted: boolean;
+  guidelinesAccepted: boolean;
   locale: 'is' | 'en';
 };
 
@@ -40,8 +43,18 @@ export interface AuthService {
 
 export interface RummalApi {
   readonly isDemo: boolean;
+  getEntitlement(): Promise<Entitlement>;
+  setSandboxTier(tier: TierId): Promise<Entitlement>;
+  getWallet(): Promise<FinanceSnapshot>;
+  getPendingFinanceCommand(): Promise<FinanceCommand | null>;
+  walletCommand(command: FinanceCommand): Promise<unknown>;
+  listMediaUploads(albumId: string): Promise<{ id: string; status: string; createdAt: string; reason: string | null }[]>;
+  appealMediaUpload(id: string): Promise<void>;
+  getPremiumProfile(id: string): Promise<{effect: boolean; badge: boolean; months: number}>;
+  setPremiumProfile(effect: boolean, badge: boolean): Promise<void>;
   discover(filters: DiscoveryFilters, cursor?: string | null): Promise<Page<PublicProfile>>;
   getProfile(id: string): Promise<PublicProfile>;
+  hasCompletedOnboarding(): Promise<boolean>;
   getOwnProfile(): Promise<OwnProfile>;
   updateProfile(profile: Partial<OwnProfile>): Promise<OwnProfile>;
   listProfileTags(): Promise<ProfileTag[]>;
@@ -59,7 +72,11 @@ export interface RummalApi {
   listGroups(): Promise<GroupSummary[]>;
   createGroup(name: string, bio?: string): Promise<string>;
   listGroupMessages(groupId: string): Promise<GroupMessage[]>;
-  sendGroupMessage(groupId: string, body: string): Promise<GroupMessage>;
+  listGroupMessagePage(groupId: string, cursor?: string | null): Promise<Page<GroupMessage>>;
+  listGroupMembers(groupId: string): Promise<GroupMember[]>;
+  inviteGroupMember(groupId: string, profileId: string): Promise<void>;
+  groupAction(groupId: string, action: GroupAction, input?: Record<string, string>): Promise<void>;
+  sendGroupMessage(groupId: string, body: string, clientMessageId?: string): Promise<GroupMessage>;
   startGroupVoice(groupId: string): Promise<GroupVoiceSession>;
   completeOnboarding(payload: OnboardingPayload): Promise<void>;
   updateLocation(fix: { latitude: number; longitude: number; accuracy: number; capturedAt: string }): Promise<LocationVerification>;
@@ -80,7 +97,8 @@ export interface RummalApi {
   shareAlbums(profileIds: string | string[], albumIds: string[], accessMode: AlbumAccessMode): Promise<{ conversationId?: string; conversationIds: Record<string, string>; shareIds: string[] }>;
   respondToAlbumShare(shareId: string, accept: boolean): Promise<void>;
   revokeAlbumShare(shareId: string): Promise<void>;
-  openAlbumShare(shareId: string): Promise<AlbumViewer>;
+  openAlbumShare(shareId: string, requestId?: string): Promise<AlbumViewer>;
+  refreshAlbumShare(shareId: string, sessionId?: string): Promise<AlbumViewer>;
   closeAlbumViewer(sessionId: string): Promise<void>;
   toggleAlbumReaction(shareId: string, itemId: string): Promise<boolean>;
   sendAlbumReply(shareId: string, itemId: string, body: string): Promise<void>;
@@ -95,9 +113,19 @@ export interface RummalApi {
   listMyMeetups(): Promise<MeetupDetail[]>;
   listMeetupRequests(id: string): Promise<MeetupRequest[]>;
   listMeetupParticipants(id: string): Promise<MeetupRosterEntry[]>;
+  getMeetupGender(id: string): Promise<string | null>;
+  setMeetupGender(id: string, gender: string | null): Promise<void>;
+  listMeetupMedia(id: string): Promise<MeetupMedia[]>;
+  uploadMeetupMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string): Promise<string | void>;
+  removeMeetupMedia(id: string, mediaId: string): Promise<void>;
+  listMeetupReviews(id: string): Promise<MeetupReview[]>;
+  saveMeetupReview(id: string, rating: number, body: string): Promise<void>;
+  deleteMeetupReview(id: string): Promise<void>;
+  listMeetupInvitations(id: string): Promise<string[]>;
+  setMeetupInvitation(id: string, profileId: string, invited: boolean): Promise<void>;
   createMeetupDraft(input: MeetupDraftInput): Promise<string>;
   updateMeetup(id: string, input: MeetupUpdateInput): Promise<MeetupDetail>;
-  publishMeetup(id: string): Promise<MeetupDetail>;
+  publishMeetup(id: string, sponsorship?: MeetupSponsorship): Promise<MeetupDetail>;
   deleteMeetupDraft(id: string): Promise<void>;
   joinMeetup(id: string): Promise<MeetupParticipation>;
   requestMeetupAccess(id: string): Promise<MeetupParticipation>;
@@ -121,6 +149,7 @@ export interface RummalApi {
   subscribeMeetupRoom(roomId: string, onInvalidate: () => void): () => void;
   setAdultContentPreference(enabled: boolean): Promise<void>;
   listMeetupNotifications(limit?: number): Promise<MeetupNotification[]>;
+  resolveNotification(notificationId: string): Promise<NotificationTarget>;
   markMeetupNotificationRead(notificationId: string): Promise<void>;
   registerPushToken(expoPushToken: string, platform: PushPlatform, locale?: 'is' | 'en'): Promise<void>;
   unregisterPushToken(expoPushToken: string): Promise<void>;

@@ -1,5 +1,6 @@
+import { Text } from '@/components/Typography';
 import { Camera, GeoJSONSource, Layer, Map } from '@maplibre/maplibre-react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import type { GeoCoordinate } from '@/types/domain';
 import { hittingarFeature } from './config';

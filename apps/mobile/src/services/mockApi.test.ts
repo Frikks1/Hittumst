@@ -5,12 +5,12 @@ import { MockRummalApi } from './mockApi';
 vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
 
 describe('MockRummalApi albums and tags', () => {
-  it('uses AND semantics for tag discovery', async () => {
+  it('matches any selected tag within the category', async () => {
     const api = new MockRummalApi();
     const gaming = await api.discover({ ...defaultFilters, tags: ['gaming'] });
     expect(gaming.items.map((profile) => profile.id)).toEqual(expect.arrayContaining(['p-elias', 'p-kari']));
     const gamingAndChill = await api.discover({ ...defaultFilters, tags: ['gaming', 'chill'] });
-    expect(gamingAndChill.items.map((profile) => profile.id)).toEqual(['p-elias']);
+    expect(gamingAndChill.items.map((profile) => profile.id)).toEqual(['p-elias', 'p-kari']);
   });
 
   it('shows no album media until a recipient accepts', async () => {
@@ -25,6 +25,7 @@ describe('MockRummalApi albums and tags', () => {
 
   it('keeps an outgoing view-once share recipient-only', async () => {
     const api = new MockRummalApi();
+    await api.setSandboxTier('flottari_plebbi');
     const album = await api.createAlbum('Private test');
     const { shareIds } = await api.shareAlbums('p-bjarni', [album.id], 'view_once');
     // The owner cannot open their outgoing share; this guards the recipient-only boundary.
@@ -33,6 +34,7 @@ describe('MockRummalApi albums and tags', () => {
 
   it('shares to several eligible profiles in one action and caps recipients at five', async () => {
     const api = new MockRummalApi();
+    await api.setSandboxTier('flottari_plebbi');
     const album = await api.createAlbum('Small circle');
     const result = await api.shareAlbums(['p-bjarni', 'p-elias'], [album.id], '1_hour');
     expect(Object.keys(result.conversationIds)).toEqual(['p-bjarni', 'p-elias']);
@@ -58,7 +60,7 @@ describe('MockRummalApi albums and tags', () => {
     const groupId = await api.createGroup('Night owls', 'Late chats');
     const message = await api.sendGroupMessage(groupId, 'Hello group');
     expect(await api.listGroupMessages(groupId)).toEqual([message]);
-    expect((await api.startGroupVoice(groupId)).participantCount).toBe(1);
+    await expect(api.startGroupVoice(groupId)).rejects.toThrow('voice_provider_unavailable');
   });
 });
 
@@ -71,5 +73,19 @@ describe('mock chat retry parity',()=>{
     expect(first.id).toBe('retry-id');expect(second.id).toBe(first.id);
     expect((await api.listMessages('c-bjarni')).items).toHaveLength(before.items.length+1);
     await expect(api.sendText('c-bjarni','Different','retry-id')).rejects.toThrow('message_id_conflict');
+  });
+});
+
+
+describe('demo onboarding parity', () => {
+  const payload = { dateOfBirth: '1990-01-01', displayName: 'Demo member', identity: ['queer' as const], lookingFor: ['friends' as const], bio: 'Hello', region: 'capital' as const, sensitiveDataConsent: true, privacyAccepted: true, termsAccepted: true, guidelinesAccepted: true, locale: 'en' as const, videos: ['https://example.test/video'], socials: [{ platform: 'instagram' as const, handle: 'member' }], interests: ['Hiking'] };
+  it('preserves entered customization instead of silently dropping it', async () => {
+    const api = new MockRummalApi(); await api.completeOnboarding(payload);
+    expect(await api.getOwnProfile()).toMatchObject({ displayName: payload.displayName, videos: payload.videos, socials: payload.socials, interests: payload.interests });
+  });
+  it('leaves the previous profile intact when explicit consent is declined', async () => {
+    const api = new MockRummalApi(); const before = await api.getOwnProfile();
+    await expect(api.completeOnboarding({ ...payload, privacyAccepted: false })).rejects.toThrow('explicit_consent_required');
+    expect(await api.getOwnProfile()).toEqual(before);
   });
 });

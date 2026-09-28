@@ -1,4 +1,12 @@
 begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000001','90000000-0000-0000-0000-000000000001');
+-- These privacy/participation fixtures need several albums or occurrences.
+update private.commerce_configuration set mode='sandbox';
+insert into private.member_subscriptions(account_id,tier,paid_until,source)
+select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles
+on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
 set local search_path = extensions, public, private;
 
 select no_plan();
@@ -49,6 +57,7 @@ reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(not public.can_create_meetup(), 'the canonical host check stays false while rollout is disabled');
 select throws_ok($$select public.create_meetup_draft('{}'::jsonb)$$,
@@ -75,6 +84,7 @@ reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select ok(public.can_create_meetup(), 'an active visible consenting adult can host');
@@ -176,6 +186,7 @@ select ok((
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(jsonb_array_length(public.discover_meetups('{}'::jsonb)), 1, 'eligible members discover the meetup');
 select is(public.get_meetup(current_setting('test.protected_meetup')::uuid) #>> '{location,state}', 'protected_locked', 'unauthorized detail contains only the locked location');
@@ -190,6 +201,7 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(
   public.respond_to_meetup_request(
@@ -203,12 +215,14 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(public.get_meetup(current_setting('test.protected_meetup')::uuid) #>> '{location,state}', 'protected_locked', 'approval before release time does not reveal the location');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.update_meetup(current_setting('test.protected_meetup')::uuid, jsonb_build_object('startsAt', now() + interval '12 hours'))$$,
@@ -218,6 +232,7 @@ select lives_ok(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(public.get_meetup(current_setting('test.protected_meetup')::uuid) #>> '{location,state}', 'protected_revealed', 'approved access reveals only after release time');
 select is(
@@ -229,6 +244,7 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok($$select public.update_meetup(current_setting('test.protected_meetup')::uuid, jsonb_build_object('startsAt', now() + interval '72 hours'))$$,
   '55000', 'released_location_window_cannot_move_later',
@@ -238,12 +254,14 @@ select throws_ok($$select public.update_meetup(current_setting('test.protected_m
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(public.request_meetup_access(current_setting('test.protected_meetup')::uuid) ->> 'status', 'pending', 'a second member may request access');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is((select count(*) from public.meetup_participations where meetup_id = current_setting('test.protected_meetup')::uuid), 1::bigint, 'a participant can select only their own participation row');
 select is((select count(*) from public.meetup_participations where meetup_id = current_setting('test.protected_meetup')::uuid and profile_id = '10000000-0000-0000-0000-000000000003'), 0::bigint, 'another attendee identity is isolated by RLS');
@@ -251,6 +269,7 @@ select is((select count(*) from public.meetup_participations where meetup_id = c
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(
   jsonb_array_length(public.list_meetup_participants(current_setting('test.protected_meetup')::uuid)),
@@ -281,6 +300,7 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok($$select public.join_meetup(current_setting('test.protected_meetup')::uuid)$$,
   '55000', 'meetup_participation_already_exists',
@@ -290,6 +310,7 @@ select throws_ok($$select public.join_meetup(current_setting('test.protected_mee
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(
   public.reinstate_meetup_participant(current_setting('test.protected_meetup')::uuid, '10000000-0000-0000-0000-000000000003', 'pending') ->> 'status',
@@ -300,6 +321,7 @@ select is(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok(
   $$insert into public.reports (reporter_id, reported_id, meetup_id, category, details)
@@ -314,6 +336,7 @@ reset role;
 select is((select priority from public.reports where id = current_setting('test.meetup_report')::uuid), 'urgent', 'report priority follows the canonical runbook');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok($$select public.admin_get_meetup_location_evidence(current_setting('test.meetup_report')::uuid, 'Unauthorized evidence attempt')$$,
   '42501', 'staff_access_required',
@@ -323,7 +346,8 @@ select throws_ok($$select public.admin_get_meetup_location_evidence(current_sett
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(
   public.admin_get_report(current_setting('test.meetup_report')::uuid)::text not like '%SECRET DOOR CODE%',
@@ -362,7 +386,8 @@ reset role;
 select is((select count(*) from private.admin_audit_log where action = 'meetup_location_evidence_access' and target_id = current_setting('test.protected_meetup')), 1::bigint, 'exact evidence access is audited');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.admin_set_report_priority(current_setting('test.meetup_report')::uuid, 'critical', 'Manual safety escalation')$$,
@@ -373,7 +398,8 @@ select is((select priority from public.reports where id = current_setting('test.
 select is((select count(*) from private.admin_audit_log where action = 'report.priority_changed' and target_id = current_setting('test.meetup_report')), 1::bigint, 'manual priority changes are audited');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.admin_set_meetup_legal_hold(current_setting('test.protected_meetup')::uuid, true, 'Open safety investigation')$$,
@@ -385,6 +411,7 @@ select ok((select legal_hold_at is not null and legal_hold_released_at is null f
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$insert into public.blocks (blocker_id, blocked_id) values (auth.uid(), '10000000-0000-0000-0000-000000000001')$$,
@@ -396,6 +423,7 @@ select is((select status from public.meetup_participations where meetup_id = cur
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok($$select public.get_meetup(current_setting('test.protected_meetup')::uuid)$$,
   '42501', 'meetup_not_visible',
@@ -408,6 +436,7 @@ select is((select status from public.meetup_participations where meetup_id = cur
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(
   jsonb_path_exists(
@@ -428,6 +457,7 @@ select lives_ok($$select public.update_meetup(current_setting('test.protected_me
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(public.get_meetup(current_setting('test.protected_meetup')::uuid) #>> '{location,state}', 'protected_locked', 'exact protected access is denied after effective_end plus two hours');
 select ok(not (public.get_meetup(current_setting('test.protected_meetup')::uuid) #> '{location}') ? 'exactLocation', 'expired protected detail omits exact coordinates');
@@ -435,12 +465,14 @@ select ok(not (public.get_meetup(current_setting('test.protected_meetup')::uuid)
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok($$select public.cancel_meetup(current_setting('test.protected_meetup')::uuid)$$, 'the host can cancel the meetup');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(jsonb_array_length(public.discover_meetups('{}'::jsonb)), 0, 'cancelled meetups leave discovery immediately');
 select is(public.get_meetup(current_setting('test.protected_meetup')::uuid) #>> '{location,state}', 'protected_locked', 'cancellation revokes protected location access');
@@ -451,6 +483,7 @@ select ok(public.export_my_account() ? 'meetupParticipationHistory', 'legacy exp
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select set_config('test.public_meetup', public.create_meetup_draft(jsonb_build_object(
@@ -477,6 +510,7 @@ select throws_ok($$select public.create_meetup_draft(jsonb_build_object(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(jsonb_array_length(public.discover_meetups('{"category":"private_adult"}'::jsonb)), 0, 'explicit meetups are hidden without adult-content opt-in');
 select lives_ok($$select public.set_adult_content_preference(true)$$, 'an eligible adult can opt in explicitly');
@@ -489,6 +523,7 @@ select current_setting('test.public_meetup')::uuid, '10000000-0000-0000-0000-000
 from generate_series(1, 5);
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select throws_ok($$select public.join_meetup(current_setting('test.public_meetup')::uuid)$$,
   '54000', 'meetup_participation_rate_limit_exceeded',
@@ -498,12 +533,14 @@ select throws_ok($$select public.join_meetup(current_setting('test.public_meetup
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(public.join_meetup(current_setting('test.public_meetup')::uuid) ->> 'status', 'joined', 'open meetup joining is atomic');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(
   jsonb_path_exists(
@@ -516,6 +553,7 @@ select ok(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 update public.profiles set is_profile_visible = false where id = auth.uid();
 
@@ -531,49 +569,52 @@ select is((select status from public.meetup_participations where meetup_id = cur
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 update public.profiles set is_profile_visible = false where id = auth.uid();
-select ok(not public.can_create_meetup(), 'a hidden profile cannot create or edit hosted meetups');
+select ok(public.can_create_meetup(), 'a hidden personal profile retains hosting capability');
 
 reset role;
-select is((select status from public.meetups where id = current_setting('test.public_meetup')::uuid), 'moderation_hidden', 'hiding the host removes published meetups and revokes location access');
+select is((select status from public.meetups where id = current_setting('test.public_meetup')::uuid), 'published', 'hiding the personal profile preserves published meetups');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(
-  not (public.get_meetup(current_setting('test.public_meetup')::uuid) #> '{location}') ? 'exactLocation',
-  'a hidden host no longer receives the exact location of their hidden meetup'
+  (public.get_meetup(current_setting('test.public_meetup')::uuid) #> '{location}') ? 'exactLocation',
+  'a hidden host retains the location of their own published meetup'
 );
 select is(
   public.get_meetup(current_setting('test.public_meetup')::uuid) ->> 'locationVisibility',
-  'protected',
-  'inaccessible public history is coherently downgraded to protected visibility'
+  'public',
+  'published event retains its configured public location visibility'
 );
 select is(
   public.get_meetup(current_setting('test.public_meetup')::uuid) #>> '{location,state}',
-  'protected_locked',
-  'inaccessible public history uses the locked location union state'
+  'public',
+  'published public location keeps its public location union state'
 );
 select is(
   (public.get_meetup(current_setting('test.public_meetup')::uuid) #>> '{location,marker,isApproximate}')::boolean,
-  true,
-  'downgraded public history exposes only the controlled approximate catalog marker'
+  false,
+  'host continues to receive the published exact location marker'
 );
 select is(
   (public.get_meetup(current_setting('test.public_meetup')::uuid) #>> '{capabilities,canEdit}')::boolean,
-  false,
-  'server-authored capabilities revoke editing when host visibility is withdrawn'
+  true,
+  'host can continue editing when the personal profile is hidden'
 );
 select is(
   (select count(*) from public.meetup_participations where meetup_id = current_setting('test.public_meetup')::uuid),
-  0::bigint,
-  'a hidden host can no longer browse the attendee roster directly'
+  1::bigint,
+  'hidden personal profile does not revoke the host attendee roster'
 );
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok($$select public.withdraw_sensitive_consent()$$, 'a participant can withdraw sensitive-data consent');
 
@@ -585,7 +626,12 @@ select is(private.meetup_report_priority('illegal_activity'), 'standard', 'illeg
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+reset role;
+insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000003','10000000-0000-0000-0000-000000000003');
+set local role authenticated;
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000003"}',true);
 select lives_ok(
   $$select set_config('test.push_token', public.register_push_token('ExponentPushToken[synthetic-device-token]', 'ios', 'en')::text, true)$$,
   'a caller can register a private Expo push token'
@@ -637,6 +683,7 @@ select is(
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.create_meetup_draft(jsonb_build_object(
@@ -674,6 +721,7 @@ set date_of_birth = null
 where id = '10000000-0000-0000-0000-000000000003';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(not public.can_create_meetup(), 'the canonical host gate requires a verified adult date of birth');
 select throws_ok(

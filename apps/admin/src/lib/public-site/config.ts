@@ -26,9 +26,13 @@ export function getPublicSiteConfig(environment: Readonly<Record<string, string 
   const released = environment.HITTUMST_PUBLIC_RELEASE === 'true';
   if (policiesApproved || released) launchDetails.parse(details);
   if (released && !policiesApproved) throw new Error('Approve the published policies before enabling the public release.');
-  const iosUrl = environment.HITTUMST_IOS_STORE_URL?.trim();
-  const androidUrl = environment.HITTUMST_ANDROID_STORE_URL?.trim();
-  if (released) { storeUrl('apps.apple.com').parse(iosUrl); storeUrl('play.google.com').parse(androidUrl); }
+  const iosUrl = environment.HITTUMST_IOS_STORE_URL?.trim() || undefined;
+  const androidUrl = environment.HITTUMST_ANDROID_STORE_URL?.trim() || undefined;
+  if (released) {
+    if (!iosUrl && !androidUrl) throw new Error('A public release requires at least one published store listing.');
+    if (iosUrl) storeUrl('apps.apple.com').parse(iosUrl);
+    if (androidUrl) storeUrl('play.google.com').parse(androidUrl);
+  }
   return { ...details, supportEmail: z.email().safeParse(details.supportEmail).success ? details.supportEmail : undefined,
     childSafetyEmail: z.email().safeParse(details.childSafetyEmail).success ? details.childSafetyEmail : undefined,
     policiesApproved, released, iosUrl: released ? iosUrl : undefined, androidUrl: released ? androidUrl : undefined };

@@ -1,4 +1,8 @@
+import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
+import { activityRank, matchesActivity } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
+import { getPoolSummary, settleEvent, TIERS, type MeetupSponsorship, activeTier, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId } from '@rummal/shared';
+import { CommerceDemo } from './commerceDemo';
 import * as Crypto from 'expo-crypto';
 import { mockConversations, mockMessages, mockOwnProfile, mockProfiles } from '@/data/mock';
 import { profileTags } from '@/data/profileTags';
@@ -6,7 +10,7 @@ import type {
   Album, AlbumAccessMode, AlbumItem, AlbumShare, AlbumViewer, ChatMessage, ConversationSummary,
   DiscoveryFilters, GeoCoordinate, LocationVerification, MeetupDraftInput, MeetupFilters,
   MeetupPlaceSearchOptions, MeetupReinstateStatus, MeetupReportInput, MeetupUpdateInput, OwnProfile, PublicProfile,
-  PushPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupMessage, GroupSummary, GroupVoiceSession,
+  PushPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
   ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType,
   MeetupRoomMessage, MeetupRoomSummary, MeetupRsvpVisibility,
 } from '@/types/domain';
@@ -14,12 +18,87 @@ import { expoPushTokenSchema, pushTokenRegistrationSchema } from '@/types/domain
 import { DemoMeetupService } from './meetupDemo';
 import type { OnboardingPayload, RummalApi } from './types';
 import { pageByTime } from '@/utils/messagePagination';
+import { matchesIdentityGroups } from '@/utils/discoveryPreferences';
 
 const delay = (ms = 160) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class MockRummalApi implements RummalApi {
   readonly isDemo = true;
-  private readonly meetupService = new DemoMeetupService();
+  readonly demoCommunityStore = new DemoCommunityStore();
+  readonly communityDemo: DemoCommunityBridge = {
+    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
+    feedbackEvent: async id => {
+      if (!this.demoCommunityStore.receipts.get(id)?.has(this.own.id) && !this.demoCommunityStore.appeals.get(id)?.has(this.own.id)) return this.getMeetup(id);
+      return this.meetupService.get(id);
+    },
+    eligible: (id, profileId) => !this.blocked.has(profileId) && !this.blocked.has(this.meetupService.communityHostId(id)) && this.meetupService.isCommunityEligible(id, profileId),
+    acceptOffer: (id, approved) => this.meetupService.acceptCommunityOffer(id, approved),
+    all: async () => (await this.meetupService.allForCommunity()).filter(event => !this.blocked.has(event.host.id)),
+    host: async id => {
+      if (this.blocked.has(id)) throw new Error('host_unavailable');
+      const profile = id === this.own.id ? this.own : this.profiles.find(value => value.id === id);
+      if (!profile) throw new Error('host_unavailable');
+      return { displayName: profile.displayName, profileVisible: id === this.own.id ? !this.own.isHidden : this.discoveryFixture(id).visible };
+    },
+    participants: id => this.meetupService.communityParticipants(id),
+  };
+  readonly commerce = new CommerceDemo();
+  private get tier(): TierId { const member = this.commerce.state.members['demo-me']!; return activeTier(member.tier, member.paidUntil); }
+  async getEntitlement() {
+    return { ...freeEntitlement(true), tier: this.tier, paidUntil: this.commerce.state.members['demo-me']!.paidUntil,
+      premiumMonths: this.commerce.state.members['demo-me']!.premiumMonths,
+      albumsUsed: this.albums.filter(a => a.ownerId === this.own.id).length,
+      occurrencesUsed: this.meetupService.hostedUsage(), joinsUsed: this.meetupService.joinedUsage(),
+      joinsLimit: TIERS[this.tier].joins, joinsRemaining: Math.max(0, TIERS[this.tier].joins - this.meetupService.joinedUsage()) };
+  }
+  async setSandboxTier(tier: TierId) { this.commerce.setTier(tier); return this.getEntitlement(); }
+  async getWallet() { return this.commerce.snapshot(); }
+  async getPendingFinanceCommand() { return null; }
+  async listMediaUploads(_albumId: string) { return []; }
+  async appealMediaUpload(_id: string) { throw new Error('appeal_unavailable'); }
+  private premiumProfile={effect:false,badge:false};
+  async getPremiumProfile(id:string) { if(id!==this.own.id){await this.getProfile(id);return {effect:false,badge:false,months:0};} const premium=this.tier==='plebba_kongur';return {effect:premium&&this.premiumProfile.effect,badge:premium&&this.premiumProfile.badge,months:premium&&this.premiumProfile.badge?this.commerce.state.members[this.own.id]!.premiumMonths:0}; }
+  async setPremiumProfile(effect:boolean,badge:boolean) {if((effect||badge)&&this.tier!=='plebba_kongur')throw new Error('premium_required');this.premiumProfile={effect,badge};}
+  async walletCommand(command: FinanceCommand) {
+    // Return a committed receipt before checking today's event state or membership.
+    if (this.commerce.state.requests[this.own.id + ':' + command.requestId]) return this.commerce.command(command);
+    if(command.action==='gift') {await this.getProfile(command.recipientId);this.commerce.state.members[command.recipientId]??={tier:'plebbi',paidUntil:null,premiumMonths:0,payoutIdentity:`sandbox:${command.recipientId}`,suspended:false};}
+    const eventId = 'meetupId' in command ? command.meetupId : command.action === 'reverse' ? this.commerce.state.contributions[command.contributionId]?.eventId : undefined;
+    if (eventId) {
+      const meetup = await this.meetupService.get(eventId);
+      const draftAllowed = meetup.status === 'draft' && meetup.host.id === this.own.id && ['contribution_quote', 'pool_info', 'publish_sponsored'].includes(command.action);
+      if (meetup.status !== 'published' && !draftAllowed && command.action !== 'pool_info') throw new Error('pool_closed');
+      if (command.action === 'publish_sponsored' && meetup.host.id !== this.own.id) throw new Error('meetup_forbidden');
+      const old = this.commerce.state.events[meetup.id];
+      this.commerce.state.members[meetup.host.id] ??= { tier: 'plebbi', paidUntil: null, premiumMonths: 0, payoutIdentity: null, suspended: false };
+      this.commerce.state.events[meetup.id] = { ...old, id: meetup.id, hostId: meetup.host.id, startsAt: meetup.startsAt, endsAt: meetup.effectiveEnd,
+        cancelled: meetup.status !== 'published' && !draftAllowed, eligibleAttendees: ['joined','approved'].includes(meetup.viewerState.participationStatus) ? [this.own.id] : [],
+        hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null, review: old?.review ?? 'pending', settled: old?.settled ?? false };
+    }
+    if (command.action === 'publish_sponsored') {
+      let result: unknown;
+      await this.meetupService.publishFunded(command.meetupId, () => { result = this.commerce.command(command); });
+      return result;
+    }
+    return this.commerce.command(command);
+  }
+  private readonly meetupService = new DemoMeetupService(new Date(), () => this.tier, event => {
+    const old = this.commerce.state.events[event.id];
+    const projected = { ...old, id: event.id, hostId: event.hostId, startsAt: event.startsAt, endsAt: event.endsAt,
+      cancelled: event.status === 'cancelled', eligibleAttendees: old?.eligibleAttendees ?? [],
+      hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null,
+      review: old?.review ?? 'pending' as const, settled: old?.settled ?? false };
+    const pool = getPoolSummary({ ...this.commerce.state, events: { ...this.commerce.state.events, [event.id]: projected } }, event.id);
+    if (Date.now() < Date.parse(event.startsAt)) {
+      pool.eligibleParticipantCount = event.participantCount;
+      pool.estimatedParticipantReward = event.participantCount > 0 && !['paid_out', 'refunded'].includes(pool.status) ? Math.floor((pool.total - Math.floor(pool.total * pool.hostBps / 10000)) / event.participantCount) : null;
+    }
+    return pool;
+  }, {
+    now: () => new Date(),
+    reservedSeats: (event, excluding) => refreshDemoQueue(this.demoCommunityStore, event, Date.now(), profileId => this.communityDemo.eligible(event.id, profileId), profileId => this.communityDemo.sponsored(event.id, profileId))
+      .filter(row => row.status === 'offered' && row.profileId !== excluding).length,
+  });
   private own: OwnProfile = structuredClone(mockOwnProfile);
   private profiles = structuredClone(mockProfiles);
   private conversations = structuredClone(mockConversations);
@@ -27,6 +106,7 @@ export class MockRummalApi implements RummalApi {
   private blocked = new Set<string>();
   private pushTokens = new Map<string, { platform: PushPlatform; locale: 'is' | 'en' }>();
   private listeners = new Map<string, Set<(message: ChatMessage) => void>>();
+  private albumSessions = new Map<string, { shareId: string; expiresAt: string; requestId: string }>();
   private ratings: ContentRating[] = [];
   private comments: ContentComment[] = [];
   private reactions: Array<{ targetType: ContentTargetType; targetId: string; emoji: ProfileReactionEmoji; userId: string }> = [];
@@ -54,16 +134,26 @@ export class MockRummalApi implements RummalApi {
     sharedAt: '2026-08-31T19:08:00.000Z', isIncoming: true, itemCount: 1,
   }];
 
+  private discoveryFixture(id:string) {
+    // Explicit synthetic activity and graph facts; never derive gender or diagnoses.
+    const days:Record<string,number>={'p-bjarni':0,'p-elias':0,'p-salka':3,'p-noa':0,'p-dagur':45,'p-embla':20};
+    return {lastActive:Date.now()-(days[id]??45)*86400000,visible:id!=='p-embla',fof:id==='p-salka'};
+  }
   async discover(filters: DiscoveryFilters) {
     await delay();
     const items = this.profiles.filter((profile) =>
       !this.blocked.has(profile.id)
       && profile.age >= filters.ageMin && profile.age <= filters.ageMax
-      && (!filters.onlineOnly || profile.isOnline)
-      && (filters.identities.length === 0 || filters.identities.some((identity) => profile.identity.includes(identity)))
+      && matchesActivity(filters.activity,this.discoveryFixture(profile.id).lastActive,this.discoveryFixture(profile.id).visible,Date.now())
+      && (!filters.genders.length || (profile.gender != null && filters.genders.includes(profile.gender)))
+      && (!filters.diagnosisIds.length || filters.diagnosisIds.some(id => profile.diagnosisIds?.includes(id)))
+      && (filters.radiusKm === null || (profile.distanceBand !== null && ({under1:0.5,'1to3':2,'3to10':6,'10to25':18,'25plus':40,'10to30':20,'30plus':40}[profile.distanceBand] <= filters.radiusKm)))
+      && (filters.social === 'all' || filters.social === 'favorites' && this.stars.some(s => s.targetType === 'friend' && s.targetId === profile.id) || filters.social === 'friends' && this.friends.some(f => f.profileId === profile.id && f.status === 'accepted') || filters.social === 'friends_of_friends' && this.discoveryFixture(profile.id).fof && this.friends.some(f=>f.status==='accepted'&&!this.blocked.has(f.profileId)))
+      && matchesIdentityGroups(filters.identities, profile.identity)
       && (filters.intents.length === 0 || filters.intents.some((intent) => profile.lookingFor.includes(intent)))
-      && (filters.tags.length === 0 || filters.tags.every((tag) => profile.tags.includes(tag)))
+      && (filters.tags.length === 0 || filters.tags.some((tag) => profile.tags.includes(tag)))
     );
+    items.sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
     return { items, nextCursor: null };
   }
 
@@ -74,6 +164,7 @@ export class MockRummalApi implements RummalApi {
     return structuredClone(profile);
   }
 
+  async hasCompletedOnboarding() { return true; }
   async getOwnProfile() { await delay(80); return structuredClone(this.own); }
   async updateProfile(profile: Partial<OwnProfile>) { this.own = { ...this.own, ...profile }; await delay(); return structuredClone(this.own); }
   async listProfileTags() { await delay(40); return structuredClone(profileTags); }
@@ -153,22 +244,46 @@ export class MockRummalApi implements RummalApi {
     return id;
   }
   async listGroupMessages(groupId: string) { await delay(); return structuredClone(this.groupMessages.filter((item) => item.groupId === groupId)); }
-  async sendGroupMessage(groupId: string, body: string) {
-    const message: GroupMessage = { id: Crypto.randomUUID(), groupId, senderId: this.own.id, senderName: this.own.displayName, body: body.trim(), createdAt: new Date().toISOString() };
+  async listGroupMessagePage(groupId: string, cursor?: string | null) {
+    const all = await this.listGroupMessages(groupId);
+    const before = cursor ? Number(cursor) : all.length;
+    return { items: all.slice(Math.max(0, before - 50), before), nextCursor: before > 50 ? String(before - 50) : null };
+  }
+  async listGroupMembers(groupId: string): Promise<GroupMember[]> {
+    const group = this.groups.find(item => item.id === groupId);
+    return group ? [{ profileId: this.own.id, displayName: this.own.displayName, role: group.role, status: 'active' }] : [];
+  }
+  async inviteGroupMember(_groupId: string, _profileId: string) { throw new Error('demo_invitation_requires_second_user'); }
+  async groupAction(groupId: string, action: GroupAction, input: Record<string, string> = {}) {
+    const group = this.groups.find(item => item.id === groupId);
+    if (!group) throw new Error('group_not_found');
+    if (action === 'archive' || action === 'leave' || action === 'decline') this.groups = this.groups.filter(item => item.id !== groupId);
+    else if (action === 'hide_message') this.groupMessages = this.groupMessages.filter(item => item.id !== input.messageId);
+    else if (action === 'lock' || action === 'unlock') group.status = action === 'lock' ? 'locked' : 'active';
+    else if (action === 'accept') group.membershipStatus = 'active';
+    await delay();
+  }
+  async sendGroupMessage(groupId: string, body: string, clientMessageId = Crypto.randomUUID()) {
+    if (!validMessageBody(body)) throw new Error('invalid_message_body');
+    const existing = this.groupMessages.find(item => item.id === clientMessageId);
+    if (existing) {
+      if (existing.groupId !== groupId || existing.body !== body.trim()) throw new Error('group_message_id_conflict');
+      return structuredClone(existing);
+    }
+    const message: GroupMessage = { id: clientMessageId, groupId, senderId: this.own.id, senderName: this.own.displayName, body: body.trim(), createdAt: new Date().toISOString() };
     this.groupMessages.push(message);
     await delay();
     return structuredClone(message);
   }
-  async startGroupVoice(groupId: string): Promise<GroupVoiceSession> {
-    const group = this.groups.find((item) => item.id === groupId);
-    if (group) group.isVoiceActive = true;
-    await delay();
-    return { id: Crypto.randomUUID(), groupId, startedBy: this.own.id, startedAt: new Date().toISOString(), participantCount: 1 };
+  async startGroupVoice(_groupId: string): Promise<GroupVoiceSession> {
+    throw new Error('voice_provider_unavailable');
   }
   async completeOnboarding(payload: OnboardingPayload) {
+    if (!payload.sensitiveDataConsent || !payload.privacyAccepted || !payload.termsAccepted || !payload.guidelinesAccepted) throw new Error('explicit_consent_required');
     this.own = {
       ...this.own, displayName: payload.displayName, dateOfBirth: payload.dateOfBirth, pronouns: payload.pronouns,
-      identity: payload.identity, lookingFor: payload.lookingFor, bio: payload.bio, region: payload.region
+      identity: payload.identity, lookingFor: payload.lookingFor, bio: payload.bio, region: payload.region,
+      videos: [...(payload.videos ?? [])], socials: structuredClone(payload.socials ?? []), interests: [...(payload.interests ?? [])],
     };
     await delay();
   }
@@ -224,7 +339,7 @@ export class MockRummalApi implements RummalApi {
   }
   async listMyAlbums() { await delay(); return structuredClone(this.albums.filter((album) => album.ownerId === this.own.id)); }
   async createAlbum(name: string) {
-    if (this.albums.filter((album) => album.ownerId === this.own.id).length >= 10) throw new Error('album_limit_reached');
+    requireAlbumCapacity(this.tier, { albums: this.albums.filter(a => a.ownerId === this.own.id).length }, 'album');
     const now = new Date().toISOString();
     const album: Album = { id: Crypto.randomUUID(), ownerId: this.own.id, name: name.trim(), contentVersion: 1, items: [], createdAt: now, updatedAt: now };
     this.albums.unshift(album); await delay(); return structuredClone(album);
@@ -242,9 +357,8 @@ export class MockRummalApi implements RummalApi {
   async addAlbumItem(albumId: string, input: { uri: string; mimeType: string; mediaType: 'image' | 'video'; byteSize: number; durationMs?: number }) {
     const album = this.albums.find((item) => item.id === albumId && item.ownerId === this.own.id);
     if (!album) throw new Error('album_not_found');
-    if (input.byteSize > 30 * 1024 * 1024 || (input.mediaType === 'video' && (input.durationMs ?? 0) > 15_000)) throw new Error('invalid_album_media');
-    if (input.mediaType === 'image' && album.items.filter((item) => item.mediaType === 'image').length >= 10) throw new Error('album_photo_limit_reached');
-    if (input.mediaType === 'video' && album.items.some((item) => item.mediaType === 'video')) throw new Error('album_video_limit_reached');
+    requireAlbumMedia(input.mediaType, input.byteSize, input.durationMs);
+    requireAlbumCapacity(this.tier, { albums: this.albums.filter(a => a.ownerId === this.own.id).length, photos: album.items.filter(i => i.mediaType === 'image').length, videos: album.items.filter(i => i.mediaType === 'video').length }, input.mediaType);
     const item: AlbumItem = { id: Crypto.randomUUID(), albumId, mediaType: input.mediaType, position: album.items.length + 1, url: input.uri, byteSize: input.byteSize, durationMs: input.durationMs };
     album.items.push(item); album.contentVersion += 1; album.updatedAt = new Date().toISOString(); await delay(); return structuredClone(item);
   }
@@ -304,21 +418,37 @@ export class MockRummalApi implements RummalApi {
     const share = this.albumShares.find((item) => item.id === shareId && item.ownerId === this.own.id);
     if (!share) throw new Error('album_share_not_revocable'); share.status = 'revoked'; await delay();
   }
-  async openAlbumShare(shareId: string): Promise<AlbumViewer> {
+  async openAlbumShare(shareId: string, requestId = Crypto.randomUUID()): Promise<AlbumViewer> {
+    const prior = [...this.albumSessions.entries()].find(([, session]) => session.requestId === requestId);
+    if (prior) {
+      if (prior[1].shareId !== shareId) throw new Error('album_share_locked');
+      return this.refreshAlbumShare(shareId, prior[0]);
+    }
     const share = this.albumShares.find((item) => item.id === shareId && item.recipientId === this.own.id);
-    if (!share || !['accepted'].includes(share.status)) throw new Error('album_share_locked');
+    if (!share || share.status !== 'accepted' || this.blocked.has(share.ownerId) || (share.expiresAt && Date.parse(share.expiresAt) <= Date.now())) throw new Error('album_share_locked');
     const album = this.albums.find((item) => item.id === share.albumId);
     if (!album) throw new Error('album_not_found');
     let sessionId: string | undefined;
     let sessionExpiresAt: string | undefined;
     if (share.accessMode === 'view_once') {
       share.status = 'consumed'; sessionId = Crypto.randomUUID(); sessionExpiresAt = new Date(Date.now() + 600_000).toISOString();
+      this.albumSessions.set(sessionId, { shareId, expiresAt: sessionExpiresAt, requestId });
     }
     share.lastViewedVersion = album.contentVersion;
     await delay();
-    return structuredClone({ shareId, albumId: album.id, name: album.name, contentVersion: album.contentVersion, sessionId, sessionExpiresAt, items: album.items });
+    return structuredClone({ shareId, albumId: album.id, name: album.name, contentVersion: album.contentVersion, sessionId, sessionExpiresAt, accessExpiresAt: sessionExpiresAt ?? share.expiresAt, urlsExpireAt: new Date(Date.now() + 60_000).toISOString(), items: album.items });
   }
-  async closeAlbumViewer() { await delay(20); }
+  async refreshAlbumShare(shareId: string, sessionId?: string): Promise<AlbumViewer> {
+    const share = this.albumShares.find(item => item.id === shareId && item.recipientId === this.own.id);
+    const session = sessionId ? this.albumSessions.get(sessionId) : undefined;
+    if (!share || this.blocked.has(share.ownerId) || (share.expiresAt && Date.parse(share.expiresAt) <= Date.now()) ||
+      (share.accessMode === 'view_once' ? share.status !== 'consumed' || !session || session.shareId !== shareId || Date.parse(session.expiresAt) <= Date.now() : share.status !== 'accepted' || Boolean(sessionId))) throw new Error('album_share_locked');
+    const album = this.albums.find(item => item.id === share.albumId);
+    if (!album) throw new Error('album_share_locked');
+    await delay();
+    return structuredClone({ shareId, albumId: album.id, name: album.name, contentVersion: album.contentVersion, sessionId, sessionExpiresAt: session?.expiresAt, accessExpiresAt: session?.expiresAt ?? share.expiresAt, urlsExpireAt: new Date(Date.now() + 60_000).toISOString(), items: album.items });
+  }
+  async closeAlbumViewer(sessionId: string) { this.albumSessions.delete(sessionId); await delay(20); }
   async toggleAlbumReaction(shareId: string, itemId: string) {
     const share = this.albumShares.find((item) => item.id === shareId);
     if (!share) throw new Error('album_share_locked');
@@ -345,18 +475,33 @@ export class MockRummalApi implements RummalApi {
   async unblock(profileId: string) { this.blocked.delete(profileId); await delay(); }
   async listBlocked() { await delay(); return structuredClone(this.profiles.filter((item) => this.blocked.has(item.id))); }
   async report() { await delay(250); }
-  async discoverMeetups(filters: MeetupFilters) { await delay(); return this.meetupService.discover(filters); }
-  async getMeetup(id: string) { await delay(80); return this.meetupService.get(id); }
-  async listMyMeetups() { await delay(); return this.meetupService.listMine(); }
+  async discoverMeetups(filters: MeetupFilters) { await delay(); const results=(await this.meetupService.discover(filters)).map(event=>decorateDemoCommunity(event, this.own.id, this.demoCommunityStore)); return results.filter(event=>!this.blocked.has(event.host.id)).filter(event=>filters.social==='all'||filters.social==='favorites'&&this.stars.some(s=>s.targetType==='event'&&s.targetId===event.id)||filters.social==='friends'&&this.friends.some(f=>f.profileId===event.host.id&&f.status==='accepted')||filters.social==='friends_of_friends'&&this.discoveryFixture(event.host.id).fof&&this.friends.some(f=>f.status==='accepted')); }
+  async getMeetup(id: string) { await delay(80); const event = await this.meetupService.get(id); if (this.blocked.has(event.host.id)) throw new Error('meetup_unavailable'); return decorateDemoCommunity(event, this.own.id, this.demoCommunityStore); }
+  async listMyMeetups() { await delay(); return (await this.meetupService.listMine()).filter(event => !this.blocked.has(event.host.id)).map(event => decorateDemoCommunity(event, this.own.id, this.demoCommunityStore)); }
   async listMeetupRequests(id: string) { await delay(); return this.meetupService.listRequests(id); }
   async listMeetupParticipants(id: string) { await delay(); return this.meetupService.listParticipants(id); }
+  async getMeetupGender(id: string) { return this.meetupService.getGender(id); }
+  async setMeetupGender(id: string, gender: string | null) { return this.meetupService.setGender(id, gender); }
+  async listMeetupMedia(id: string) { await this.getMeetup(id); return this.meetupService.listMedia(id); }
+  async uploadMeetupMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string) { return this.meetupService.uploadMedia(id, uri, kind, mimeType); }
+  async removeMeetupMedia(id: string, mediaId: string) { await this.meetupService.removeMedia(id, mediaId); if (this.demoCommunityStore.covers.get(id)?.id === mediaId) this.demoCommunityStore.covers.delete(id); }
+  async listMeetupReviews(id: string) { return this.meetupService.listReviews(id); }
+  async saveMeetupReview(id: string, rating: number, body: string) { return this.meetupService.saveReview(id, rating, body); }
+  async deleteMeetupReview(id: string) { return this.meetupService.deleteReview(id); }
+  async listMeetupInvitations(id: string) { return this.meetupService.listInvitations(id); }
+  async setMeetupInvitation(id: string, profileId: string, invited: boolean) { return this.meetupService.setInvitation(id, profileId, invited); }
   async createMeetupDraft(input: MeetupDraftInput) { await delay(); return this.meetupService.createDraft(input); }
   async updateMeetup(id: string, input: MeetupUpdateInput) { await delay(); return this.meetupService.update(id, input); }
-  async publishMeetup(id: string) { await delay(); return this.meetupService.publish(id); }
+  async publishMeetup(id: string, sponsorship?: MeetupSponsorship) {
+    await delay();
+    if (!sponsorship) { const event = await this.meetupService.publish(id); notifyDemoCommunity(this.demoCommunityStore, event, 'community_published', 'published', demoEventFollowers(this.demoCommunityStore, event)); return event; }
+    await this.walletCommand({ action: 'publish_sponsored', meetupId: id, ...sponsorship });
+    const event = await this.meetupService.get(id); notifyDemoCommunity(this.demoCommunityStore, event, 'community_published', 'published', demoEventFollowers(this.demoCommunityStore, event)); return event;
+  }
   async deleteMeetupDraft(id: string) { await this.meetupService.deleteDraft(id); await delay(); }
-  async joinMeetup(id: string) { await delay(); return this.meetupService.join(id); }
-  async requestMeetupAccess(id: string) { await delay(); return this.meetupService.requestAccess(id); }
-  async cancelMeetupRequest(id: string) { await this.meetupService.cancelRequest(id); await delay(); }
+  async joinMeetup(id: string) { await this.getMeetup(id); return this.meetupService.join(id); }
+  async requestMeetupAccess(id: string) { await this.getMeetup(id); return this.meetupService.requestAccess(id); }
+  async cancelMeetupRequest(id: string) { await this.meetupService.cancelRequest(id); this.demoCommunityStore.applications.get(id)?.delete(this.own.id); this.demoCommunityStore.queues.set(id, (this.demoCommunityStore.queues.get(id) ?? []).filter(row => row.profileId !== this.own.id)); await delay(); }
   async leaveMeetup(id: string) { await this.meetupService.leave(id); await delay(); }
   async respondToMeetupRequest(id: string, profileId: string, approve: boolean) {
     await delay(); return this.meetupService.respond(id, profileId, approve);
@@ -367,9 +512,16 @@ export class MockRummalApi implements RummalApi {
   async reinstateMeetupParticipant(id: string, profileId: string, status: MeetupReinstateStatus) {
     await delay(); return this.meetupService.reinstateParticipant(id, profileId, status);
   }
-  async cancelMeetup(id: string) { await this.meetupService.cancel(id); await delay(); }
+  async cancelMeetup(id: string) {
+    await this.meetupService.cancel(id);
+    if (this.commerce.state.events[id]) {
+      this.commerce.state.events[id]!.cancelled = true;
+      this.commerce.state = settleEvent(this.commerce.state, id, new Date().toISOString());
+    }
+    await delay();
+  }
   async reportMeetup(id: string, input: MeetupReportInput) { await delay(); return this.meetupService.report(id, input); }
-  async listPublicMeetupRoster(id: string) { await delay(); return { items: (await this.meetupService.listParticipants(id)).filter((item) => item.rsvpVisibility !== 'private'), nextCursor: null }; }
+  async listPublicMeetupRoster(_id: string) { await delay(); return { items: [], nextCursor: null }; }
   async listProfileMeetupHistory(_profileId: string) { await delay(); return { items: [], nextCursor: null }; }
   async listProfileUpcomingMeetups(_profileId: string) { await delay(); return { items: [], nextCursor: null }; }
   async setMeetupRsvpVisibility(_id: string, _visibility: MeetupRsvpVisibility) { await delay(20); }
@@ -412,9 +564,28 @@ export class MockRummalApi implements RummalApi {
     return () => { listeners.delete(onInvalidate); };
   }
   async setAdultContentPreference(enabled: boolean) { await this.meetupService.setAdultPreference(enabled); await delay(); }
-  async listMeetupNotifications(limit?: number) { await delay(); return this.meetupService.listNotifications(limit); }
+  async resolveNotification(notificationId: string) {
+    const item = (await this.listMeetupNotifications(200)).find(notification => notification.id === notificationId);
+    if (!item) throw new Error('notification_unavailable');
+    await this.meetupService.get(item.meetupId);
+    await this.meetupService.markNotificationRead(notificationId);
+    return { type: 'meetup' as const, id: item.meetupId };
+  }
+  async listMeetupNotifications(limit = 50) {
+    await delay();
+    for (const event of await this.communityDemo.all()) {
+      const until = Date.parse(event.startsAt) - Date.now();
+      if (event.status !== 'published' || until <= 0) continue;
+      const recipients = [...this.communityDemo.participants(event.id), ...demoEventFollowers(this.demoCommunityStore, event, false)];
+      if (until <= 86400000 && until > 3600000) notifyDemoCommunity(this.demoCommunityStore, event, 'community_reminder', 'reminder:24h', recipients);
+      if (until <= 3600000) notifyDemoCommunity(this.demoCommunityStore, event, 'community_reminder', 'reminder:1h', recipients);
+    }
+    return [...await this.meetupService.listNotifications(limit), ...(this.demoCommunityStore.notifications.get(this.own.id) ?? [])]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  }
   async markMeetupNotificationRead(notificationId: string) {
-    await this.meetupService.markNotificationRead(notificationId); await delay();
+    const community = this.demoCommunityStore.notifications.get(this.own.id)?.find(item => item.id === notificationId);
+    if (community) community.readAt = new Date().toISOString(); else await this.meetupService.markNotificationRead(notificationId); await delay();
   }
   async registerPushToken(expoPushToken: string, platform: PushPlatform, locale: 'is' | 'en' = 'is') {
     const registration = pushTokenRegistrationSchema.parse({ expoPushToken, platform, locale });

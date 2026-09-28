@@ -1,10 +1,13 @@
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StartupGate } from '@/components/StartupGate';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Button, ChoiceChip, Field, Screen, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
-import { api } from '@/services';
+import { api, runtimeEnv } from '@/services';
+import * as Linking from 'expo-linking';
 import type { Identity, IcelandRegion, Intent, ProfileSocial } from '@/types/domain';
 import { parseProfileList, socialPlatforms, updateSocialHandle } from '@/utils/profileExtras';
 import { isAtLeast18, parseDateOnly } from '@/utils/age';
@@ -17,6 +20,19 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const { locale, setLocale, t, theme, verifyLocation } = useApp();
   const [step, setStep] = useState(0);
+  const [checking, setChecking] = useState(true);
+  const [checkFailed, setCheckFailed] = useState(false);
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setChecking(true); setCheckFailed(false);
+    void api.hasCompletedOnboarding().then(completed => {
+      if (!active) return;
+      if (completed && !api.isDemo) router.replace('/(tabs)/discover');
+      else setChecking(false);
+    }).catch(() => { if (active) { setChecking(false); setCheckFailed(true); } });
+    return () => { active = false; };
+  }, [checkAttempt, router]);
   const [dob, setDob] = useState('');
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
@@ -45,6 +61,7 @@ export default function OnboardingScreen() {
     setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
 
   const next = async () => {
+    if (loading) return;
     setError('');
     if (step === 1 && (parseDateOnly(dob) === null || !isAtLeast18(dob))) {
       setError(parseDateOnly(dob) ? t('onboarding.underage') : t('onboarding.invalidDob'));
@@ -68,6 +85,8 @@ export default function OnboardingScreen() {
           region,
           sensitiveDataConsent: sensitive,
           privacyAccepted: privacy,
+          termsAccepted: terms,
+          guidelinesAccepted: guidelines,
           locale,
         });
         setStep(4);
@@ -97,8 +116,10 @@ export default function OnboardingScreen() {
   ] as const;
   const current = copy[step] ?? copy[0];
 
+  if (checking) return <StartupGate />;
+  if (checkFailed) return <StartupGate unavailable retry={() => setCheckAttempt(value => value + 1)} />;
   return (
-    <Screen back={step > 0}>
+    <Screen back={step > 0 && step < 4} onBack={() => { if (!loading) setStep(value => Math.max(0, value - 1)); }}>
       <View style={styles.page}>
         <View style={styles.progressRow}>
           <View style={styles.progress}>{copy.map((_, index) => <View key={index} style={[styles.progressItem, { backgroundColor: index <= step ? theme.colors.accent : theme.colors.border }]} />)}</View>
@@ -124,6 +145,7 @@ export default function OnboardingScreen() {
           {step === 1 && <Field label={t('onboarding.dobLabel')} value={dob} onChangeText={setDob} keyboardType="numbers-and-punctuation" placeholder={t('onboarding.dobPlaceholder')} />}
           {step === 2 && (
             <View style={styles.checkList}>
+              {runtimeEnv.websiteUrl && ([['terms', 'support.terms'], ['privacy', 'support.privacyNotice'], ['community', 'support.guidelines']] as const).map(([path, label]) => <Button key={path} variant="secondary" icon="open-outline" label={t(label)} onPress={() => { void Linking.openURL(runtimeEnv.websiteUrl + '/' + path + (locale === 'en' ? '?lang=en' : '')).catch(() => setError(t('support.linkFailed'))); }} />)}
               {[
                 [terms, setTerms, 'onboarding.terms'],
                 [privacy, setPrivacy, 'settings.privacy'],

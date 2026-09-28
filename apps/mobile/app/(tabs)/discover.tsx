@@ -1,9 +1,12 @@
+import { discoveryFilterCount } from '@/utils/discoveryPreferences';
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Brand, Button, ChoiceChip, DemoBanner, EmptyState, IconButton, ProfileTile, Screen } from '@/components/ui';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Brand, Button, ChoiceChip, EmptyState, IconButton, ProfileTile, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
+import { useAppearance } from '@/providers/AppearanceProvider';
 import { api } from '@/services';
 import { defaultFilters, type DiscoveryFilters, type Intent, type PublicProfile } from '@/types/domain';
 import { emptyFeed, PagedFeed } from '@/utils/pagedFeed';
@@ -11,20 +14,29 @@ import { emptyFeed, PagedFeed } from '@/utils/pagedFeed';
 export default function DiscoverScreen() {
   const router = useRouter();
   const { discoveryFilters, setDiscoveryFilters, locationAllowed, user, t, theme } = useApp();
+  const { appearance } = useAppearance();
+  const { width, fontScale } = useWindowDimensions();
+  const [listWidth, setListWidth] = useState(width);
+  const textScale = appearance.textScale * Math.max(1, fontScale);
+  const preferredColumns = listWidth >= 700 ? Math.max(2, Math.floor(listWidth / (appearance.discoveryLayout === 'large' ? 380 : appearance.discoveryLayout === 'dense' ? 190 : 250))) : appearance.discoveryLayout === 'large' ? 1 : appearance.discoveryLayout === 'dense' && textScale === 1 ? 3 : 2;
+  // Leave enough room for readable labels, including the phone's font-size preference.
+  const columns = Math.max(1, Math.min(preferredColumns, Math.floor((listWidth - 32 + 10) / (100 * textScale + 10))));
+  const tileWidth = Math.max(80, (listWidth - 32 - (columns - 1) * 10) / columns);
+  const [own, setOwn] = useState<{ interests: string[]; tags: string[] }>({ interests: [], tags: [] });
+  useFocusEffect(useCallback(() => { let active = true; void api.getOwnProfile().then(profile => { if (active) setOwn(profile); }).catch(() => { if (active) setOwn({ interests: [], tags: [] }); }); return () => { active = false; }; }, [user?.id]));
   const [snapshot, setSnapshot] = useState(emptyFeed<PublicProfile>);
   const feed = useMemo(() => new PagedFeed<PublicProfile, DiscoveryFilters>(
     (query, cursor) => api.discover(query, cursor), setSnapshot,
   ), []);
-  const activeFilters = discoveryFilters.identities.length + discoveryFilters.intents.length +
-    discoveryFilters.tags.length + Number(discoveryFilters.onlineOnly) +
-    Number(discoveryFilters.ageMin > 18 || discoveryFilters.ageMax < 99);
+  const activeFilters = discoveryFilterCount(discoveryFilters);
   const load = useCallback(() => {
     if (locationAllowed && user) {
       void feed.refresh(discoveryFilters);
-      void api.touchPresence().catch(() => undefined);
+
     } else feed.clear();
   }, [discoveryFilters, feed, locationAllowed, user]);
-  useFocusEffect(useCallback(() => { load(); return () => feed.clear(); }, [feed, load]));
+  useEffect(() => { if (!locationAllowed || !user) feed.clear(); }, [feed, locationAllowed, user]);
+  useFocusEffect(useCallback(() => { load(); return () => feed.pause(); }, [feed, load]));
 
   const header = (
     <View style={styles.header}>
@@ -48,10 +60,11 @@ export default function DiscoverScreen() {
           <ChoiceChip key={intent} label={t(`intent.${intent}`)} selected={discoveryFilters.intents.includes(intent)}
             onPress={() => setDiscoveryFilters({ ...discoveryFilters, intents: discoveryFilters.intents.includes(intent) ? discoveryFilters.intents.filter(i => i !== intent) : [...discoveryFilters.intents, intent] })} />
         ))}
+        <ChoiceChip label={t('discovery.moreOptions')} selected={false} onPress={() => router.push('/filters')} />
       </ScrollView>
       <View style={styles.resultBar}>
         <Text accessibilityLiveRegion="polite" style={[styles.resultText, { color: theme.colors.textMuted }]}>
-          {snapshot.loading && !snapshot.items.length ? t('common.loading') : t('discovery.results', { count: snapshot.items.length })}
+          {snapshot.loading && !snapshot.items.length ? t('common.loading') : t(snapshot.items.length === 1 ? 'discovery.oneResult' : 'discovery.results', { count: snapshot.items.length })}
         </Text>
         {activeFilters > 0 && <Pressable accessibilityRole="button" onPress={() => setDiscoveryFilters({ ...defaultFilters })} style={styles.clear}>
           <Text style={{ color: theme.colors.accent, fontWeight: '700' }}>{t('filters.clear')} · {activeFilters}</Text>
@@ -62,20 +75,21 @@ export default function DiscoverScreen() {
 
   return (
     <Screen scroll={false}>
-      <DemoBanner />
+      <View style={styles.feed} onLayout={event => setListWidth(event.nativeEvent.layout.width)}>
       <FlatList
         data={locationAllowed ? snapshot.items : []}
-        numColumns={2}
+        key={`columns-${columns}`}
+        numColumns={columns}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        columnWrapperStyle={styles.columns}
+        columnWrapperStyle={columns > 1 ? styles.columns : undefined}
         ListHeaderComponent={header}
         refreshing={snapshot.loading}
         onRefresh={load}
         initialNumToRender={8}
         windowSize={5}
         keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => <View style={styles.cell}><ProfileTile profile={item} onPress={() => router.push(`/profile/${item.id}`)} /></View>}
+        renderItem={({ item }) => <View style={[styles.cell, { width: tileWidth }]}><ProfileTile profile={item} compact={tileWidth < 150 * textScale} ownInterests={own.interests} ownTags={own.tags} onPress={() => router.push(`/profile/${item.id}`)} /></View>}
         ListEmptyComponent={!locationAllowed ? (
           <EmptyState icon="location-outline" title={t('location.staleTitle')} body={t('location.lockedHint')}
             action={<Button label={t('location.verifyAgain')} onPress={() => router.push('/location-gate')} />} />
@@ -85,7 +99,7 @@ export default function DiscoverScreen() {
           <EmptyState icon="cloud-offline-outline" title={t('discover.error')} action={<Button label={t('common.retry')} onPress={load} />} />
         ) : (
           <EmptyState icon="people-outline" title={t('discover.emptyTitle')} body={t('discovery.emptyHelp')}
-            action={<Button variant="secondary" label={activeFilters ? t('filters.clear') : t('common.retry')} onPress={activeFilters ? () => setDiscoveryFilters({ ...defaultFilters }) : load} />} />
+            action={<View style={{gap:8}}><Button variant="secondary" label={t('discovery.adjust')} onPress={()=>router.push('/filters')}/><Button variant="secondary" label={activeFilters ? t('filters.clear') : t('common.retry')} onPress={activeFilters ? () => setDiscoveryFilters({ ...defaultFilters }) : load} /></View>} />
         )}
         ListFooterComponent={snapshot.items.length > 0 ? (
           <View style={styles.footer}>
@@ -95,10 +109,12 @@ export default function DiscoverScreen() {
           </View>
         ) : null}
       />
+      </View>
     </Screen>
   );
 }
 const styles = StyleSheet.create({
+  feed: { flex: 1 },
   list: { paddingHorizontal: 16, paddingBottom: 24, flexGrow: 1 },
   header: { gap: 12, paddingTop: 18, paddingBottom: 10 },
   topbar: { flexDirection: 'row', alignItems: 'center', gap: 12 },

@@ -9,9 +9,13 @@ import { BrandMark } from "./brand-mark";
 import { Icons } from "./icon";
 
 const navigation = [
+  { href: "/attendance-reviews", label: "Attendance review", icon: Icons.FileSearch },
+  { href: "/diagnosis-review", label: "Diagnosis review", icon: Icons.FileSearch },
   { href: "/dashboard", label: "Overview", icon: Icons.LayoutDashboard },
   { href: "/reports", label: "Reports", icon: Icons.MessageSquareWarning },
   { href: "/photos", label: "Photo review", icon: Icons.ImageIcon },
+  { href: "/media-appeals", label: "Media appeals", icon: Icons.ImageIcon },
+  { href: "/finance", label: "Finance review", icon: Icons.FileSearch },
   { href: "/audit", label: "Audit log", icon: Icons.FileSearch },
 ];
 
@@ -32,7 +36,6 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
           >
             <item.icon aria-hidden="true" />
             <span>{item.label}</span>
-            {item.href === "/reports" && <span className="nav-count">12</span>}
           </Link>
         );
       })}

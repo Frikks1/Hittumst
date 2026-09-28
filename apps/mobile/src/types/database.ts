@@ -75,12 +75,14 @@ export type Database = {
           {
             foreignKeyName: "album_items_album_id_fkey"
             columns: ["album_id"]
+            isOneToOne: false
             referencedRelation: "albums"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_items_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -112,18 +114,21 @@ export type Database = {
           {
             foreignKeyName: "album_reactions_item_id_fkey"
             columns: ["item_id"]
+            isOneToOne: false
             referencedRelation: "album_items"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_reactions_reactor_id_fkey"
             columns: ["reactor_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_reactions_share_id_fkey"
             columns: ["share_id"]
+            isOneToOne: false
             referencedRelation: "album_shares"
             referencedColumns: ["id"]
           },
@@ -185,24 +190,28 @@ export type Database = {
           {
             foreignKeyName: "album_shares_album_id_fkey"
             columns: ["album_id"]
+            isOneToOne: false
             referencedRelation: "albums"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_shares_conversation_id_fkey"
             columns: ["conversation_id"]
+            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_shares_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_shares_recipient_id_fkey"
             columns: ["recipient_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -210,6 +219,7 @@ export type Database = {
       }
       album_view_sessions: {
         Row: {
+          client_request_id: string | null
           closed_at: string | null
           created_at: string
           expires_at: string
@@ -218,6 +228,7 @@ export type Database = {
           viewer_id: string
         }
         Insert: {
+          client_request_id?: string | null
           closed_at?: string | null
           created_at?: string
           expires_at: string
@@ -226,6 +237,7 @@ export type Database = {
           viewer_id: string
         }
         Update: {
+          client_request_id?: string | null
           closed_at?: string | null
           created_at?: string
           expires_at?: string
@@ -237,12 +249,14 @@ export type Database = {
           {
             foreignKeyName: "album_view_sessions_share_id_fkey"
             columns: ["share_id"]
+            isOneToOne: true
             referencedRelation: "album_shares"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "album_view_sessions_viewer_id_fkey"
             columns: ["viewer_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -280,6 +294,7 @@ export type Database = {
           {
             foreignKeyName: "albums_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -305,12 +320,14 @@ export type Database = {
           {
             foreignKeyName: "blocks_blocked_id_fkey"
             columns: ["blocked_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "blocks_blocker_id_fkey"
             columns: ["blocker_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -354,6 +371,7 @@ export type Database = {
           {
             foreignKeyName: "content_comments_author_id_fkey"
             columns: ["author_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -394,6 +412,7 @@ export type Database = {
           {
             foreignKeyName: "content_ratings_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -428,6 +447,7 @@ export type Database = {
           {
             foreignKeyName: "content_reactions_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -459,12 +479,14 @@ export type Database = {
           {
             foreignKeyName: "conversation_members_conversation_id_fkey"
             columns: ["conversation_id"]
+            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "conversation_members_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -496,12 +518,14 @@ export type Database = {
           {
             foreignKeyName: "conversations_participant_high_fkey"
             columns: ["participant_high"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "conversations_participant_low_fkey"
             columns: ["participant_low"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -539,12 +563,14 @@ export type Database = {
           {
             foreignKeyName: "friendships_addressee_id_fkey"
             columns: ["addressee_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "friendships_requester_id_fkey"
             columns: ["requester_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -579,12 +605,14 @@ export type Database = {
           {
             foreignKeyName: "group_members_group_id_fkey"
             columns: ["group_id"]
+            isOneToOne: false
             referencedRelation: "groups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "group_members_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -619,12 +647,14 @@ export type Database = {
           {
             foreignKeyName: "group_messages_group_id_fkey"
             columns: ["group_id"]
+            isOneToOne: false
             referencedRelation: "groups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "group_messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -653,12 +683,14 @@ export type Database = {
           {
             foreignKeyName: "group_voice_participants_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "group_voice_participants_session_id_fkey"
             columns: ["session_id"]
+            isOneToOne: false
             referencedRelation: "group_voice_sessions"
             referencedColumns: ["id"]
           },
@@ -690,12 +722,14 @@ export type Database = {
           {
             foreignKeyName: "group_voice_sessions_group_id_fkey"
             columns: ["group_id"]
+            isOneToOne: false
             referencedRelation: "groups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "group_voice_sessions_started_by_fkey"
             columns: ["started_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -736,6 +770,7 @@ export type Database = {
           {
             foreignKeyName: "groups_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -848,18 +883,21 @@ export type Database = {
           {
             foreignKeyName: "meetup_participations_meetup_id_fkey"
             columns: ["meetup_id"]
+            isOneToOne: false
             referencedRelation: "meetups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "meetup_participations_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "meetup_participations_responded_by_fkey"
             columns: ["responded_by"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -897,12 +935,14 @@ export type Database = {
           {
             foreignKeyName: "meetup_room_memberships_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "meetup_room_memberships_room_id_fkey"
             columns: ["room_id"]
+            isOneToOne: false
             referencedRelation: "meetup_rooms"
             referencedColumns: ["id"]
           },
@@ -946,12 +986,14 @@ export type Database = {
           {
             foreignKeyName: "meetup_room_messages_room_id_fkey"
             columns: ["room_id"]
+            isOneToOne: false
             referencedRelation: "meetup_rooms"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "meetup_room_messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -989,6 +1031,7 @@ export type Database = {
           {
             foreignKeyName: "meetup_rooms_meetup_id_fkey"
             columns: ["meetup_id"]
+            isOneToOne: true
             referencedRelation: "meetups"
             referencedColumns: ["id"]
           },
@@ -1047,6 +1090,7 @@ export type Database = {
           {
             foreignKeyName: "meetup_series_host_id_fkey"
             columns: ["host_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1064,6 +1108,7 @@ export type Database = {
           description: string
           effective_end: string | null
           ends_at: string | null
+          event_profile: Json | null
           general_area: string
           host_id: string | null
           id: string
@@ -1098,6 +1143,7 @@ export type Database = {
           description?: string
           effective_end?: string | null
           ends_at?: string | null
+          event_profile?: Json | null
           general_area: string
           host_id?: string | null
           id?: string
@@ -1132,6 +1178,7 @@ export type Database = {
           description?: string
           effective_end?: string | null
           ends_at?: string | null
+          event_profile?: Json | null
           general_area?: string
           host_id?: string | null
           id?: string
@@ -1159,18 +1206,21 @@ export type Database = {
           {
             foreignKeyName: "meetups_general_area_fkey"
             columns: ["general_area"]
+            isOneToOne: false
             referencedRelation: "meetup_general_areas"
             referencedColumns: ["code"]
           },
           {
             foreignKeyName: "meetups_host_id_fkey"
             columns: ["host_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "meetups_series_id_fkey"
             columns: ["series_id"]
+            isOneToOne: false
             referencedRelation: "meetup_series"
             referencedColumns: ["id"]
           },
@@ -1186,6 +1236,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           image_path: string | null
+          media_status: string | null
           message_kind: string
           sender_id: string | null
         }
@@ -1198,6 +1249,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           image_path?: string | null
+          media_status?: string | null
           message_kind?: string
           sender_id?: string | null
         }
@@ -1210,6 +1262,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           image_path?: string | null
+          media_status?: string | null
           message_kind?: string
           sender_id?: string | null
         }
@@ -1217,24 +1270,28 @@ export type Database = {
           {
             foreignKeyName: "messages_album_item_id_fkey"
             columns: ["album_item_id"]
+            isOneToOne: false
             referencedRelation: "album_items"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "messages_album_share_id_fkey"
             columns: ["album_share_id"]
+            isOneToOne: false
             referencedRelation: "album_shares"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "messages_conversation_id_fkey"
             columns: ["conversation_id"]
+            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1242,7 +1299,11 @@ export type Database = {
       }
       notifications: {
         Row: {
+          conversation_id: string | null
           created_at: string
+          direct_message_id: string | null
+          group_id: string | null
+          group_message_id: string | null
           id: string
           kind: string
           meetup_id: string | null
@@ -1251,7 +1312,11 @@ export type Database = {
           recipient_id: string
         }
         Insert: {
+          conversation_id?: string | null
           created_at?: string
+          direct_message_id?: string | null
+          group_id?: string | null
+          group_message_id?: string | null
           id?: string
           kind: string
           meetup_id?: string | null
@@ -1260,7 +1325,11 @@ export type Database = {
           recipient_id: string
         }
         Update: {
+          conversation_id?: string | null
           created_at?: string
+          direct_message_id?: string | null
+          group_id?: string | null
+          group_message_id?: string | null
           id?: string
           kind?: string
           meetup_id?: string | null
@@ -1270,14 +1339,44 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "notifications_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_direct_message_id_fkey"
+            columns: ["direct_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_group_message_id_fkey"
+            columns: ["group_message_id"]
+            isOneToOne: false
+            referencedRelation: "group_messages"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "notifications_meetup_id_fkey"
             columns: ["meetup_id"]
+            isOneToOne: false
             referencedRelation: "meetups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "notifications_recipient_id_fkey"
             columns: ["recipient_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1288,6 +1387,7 @@ export type Database = {
           approval_status: string
           created_at: string
           id: string
+          moderation_source: string
           position: number
           profile_id: string
           rejection_reason: string | null
@@ -1301,6 +1401,7 @@ export type Database = {
           approval_status?: string
           created_at?: string
           id?: string
+          moderation_source?: string
           position: number
           profile_id: string
           rejection_reason?: string | null
@@ -1314,6 +1415,7 @@ export type Database = {
           approval_status?: string
           created_at?: string
           id?: string
+          moderation_source?: string
           position?: number
           profile_id?: string
           rejection_reason?: string | null
@@ -1327,6 +1429,7 @@ export type Database = {
           {
             foreignKeyName: "profile_photos_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1366,6 +1469,7 @@ export type Database = {
           created_at: string
           duration_ms: number
           id: string
+          moderation_source: string
           position: number
           profile_id: string
           rejection_reason: string | null
@@ -1381,6 +1485,7 @@ export type Database = {
           created_at?: string
           duration_ms: number
           id?: string
+          moderation_source?: string
           position: number
           profile_id: string
           rejection_reason?: string | null
@@ -1396,6 +1501,7 @@ export type Database = {
           created_at?: string
           duration_ms?: number
           id?: string
+          moderation_source?: string
           position?: number
           profile_id?: string
           rejection_reason?: string | null
@@ -1409,6 +1515,7 @@ export type Database = {
           {
             foreignKeyName: "profile_videos_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1421,11 +1528,15 @@ export type Database = {
           anonymous_ratings_enabled: boolean
           bio: string | null
           comment_wall_enabled: boolean
+          conversation_prompt: string
+          cover_photo_id: string | null
           created_at: string
           custom_tags: string[]
           date_of_birth: string | null
           deletion_requested_at: string | null
           display_name: string | null
+          friends_of_friends_discovery: boolean
+          gender: string | null
           guidelines_accepted_at: string | null
           guidelines_accepted_version: string | null
           id: string
@@ -1461,11 +1572,15 @@ export type Database = {
           anonymous_ratings_enabled?: boolean
           bio?: string | null
           comment_wall_enabled?: boolean
+          conversation_prompt?: string
+          cover_photo_id?: string | null
           created_at?: string
           custom_tags?: string[]
           date_of_birth?: string | null
           deletion_requested_at?: string | null
           display_name?: string | null
+          friends_of_friends_discovery?: boolean
+          gender?: string | null
           guidelines_accepted_at?: string | null
           guidelines_accepted_version?: string | null
           id: string
@@ -1501,11 +1616,15 @@ export type Database = {
           anonymous_ratings_enabled?: boolean
           bio?: string | null
           comment_wall_enabled?: boolean
+          conversation_prompt?: string
+          cover_photo_id?: string | null
           created_at?: string
           custom_tags?: string[]
           date_of_birth?: string | null
           deletion_requested_at?: string | null
           display_name?: string | null
+          friends_of_friends_discovery?: boolean
+          gender?: string | null
           guidelines_accepted_at?: string | null
           guidelines_accepted_version?: string | null
           id?: string
@@ -1535,7 +1654,15 @@ export type Database = {
           updated_at?: string
           videos?: string[]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_cover_photo_id_fkey"
+            columns: ["cover_photo_id"]
+            isOneToOne: false
+            referencedRelation: "profile_photos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reports: {
         Row: {
@@ -1605,36 +1732,42 @@ export type Database = {
           {
             foreignKeyName: "reports_album_item_id_fkey"
             columns: ["album_item_id"]
+            isOneToOne: false
             referencedRelation: "album_items"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "reports_album_share_id_fkey"
             columns: ["album_share_id"]
+            isOneToOne: false
             referencedRelation: "album_shares"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "reports_conversation_id_fkey"
             columns: ["conversation_id"]
+            isOneToOne: false
             referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "reports_meetup_id_fkey"
             columns: ["meetup_id"]
+            isOneToOne: false
             referencedRelation: "meetups"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "reports_message_id_fkey"
             columns: ["message_id"]
+            isOneToOne: false
             referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "reports_room_message_id_fkey"
             columns: ["room_message_id"]
+            isOneToOne: false
             referencedRelation: "meetup_room_messages"
             referencedColumns: ["id"]
           },
@@ -1672,6 +1805,7 @@ export type Database = {
           {
             foreignKeyName: "starred_items_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1703,6 +1837,8 @@ export type Database = {
         Args: { p_cursor?: string; p_limit?: number; p_status?: string }
         Returns: Json
       }
+      admin_media_appeals: { Args: never; Returns: Json }
+      admin_media_evidence: { Args: { upload_id: string }; Returns: Json }
       admin_moderate_meetup: {
         Args: {
           p_action: string
@@ -1733,6 +1869,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_review_media: {
+        Args: { approved: boolean; reason: string; upload_id: string }
+        Returns: undefined
+      }
       admin_set_meetup_legal_hold: {
         Args: { p_enabled: boolean; p_meetup_id: string; p_reason: string }
         Returns: undefined
@@ -1751,7 +1891,65 @@ export type Database = {
         }
         Returns: undefined
       }
+      appeal_media_upload: { Args: { upload_id: string }; Returns: undefined }
+      apple_authorization_start: {
+        Args: { account_id: string; apple_subject: string; state_hash: string }
+        Returns: undefined
+      }
+      apple_authorization_start_bound: {
+        Args: {
+          account_id: string
+          apple_subject: string
+          return_mode: string
+          session_id: string
+          state_hash: string
+        }
+        Returns: undefined
+      }
+      apple_authorization_start_web: {
+        Args: { account_id: string; apple_subject: string; state_hash: string }
+        Returns: undefined
+      }
+      apple_authorization_take: { Args: { state_hash: string }; Returns: Json }
+      apple_custody_context: { Args: never; Returns: Json }
+      apple_session_active: { Args: never; Returns: boolean }
+      apple_token_get: { Args: { account_id: string }; Returns: Json }
+      apple_token_store: {
+        Args: {
+          account_id: string
+          apple_subject: string
+          client_id: string
+          sealed_token: string
+        }
+        Returns: undefined
+      }
+      apple_token_store_authorized: {
+        Args: {
+          account_id: string
+          apple_subject: string
+          client_id: string
+          sealed_token: string
+          session_id: string
+        }
+        Returns: undefined
+      }
+      billing_provider_guard: {
+        Args: {
+          p_account: string
+          p_aliases?: Json
+          p_claim: string
+          p_erasing?: boolean
+          p_job: string
+        }
+        Returns: Json
+      }
+      billing_service: {
+        Args: { p_action: string; p_input?: Json }
+        Returns: Json
+      }
+      billing_sync_access: { Args: { p_enqueue?: boolean }; Returns: Json }
       can_create_meetup: { Args: never; Returns: boolean }
+      cancel_media_upload: { Args: { upload_id: string }; Returns: boolean }
       cancel_meetup: { Args: { meetup_id: string }; Returns: undefined }
       cancel_meetup_request: { Args: { meetup_id: string }; Returns: undefined }
       cancel_meetup_series_occurrences: {
@@ -1763,6 +1961,9 @@ export type Database = {
         Args: { batch_size?: number; claim_token: string }
         Returns: Json
       }
+      claim_diagnosis_cleanup: { Args: { claim: string }; Returns: Json }
+      claim_media_cleanup: { Args: { claim_id: string }; Returns: Json }
+      claim_media_upload: { Args: { claim_id: string }; Returns: Json }
       claim_notification_outbox: {
         Args: { batch_size?: number; claim_token?: string }
         Returns: Json
@@ -1770,6 +1971,58 @@ export type Database = {
       close_album_view_session: {
         Args: { session_id: string }
         Returns: undefined
+      }
+      community_apply: {
+        Args: {
+          p_answers: string[]
+          p_introduction: string
+          p_meetup_id: string
+          p_rules_accepted: boolean
+        }
+        Returns: Json
+      }
+      community_checkin_receipts: {
+        Args: { p_meetup_id: string }
+        Returns: Json
+      }
+      community_decide_application: {
+        Args: { p_approve: boolean; p_meetup_id: string; p_profile_id: string }
+        Returns: Json
+      }
+      community_get_state: { Args: { p_meetup_id: string }; Returns: Json }
+      community_list_announcements: {
+        Args: { p_meetup_id: string }
+        Returns: Json
+      }
+      community_list_applications: {
+        Args: { p_meetup_id: string }
+        Returns: Json
+      }
+      community_list_following: { Args: never; Returns: Json }
+      community_publish_announcement: {
+        Args: { p_audience: string; p_body: string; p_meetup_id: string }
+        Returns: Json
+      }
+      community_set_cover: {
+        Args: { p_media_id: string; p_meetup_id: string }
+        Returns: undefined
+      }
+      community_set_follow: {
+        Args: {
+          p_following: boolean
+          p_notifications?: boolean
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
+      }
+      community_set_questions: {
+        Args: { p_meetup_id: string; p_questions: string[] }
+        Returns: undefined
+      }
+      community_waitlist_action: {
+        Args: { p_action: string; p_meetup_id: string }
+        Returns: Json
       }
       complete_meetup_attendance: {
         Args: {
@@ -1796,6 +2049,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      complete_onboarding_profile: { Args: { input: Json }; Returns: undefined }
       confirm_meetup_attendance: {
         Args: { meetup_id: string }
         Returns: undefined
@@ -1805,11 +2059,23 @@ export type Database = {
         Args: { avatar_path?: string; bio?: string; name: string }
         Returns: string
       }
+      create_meetup_attendance_code: {
+        Args: { p_meetup_id: string }
+        Returns: Json
+      }
       create_meetup_draft: { Args: { input: Json }; Returns: string }
       delete_album: { Args: { album_id: string }; Returns: undefined }
       delete_album_item: { Args: { item_id: string }; Returns: Json }
       delete_meetup_draft: { Args: { meetup_id: string }; Returns: undefined }
+      delete_meetup_recommendation: {
+        Args: { p_meetup_id: string }
+        Returns: undefined
+      }
       delete_my_account: { Args: never; Returns: undefined }
+      diagnosis_action: {
+        Args: { action: string; input?: Json }
+        Returns: Json
+      }
       disable_push_token: {
         Args: { reason: string; token_id: string }
         Returns: undefined
@@ -1834,22 +2100,117 @@ export type Database = {
           result_cursor: Json
         }[]
       }
+      discovery_release_status: { Args: never; Returns: boolean }
       export_account: { Args: never; Returns: Json }
       export_my_account: { Args: never; Returns: Json }
+      fail_media_upload: {
+        Args: { claim_id: string; job_id: string; permanent?: boolean }
+        Returns: boolean
+      }
+      finance_billing_save: {
+        Args: { fingerprint: string; revision: number; state: Json }
+        Returns: boolean
+      }
+      finance_billing_snapshot: { Args: never; Returns: Json }
+      finance_event_context: { Args: { meetup_id: string }; Returns: Json }
+      finance_event_save: {
+        Args: {
+          command_action: string
+          meetup_id: string
+          member_id: string
+          revision: number
+          session_id: string
+          state: Json
+        }
+        Returns: boolean
+      }
+      finance_load: { Args: never; Returns: Json }
+      finance_publish_context: {
+        Args: { meetup_id: string; member_id: string }
+        Returns: Json
+      }
+      finance_publish_meetup: {
+        Args: {
+          meetup_id: string
+          member_id: string
+          occurrence_starts?: Json
+          recurrence?: Json
+          request_id: string
+          revision: number
+          session_id: string
+          state: Json
+        }
+        Returns: boolean
+      }
+      finance_save: {
+        Args: { revision: number; state: Json }
+        Returns: boolean
+      }
+      finance_settlement_save: {
+        Args: { meetup_id: string; revision: number; state: Json }
+        Returns: boolean
+      }
       finish_account_deletion: {
         Args: { claim_token: string; job_id: string; succeeded: boolean }
         Returns: undefined
       }
+      finish_diagnosis_cleanup: {
+        Args: { claim: string; path: string }
+        Returns: boolean
+      }
+      finish_media_cleanup: {
+        Args: { claim_id: string; job_id: string; succeeded: boolean }
+        Returns: boolean
+      }
+      finish_media_upload: {
+        Args: {
+          byte_size: number
+          claim_id: string
+          duration_ms: number
+          job_id: string
+          object_path: string
+          rejection_reason: string
+          thumbnail_path: string
+        }
+        Returns: boolean
+      }
+      get_account_media: { Args: { object_id: string }; Returns: Json }
+      get_financial_access: { Args: never; Returns: boolean }
+      get_host_community_summary: { Args: { p_host_id: string }; Returns: Json }
       get_launch_capabilities: { Args: never; Returns: Json }
       get_meetup: { Args: { meetup_id: string }; Returns: Json }
+      get_meetup_community_feedback: {
+        Args: { p_meetup_id: string }
+        Returns: Json
+      }
       get_meetup_draft_recurrence: {
         Args: { meetup_id: string }
         Returns: Json
       }
       get_meetup_online_access: { Args: { meetup_id: string }; Returns: Json }
       get_meetup_room_summary: { Args: { meetup_id: string }; Returns: Json }
+      get_my_entitlement: { Args: never; Returns: Json }
+      get_premium_profile: { Args: { profile_id: string }; Returns: Json }
       get_public_profile: { Args: { profile_id: string }; Returns: Json }
+      get_recovery_media_manifest: {
+        Args: { after_key?: string; batch_size?: number }
+        Returns: Json
+      }
       get_staff_access: { Args: never; Returns: Json }
+      get_worker_health: { Args: never; Returns: Json }
+      group_action: {
+        Args: { action: string; group_id: string; input?: Json }
+        Returns: undefined
+      }
+      group_voice_access: {
+        Args: {
+          p_action: string
+          p_admission_id?: string
+          p_group_id: string
+          p_target_id?: string
+        }
+        Returns: Json
+      }
       join_meetup: { Args: { meetup_id: string }; Returns: Json }
       leave_meetup: { Args: { meetup_id: string }; Returns: undefined }
       list_blocked_profiles: { Args: never; Returns: Json }
@@ -1866,11 +2227,17 @@ export type Database = {
         Returns: Json
       }
       list_friends: { Args: never; Returns: Json }
+      list_group_members: { Args: { group_id: string }; Returns: Json }
       list_group_messages: {
         Args: { before?: string; group_id: string; page_size?: number }
         Returns: Json
       }
+      list_group_messages_page: {
+        Args: { cursor?: Json; group_id: string; page_size?: number }
+        Returns: Json
+      }
       list_groups: { Args: never; Returns: Json }
+      list_media_uploads: { Args: { album_id: string }; Returns: Json }
       list_meetup_participants: { Args: { meetup_id: string }; Returns: Json }
       list_meetup_requests: { Args: { meetup_id: string }; Returns: Json }
       list_meetup_room_message_page: {
@@ -1883,6 +2250,11 @@ export type Database = {
       }
       list_messages_page: {
         Args: { conversation_id: string; cursor?: Json; page_size?: number }
+        Returns: Json
+      }
+      list_my_community_attendance: { Args: never; Returns: Json }
+      list_my_media_uploads: {
+        Args: { target_id?: string; target_type?: string }
         Returns: Json
       }
       list_my_meetups: { Args: never; Returns: Json }
@@ -1908,8 +2280,17 @@ export type Database = {
         Args: { notification_id: string }
         Returns: undefined
       }
+      meetup_profile_action: {
+        Args: { action: string; input?: Json; meetup_id: string }
+        Returns: Json
+      }
       open_album_share: { Args: { share_id: string }; Returns: Json }
+      open_album_share_once: {
+        Args: { request_id: string; share_id: string }
+        Returns: Json
+      }
       prepare_account_deletion: { Args: never; Returns: boolean }
+      prepare_media_restore: { Args: { restore_id: string }; Returns: number }
       process_hittumst_lifecycle: { Args: never; Returns: Json }
       publish_meetup: { Args: { meetup_id: string }; Returns: Json }
       publish_meetup_series: {
@@ -1925,10 +2306,26 @@ export type Database = {
         Args: { target_id: string; target_type: string; value: number }
         Returns: undefined
       }
+      record_meetup_attendance: {
+        Args: { p_code: string; p_meetup_id: string }
+        Returns: undefined
+      }
       record_push_receipts: { Args: { receipts: Json }; Returns: undefined }
       record_push_tickets: {
         Args: { claim_token: string; outbox_id: number; tickets: Json }
         Returns: undefined
+      }
+      record_worker_heartbeat: {
+        Args: { batches?: number; worker_name: string; worker_state: string }
+        Returns: undefined
+      }
+      recovery_media_is_current: {
+        Args: { bucket: string; object_path: string }
+        Returns: boolean
+      }
+      refresh_album_share: {
+        Args: { session_id?: string; share_id: string }
+        Returns: Json
       }
       register_push_token: {
         Args: { expo_push_token: string; locale?: string; platform: string }
@@ -1951,10 +2348,28 @@ export type Database = {
         Returns: string
       }
       request_meetup_access: { Args: { meetup_id: string }; Returns: Json }
+      request_meetup_attendance_review: {
+        Args: { p_meetup_id: string; p_reason: string }
+        Returns: undefined
+      }
+      reserve_album_upload: {
+        Args: { album_id: string; media_type: string }
+        Returns: Json
+      }
+      reserve_media_upload: {
+        Args: {
+          media_type: string
+          metadata?: Json
+          target_id: string
+          target_type: string
+        }
+        Returns: Json
+      }
       resolve_meetup_room_conflict: {
         Args: { action: string; conflict_id: string }
         Returns: undefined
       }
+      resolve_notification: { Args: { notification_id: string }; Returns: Json }
       respond_to_album_share: {
         Args: { accept: boolean; share_id: string }
         Returns: Json
@@ -1963,7 +2378,15 @@ export type Database = {
         Args: { approve: boolean; meetup_id: string; profile_id: string }
         Returns: Json
       }
+      review_diagnosis: {
+        Args: { action: string; input?: Json }
+        Returns: Json
+      }
       revoke_album_share: { Args: { share_id: string }; Returns: undefined }
+      save_meetup_recommendation: {
+        Args: { p_body?: string; p_meetup_id: string; p_recommended: boolean }
+        Returns: undefined
+      }
       send_album_reply: {
         Args: { body: string; item_id: string; share_id: string }
         Returns: string
@@ -1971,6 +2394,14 @@ export type Database = {
       send_group_message: {
         Args: { body: string; group_id: string }
         Returns: string
+      }
+      send_group_message_once: {
+        Args: { body: string; client_message_id: string; group_id: string }
+        Returns: string
+      }
+      send_group_message_receipt: {
+        Args: { body: string; client_message_id: string; group_id: string }
+        Returns: Json
       }
       send_meetup_room_message: {
         Args: { body: string; room_id: string }
@@ -2004,6 +2435,11 @@ export type Database = {
         Args: { meetup_id: string; visibility: string }
         Returns: undefined
       }
+      set_premium_profile: {
+        Args: { badge: boolean; effect: boolean }
+        Returns: Json
+      }
+      set_sandbox_tier: { Args: { tier: string }; Returns: Json }
       share_albums: {
         Args: { access_mode: string; album_ids: string[]; recipient_id: string }
         Returns: Json
@@ -2015,6 +2451,11 @@ export type Database = {
           recipient_ids: string[]
         }
         Returns: Json
+      }
+      staff_list_meetup_attendance_reviews: { Args: never; Returns: Json }
+      staff_resolve_meetup_attendance_review: {
+        Args: { p_approved: boolean; p_reason: string; p_request_id: string }
+        Returns: undefined
       }
       start_conversation: {
         Args: { other_profile_id: string }
@@ -2053,6 +2494,10 @@ export type Database = {
         Returns: Json
       }
       update_meetup: { Args: { input: Json; meetup_id: string }; Returns: Json }
+      voice_service: {
+        Args: { p_action: string; p_event?: Json; p_id?: string }
+        Returns: Json
+      }
       withdraw_sensitive_consent: { Args: never; Returns: undefined }
     }
     Enums: {

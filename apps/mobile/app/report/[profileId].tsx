@@ -1,6 +1,7 @@
+import { Text } from '@/components/Typography';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, ChoiceChip, Field, Screen, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';

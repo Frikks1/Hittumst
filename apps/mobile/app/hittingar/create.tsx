@@ -1,8 +1,16 @@
+import { communityApi } from '@/services/community';
+import { ApplicationQuestions } from '@/features/hittingar/CommunityPanels';
+import { SponsorshipForm, type SponsorshipSelection } from '@/features/hittingar/SponsorshipForm';
+import { PoolSummary } from '@/features/hittingar/PoolSummary';
+import { defaultMeetupEventProfile, type MeetupSummary, type FinanceCommand } from '@rummal/shared';
+import { EventProfileFields } from '@/features/hittingar/EventProfileFields';
+import { EventMediaGallery, type PendingEventMedia } from '@/features/hittingar/EventMedia';
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { Button, ChoiceChip, DemoBanner, Field, Screen, textStyles } from '@/components/ui';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Button, ChoiceChip, Field, Screen, textStyles } from '@/components/ui';
 import { SafetyNotice } from '@/features/hittingar/components';
 import {
   clearHittingarLocalDraft,
@@ -56,6 +64,7 @@ function draftInput(form: CreateHittingurForm): MeetupDraftInput {
     timezone: 'Atlantic/Reykjavik' as const,
   } : null;
   return {
+    eventProfile: form.eventProfile,
     title: form.title.trim(),
     description: form.description.trim(),
     category: form.category,
@@ -64,13 +73,13 @@ function draftInput(form: CreateHittingurForm): MeetupDraftInput {
     tags: form.tags,
     startsAt,
     endsAt,
-    accessMode: form.accessMode,
+    accessMode: form.eventProfile.joinMode === 'request' ? 'private' : 'open',
     locationVisibility: form.locationVisibility,
-    releasePolicy: form.releasePolicy,
+    releasePolicy: form.locationVisibility === 'public' ? 'immediate' : form.releasePolicy,
     generalAreaId: form.generalAreaId ?? 'reykjavik',
     capacity: form.capacity ? Number(form.capacity) : null,
     isExplicit: form.isExplicit,
-    rsvpVisibility: form.rsvpVisibility,
+    rsvpVisibility: 'private',
     onlineUrl: form.venueMode === 'in_person' ? undefined : form.onlineUrl.trim(),
     onlineAccessCode: form.venueMode === 'in_person' ? undefined : form.onlineAccessCode.trim() || undefined,
     recurrence,
@@ -100,7 +109,15 @@ export default function CreateHittingurScreen() {
   const { id: editingId } = useLocalSearchParams<CreateParams>();
   const router = useRouter();
   const { locale, t, theme, user } = useApp();
+  const [pendingPublication, setPendingPublication] = useState<Extract<FinanceCommand, { action: 'publish_sponsored' }> | null>(null);
+  const [sponsoring, setSponsoring] = useState(false);
+  const [sponsorship, setSponsorship] = useState<SponsorshipSelection | null>(null);
+  const [published, setPublished] = useState(false);
+  const [pool, setPool] = useState<MeetupSummary['pool']>({ hostBps: 2500, locked: false, total: 0, fundedTotal: 0, paidTotal: 0, refundedTotal: 0, status: 'accepting', estimatedParticipantReward: null, eligibleParticipantCount: 0 });
   const [step, setStep] = useState(0);
+  const stage = [2, 0, 1, 3][step] ?? 2;
+  useEffect(() => { setSponsorship(null); }, [step]);
+  const [pendingMedia, setPendingMedia] = useState<PendingEventMedia[]>([]);
   const [form, setForm] = useState<CreateHittingurForm>(initialCreateHittingurForm);
   const [draftId, setDraftId] = useState<string | null>(editingId ?? null);
   const draftIdRef = useRef<string | null>(editingId ?? null);
@@ -113,6 +130,26 @@ export default function CreateHittingurScreen() {
   const [restored, setRestored] = useState(Boolean(editingId));
   const localDraftOwnerId = editingId ? null : user?.id ?? null;
 
+  useEffect(() => {
+    let active = true;
+    void meetupApi.getPendingFinanceCommand().then(command => { if (active && command?.action === 'publish_sponsored') setPendingPublication(command); }).catch(() => {});
+    return () => { active = false; };
+  }, [user?.id]);
+
+  const resumePublication = async () => {
+    if (!pendingPublication || saving) return;
+    setSaving(true);
+    try {
+      await meetupApi.publishMeetup(pendingPublication.meetupId, pendingPublication);
+      if (localDraftOwnerId && pendingPublication.meetupId === draftIdRef.current) await clearHittingarLocalDraft(localDraftOwnerId);
+      router.replace(`/hittingar/${pendingPublication.meetupId}` as Href);
+    } catch {
+      const command = await meetupApi.getPendingFinanceCommand().catch(() => null);
+      setPendingPublication(command?.action === 'publish_sponsored' ? command : null);
+      setErrors(['event.error']);
+    } finally { setSaving(false); }
+  };
+
   const update = <K extends keyof CreateHittingurForm>(key: K, value: CreateHittingurForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -124,14 +161,18 @@ export default function CreateHittingurScreen() {
   useEffect(() => {
     let active = true;
     if (editingId) {
-      void meetupApi.getMeetup(editingId).then((detail) => {
+      void Promise.all([meetupApi.getMeetup(editingId), communityApi.getState(editingId)]).then(([detail, community]) => {
         if (!active) return;
+        setPool(detail.pool);
+        setPublished(detail.status !== 'draft');
         const start = utcToReykjavikFields(detail.startsAt);
         const end = utcToReykjavikFields(detail.endsAt);
         const exact = detail.location.state === 'public' || detail.location.state === 'protected_revealed'
           ? detail.location.exactLocation
           : null;
         setForm({
+          eventProfile: detail.eventProfile ?? defaultMeetupEventProfile(detail.accessMode),
+          applicationQuestions: community.applicationQuestions,
           title: detail.title,
           description: detail.description,
           category: detail.category,
@@ -157,7 +198,7 @@ export default function CreateHittingurScreen() {
           releasePolicy: detail.releasePolicy,
           publicLocationConfirmed: detail.locationVisibility === 'public',
           prohibitedServicesAttested: false,
-          rsvpVisibility: detail.rsvpVisibility,
+          rsvpVisibility: 'private',
           onlineUrl: detail.onlineAccess.state === 'revealed' ? detail.onlineAccess.url : '',
           onlineAccessCode: detail.onlineAccess.state === 'revealed' ? detail.onlineAccess.accessCode ?? '' : '',
           recurring: detail.recurrence !== null,
@@ -205,25 +246,27 @@ export default function CreateHittingurScreen() {
         }
       }
       setSaveStatus('saved');
+      return true;
     } catch {
       setSaveStatus('error');
+      return false;
     }
   }, [localDraftOwnerId]);
 
-  const basicsComplete = validateCreateStep(0, form).length === 0;
-  const serverReady = [0, 1, 2, 3].every((value) => validateCreateStep(value, form).length === 0);
+  const basicsComplete = true;
+
   useEffect(() => {
     if (!restored || !basicsComplete) return;
-    const timer = setTimeout(() => void persist(form, step >= 2 && serverReady), 650);
+    const timer = setTimeout(() => void persist(form, false), 650);
     return () => clearTimeout(timer);
-  }, [basicsComplete, form, persist, restored, serverReady, step]);
+  }, [basicsComplete, form, persist, restored, step]);
 
-  const stepErrors = useMemo(() => validateCreateStep(step, form), [form, step]);
+  const stepErrors = useMemo(() => validateCreateStep(stage, form), [form, stage]);
   const next = async () => {
-    const nextErrors = validateCreateStep(step, form);
+    const nextErrors = validateCreateStep(stage, form);
     setErrors(nextErrors);
     if (nextErrors.length > 0) return;
-    await persist(form, step >= 2 && serverReady);
+    await persist(form, false);
     setStep((value) => Math.min(value + 1, 3));
   };
 
@@ -256,23 +299,41 @@ export default function CreateHittingurScreen() {
     }
   };
 
+  const prepareSponsorship = async () => {
+    const nextErrors = [0, 1, 2, 3].flatMap(value => validateCreateStep(value, form));
+    setErrors(nextErrors);
+    if (nextErrors.length > 0 || !await persist(form, true) || !draftIdRef.current) throw new Error('event_save_failed');
+    return draftIdRef.current;
+  };
+
   const save = async (publish: boolean) => {
+    if (saving || pendingPublication || (publish && sponsoring && !sponsorship)) return;
     const allErrors = [0, 1, 2, 3].flatMap((value) => validateCreateStep(value, form));
     setErrors(allErrors);
     if (allErrors.length > 0) return;
     setSaving(true);
     try {
-      await persist(form, true);
+      if (!await persist(form, true)) throw new Error('event_save_failed');
       const id = draftIdRef.current;
       if (!id) throw new Error('Draft id missing');
+      await communityApi.setQuestions(id, form.applicationQuestions.map(value => value.trim()).filter(Boolean));
+      for (const item of pendingMedia) {
+        const mediaId = await meetupApi.uploadMeetupMedia(id, item.uri, item.kind, item.mimeType);
+        if (item.isCover && typeof mediaId === 'string') await communityApi.setCover(id, mediaId);
+        setPendingMedia(current => current.filter(value => value !== item));
+      }
       if (publish) {
-        await meetupApi.publishMeetup(id);
+        await meetupApi.publishMeetup(id, sponsoring && sponsorship ? { quoteId: sponsorship.quote.id, amount: sponsorship.quote.amount, expectedHostBps: sponsorship.quote.hostBps, requestId: sponsorship.requestId } : undefined);
         if (localDraftOwnerId) await clearHittingarLocalDraft(localDraftOwnerId);
         router.replace(`/hittingar/${id}` as Href);
       } else {
         if (localDraftOwnerId) await clearHittingarLocalDraft(localDraftOwnerId);
         router.replace('/hittingar/mine' as Href);
       }
+    } catch {
+      const command = await meetupApi.getPendingFinanceCommand().catch(() => null);
+      setPendingPublication(command?.action === 'publish_sponsored' ? command : null);
+      setErrors(['event.error']);
     } finally {
       setSaving(false);
     }
@@ -280,8 +341,8 @@ export default function CreateHittingurScreen() {
 
   return (
     <Screen back title={t(editingId ? 'hittingar.create.editTitle' : 'hittingar.create.title')}>
-      <DemoBanner />
       <View style={styles.page}>
+        {pendingPublication && <View style={{ gap: 10, padding: 14, backgroundColor: theme.colors.surface, borderRadius: 16 }}><Text accessibilityRole="alert" style={{ color: theme.colors.text }}>{locale === 'is' ? 'Birting með styrk bíður staðfestingar. Uppkastið er vistað. Athugaðu sömu aðgerð áður en þú birtir aftur.' : 'Sponsored publication is awaiting confirmation. Your draft is saved. Check the same request before publishing again.'}</Text><Button disabled={saving} label={locale === 'is' ? 'Athuga stöðu birtingar' : 'Check publication status'} onPress={() => void resumePublication()} /></View>}
         <View style={styles.steps} accessibilityLabel={t('hittingar.create.progress', { step: step + 1 })}>
           {[0, 1, 2, 3].map((value) => <View key={value} style={[styles.step, { backgroundColor: value <= step ? theme.colors.accent : theme.colors.surfaceMuted }]} />)}
         </View>
@@ -289,13 +350,15 @@ export default function CreateHittingurScreen() {
           <Text style={[textStyles.eyebrow, { color: theme.colors.accent }]}>{t('hittingar.create.stepLabel', { step: step + 1 })}</Text>
           {saveStatus !== 'idle' && <Text accessibilityLiveRegion="polite" style={[styles.saveStatus, { color: saveStatus === 'error' ? theme.colors.danger : theme.colors.textMuted }]}>{t(`hittingar.create.saveStatus.${saveStatus}`)}</Text>}
         </View>
-        <Text style={[textStyles.title, { color: theme.colors.text }]}>{t(`hittingar.create.step${step + 1}Title` as TranslationKey)}</Text>
-        <Text style={[textStyles.body, { color: theme.colors.textMuted }]}>{t(`hittingar.create.step${step + 1}Body` as TranslationKey)}</Text>
+        <Text style={[textStyles.title, { color: theme.colors.text }]}>{t(`hittingar.create.step${stage + 1}Title` as TranslationKey)}</Text>
+        <Text style={[textStyles.body, { color: theme.colors.textMuted }]}>{t(`hittingar.create.step${stage + 1}Body` as TranslationKey)}</Text>
 
-        {step === 0 && (
+        {stage === 0 && (
           <View style={styles.form}>
+            <EventMediaGallery id={draftId} editable pending={pendingMedia} onPendingChange={setPendingMedia} />
             <Field label={t('hittingar.create.titleLabel')} value={form.title} onChangeText={(value) => update('title', value)} placeholder={t('hittingar.create.titlePlaceholder')} />
             <Field label={t('hittingar.create.descriptionLabel')} value={form.description} onChangeText={(value) => update('description', value)} multiline placeholder={t('hittingar.create.descriptionPlaceholder')} />
+            <EventProfileFields value={form.eventProfile} onChange={value => update('eventProfile', value)} section="information" />
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.intentionLabel')}</Text>
             <View style={styles.wrap}>{HITTINGUR_INTENTIONS.map((value) => <ChoiceChip key={value} label={t(`hittingar.intention.${value}` as TranslationKey)} selected={form.intention === value} onPress={() => setForm((current) => ({ ...current, intention: value, isExplicit: false }))} />)}</View>
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.categoryLabel')}</Text>
@@ -321,7 +384,7 @@ export default function CreateHittingurScreen() {
           </View>
         )}
 
-        {step === 1 && (
+        {stage === 1 && (
           <View style={styles.form}>
             <View style={styles.twoColumns}>
               <View style={styles.flex}><Field label={t('hittingar.create.startDateLabel')} value={form.startDate} onChangeText={(value) => update('startDate', value)} placeholder={t('hittingar.create.datePlaceholder')} /></View>
@@ -352,7 +415,7 @@ export default function CreateHittingurScreen() {
           </View>
         )}
 
-        {step === 2 && (
+        {stage === 2 && (
           <View style={styles.form}>
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.venueModeLabel')}</Text>
             <View style={styles.wrap}>{HITTINGUR_VENUE_MODES.map((value) => <ChoiceChip key={value} label={t(`hittingar.venue.${value}` as TranslationKey)} selected={form.venueMode === value} onPress={() => update('venueMode', value)} />)}</View>
@@ -391,14 +454,12 @@ export default function CreateHittingurScreen() {
           </View>
         )}
 
-        {step === 3 && (
+        {stage === 3 && (
           <View style={styles.form}>
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.accessLabel')}</Text>
-            <View style={styles.wrap}>
-              <ChoiceChip label={t('hittingar.access.private')} selected={form.accessMode === 'private'} onPress={() => update('accessMode', 'private')} />
-              <ChoiceChip label={t('hittingar.access.open')} selected={form.accessMode === 'open'} onPress={() => update('accessMode', 'open')} />
-            </View>
-            {form.locationVisibility === 'protected' && form.accessMode === 'open' && <SafetyNotice title={t('hittingar.location.openProtectedTitle')} tone="danger"><Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{t('hittingar.location.openProtectedBody')}</Text></SafetyNotice>}
+            <EventProfileFields value={form.eventProfile} onChange={value => setForm(current => ({ ...current, eventProfile: value, accessMode: value.joinMode === 'request' ? 'private' : 'open' }))} section="admission" />
+            {form.eventProfile.joinMode === 'request' && <ApplicationQuestions value={form.applicationQuestions} onChange={value => update('applicationQuestions', value)} />}
+            {form.locationVisibility === 'protected' && form.eventProfile.joinMode === 'public' && <SafetyNotice title={t('hittingar.location.openProtectedTitle')} tone="danger"><Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{t('hittingar.location.openProtectedBody')}</Text></SafetyNotice>}
             {form.locationVisibility === 'protected' && (
               <>
                 <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.releaseLabel')}</Text>
@@ -412,9 +473,14 @@ export default function CreateHittingurScreen() {
             <View style={[styles.review, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
               <Text style={[textStyles.heading, { color: theme.colors.text }]}>{form.title}</Text>
               <Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{form.startDate} {form.startTime} · {form.generalAreaId ? t(generalAreaKey(form.generalAreaId)) : ''}</Text>
-              <Text style={[styles.reviewLine, { color: theme.colors.text }]}>{t(`hittingar.access.${form.accessMode}`)} · {t(`hittingar.location.${form.locationVisibility}`)}</Text>
+              <Text style={[styles.reviewLine, { color: theme.colors.text }]}>{t(`event.${form.eventProfile.joinMode}`)} · {t(`hittingar.location.${form.locationVisibility}`)}</Text>
               {form.isExplicit && <Text style={[styles.reviewLine, { color: theme.colors.danger }]}>18+ · {t('hittingar.create.explicitTitle')}</Text>}
             </View>
+            <PoolSummary pool={pool} />
+            {!published && <>
+              <View style={[styles.switchRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}><View style={styles.switchCopy}><Text style={[styles.switchTitle, { color: theme.colors.text }]}>{locale === 'is' ? 'Styrkja eigin hitting' : 'Sponsor your own meetup'}</Text><Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{locale === 'is' ? 'Valfrjáls styrkur bætir hvata fyrir þátttakendur. Birtist í sjóðnum eftir staðfesta birtingu.' : 'Add an optional reward for attendees. It appears in the funded pool after publication is confirmed.'}</Text></View><Switch accessibilityLabel={locale === 'is' ? 'Styrkja eigin hitting' : 'Sponsor your own meetup'} disabled={saving} value={sponsoring} onValueChange={value => { setSponsoring(value); setSponsorship(null); }} trackColor={{ true: theme.colors.accent }} /></View>
+              {sponsoring && <SponsorshipForm prepareMeetup={prepareSponsorship} deferConfirmation disabled={saving} onSelectionChange={setSponsorship} />}
+            </>}
             <SafetyNotice title={t('hittingar.create.reviewSafetyTitle')} tone="accent"><Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{t('hittingar.create.reviewSafetyBody')}</Text></SafetyNotice>
             <View style={[styles.confirm, { borderColor: theme.colors.warning, backgroundColor: theme.colors.surface }]}>
               <View style={styles.switchCopy}>
@@ -422,6 +488,7 @@ export default function CreateHittingurScreen() {
                 <Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{t('hittingar.create.attestationBody')}</Text>
               </View>
               <Switch
+                accessibilityLabel={t('hittingar.create.attestationTitle')}
                 value={form.prohibitedServicesAttested}
                 onValueChange={(value) => update('prohibitedServicesAttested', value)}
                 trackColor={{ true: theme.colors.accent }}
@@ -436,7 +503,7 @@ export default function CreateHittingurScreen() {
           {step < 3 ? <View style={styles.flex}><Button label={t('common.continue')} disabled={stepErrors.length > 0} onPress={() => void next()} /></View> : (
             <>
               <View style={styles.flex}><Button label={t('hittingar.create.saveDraft')} variant="secondary" loading={saving} onPress={() => void save(false)} /></View>
-              <View style={styles.flex}><Button label={t(editingId ? 'hittingar.create.saveChanges' : 'hittingar.create.publish')} loading={saving} onPress={() => void save(true)} /></View>
+              <View style={styles.flex}><Button label={sponsoring ? (locale === 'is' ? 'Birta og styrkja' : 'Publish and sponsor') : t(editingId ? 'hittingar.create.saveChanges' : 'hittingar.create.publish')} disabled={Boolean(pendingPublication) || (sponsoring && !sponsorship)} loading={saving} onPress={() => void save(true)} /></View>
             </>
           )}
         </View>

@@ -1,0 +1,14 @@
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const linuxRoot=root.replace(/^([A-Za-z]):/,(_,drive)=>`/mnt/${drive.toLowerCase()}`).replaceAll('\\','/');
+const quote=value=>`'${value.replaceAll("'","'\\''")}'`;
+const raw=process.platform==='win32'?execFileSync('wsl.exe',['-d','Ubuntu','-u','root','--','sh','-s'],{input:`cd ${quote(linuxRoot)}\nsupabase status -o json\n`,encoding:'utf8',timeout:45000,windowsHide:true,stdio:['pipe','pipe','pipe']}):execFileSync('supabase',['status','-o','json'],{cwd:root,encoding:'utf8',timeout:45000,stdio:['ignore','pipe','pipe']});
+const config=JSON.parse(raw.slice(raw.indexOf('{')));
+if(config.API_URL!=='http://127.0.0.1:54321'||!config.PUBLISHABLE_KEY?.startsWith('sb_publishable_'))throw Error('Disposable local backend and publishable key required');
+const env=Object.fromEntries(Object.entries(process.env).filter(([name])=>!name.startsWith('EXPO_PUBLIC_')));
+Object.assign(env,{EXPO_NO_DOTENV:'1',EXPO_PUBLIC_APP_ENV:'development',EXPO_PUBLIC_DEV_BYPASS_AUTH:'false',EXPO_PUBLIC_HITTINGAR_ENABLED:'true',EXPO_PUBLIC_SUPABASE_URL:config.API_URL,EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY:config.PUBLISHABLE_KEY,EXPO_PUBLIC_WEBSITE_URL:'http://127.0.0.1:3001'});
+const result=spawnSync(process.execPath,[path.join(root,'node_modules/expo/bin/cli'),'export','--platform','web','--output-dir','dist-live','--clear'],{cwd:path.join(root,'apps/mobile'),env,stdio:'inherit',windowsHide:true});
+if(result.error)throw result.error;
+process.exitCode=result.status??1;

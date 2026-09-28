@@ -39,3 +39,7 @@
 - Complete Apple privacy labels and Google Play Data Safety accurately.
 - Configure Google Play minor-access restrictions and publish child-safety standards/contact details.
 - Obtain Icelandic legal review before accepting public registrations.
+
+## Private diagnosis review — combined release remains disabled
+
+Follow [the diagnosis release controls](discovery-diagnosis-release.md) before enabling medical uploads or restricted-meetup admission. Extend the DPIA, processing-basis/health-condition review, notices, retention schedule, designated-reviewer training, access audits, account rights, and isolated restoration procedure to clinician evidence and inferred diagnosis membership. Approve the 24-hour/30-day defaults explicitly. Record synthetic deletion-retry and restored-backup evidence; do not treat unit tests as privacy approval.

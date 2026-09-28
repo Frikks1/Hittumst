@@ -1,4 +1,5 @@
 import type { ColorSchemeName } from 'react-native';
+import { defaultAppearance, type AppearancePreferences } from './appearance';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -92,6 +93,21 @@ export const darkTheme: AppTheme = {
   }
 };
 
-export function resolveTheme(mode: ThemeMode, systemScheme: ColorSchemeName): AppTheme {
-  return mode === 'dark' || (mode === 'system' && systemScheme === 'dark') ? darkTheme : lightTheme;
+export function resolveTheme(mode: ThemeMode, systemScheme: ColorSchemeName, appearance: AppearancePreferences = defaultAppearance): AppTheme {
+  const base = mode === 'dark' || (mode === 'system' && systemScheme === 'dark') ? darkTheme : lightTheme;
+  const palettes = {
+    forest: { canvas: '#070E0C', surface: '#0D1B17', surfaceRaised: '#182C25', surfaceMuted: '#20382F', border: '#355247' },
+    midnight: { canvas: '#080D1B', surface: '#121B30', surfaceRaised: '#1B2944', surfaceMuted: '#283653', border: '#3F506F' },
+    charcoal: { canvas: '#101114', surface: '#1B1D22', surfaceRaised: '#26292F', surfaceMuted: '#34373E', border: '#4A4F59' },
+  };
+  const accents = base.dark ? {
+    pink: ['#FF6B98', '#FF90B0', '#341826'], mint: ['#78DFC1', '#A8E8D7', '#153B31'],
+    violet: ['#BCACFF', '#D4CAFF', '#292340'], amber: ['#F3C776', '#F9DCA6', '#382E1B'],
+  } : {
+    pink: ['#B91C50', '#95113C', '#FBE3ED'], mint: ['#0D705B', '#095242', '#DCEFE8'],
+    violet: ['#6240B9', '#492C91', '#EDE7FC'], amber: ['#845A08', '#644304', '#F5EAD2'],
+  };
+  const [accent, accentPressed, accentSoft] = accents[appearance.accent];
+  return { ...base, colors: { ...base.colors, ...(base.dark ? palettes[appearance.darkPreset] : {}),
+    accent: accent!, accentPressed: accentPressed!, accentSoft: accentSoft!, textOnAccent: base.dark ? '#101318' : '#FFFFFF' } };
 }

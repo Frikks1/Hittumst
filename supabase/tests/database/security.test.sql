@@ -1,4 +1,7 @@
 begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000001','90000000-0000-0000-0000-000000000001');
 update private.private_locations set verified_at=now() where profile_id::text like '10000000-%';
 set local search_path = extensions, public, private;
 
@@ -33,6 +36,7 @@ update public.profiles set profile_tags = array['gaming'] where id = '10000000-0
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select is((select count(*) from public.profiles), 1::bigint, 'RLS exposes only the caller profile');
@@ -49,6 +53,7 @@ select is(
 );
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is(
   (select count(*) from public.discover_nearby('{"min_age":18,"max_age":99,"limit":40}'::jsonb, null)),
@@ -63,12 +68,12 @@ select is(
 select is(
   (select count(*) from public.discover_nearby('{"tags":["gaming","hiking"]}'::jsonb, null)),
   1::bigint,
-  'multiple profile tags use AND semantics'
+  'multiple profile tags use AND semantics before the combined release'
 );
 select is(
   (select count(*) from public.discover_nearby('{"tags":["gaming","music"]}'::jsonb, null)),
   0::bigint,
-  'profiles missing any selected tag are excluded'
+  'legacy tag matching remains unchanged before release'
 );
 
 insert into public.blocks(blocker_id, blocked_id)
@@ -87,7 +92,8 @@ select throws_ok(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(private.is_admin(), 'role comes from protected app_metadata');
 select is(jsonb_array_length(public.admin_list_reports(null, 50, null)), 1, 'staff can read report queue through RPC');

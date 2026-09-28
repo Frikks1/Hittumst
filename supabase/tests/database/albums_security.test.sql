@@ -1,4 +1,12 @@
 begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000001','90000000-0000-0000-0000-000000000001');
+-- These privacy/participation fixtures need several albums or occurrences.
+update private.commerce_configuration set mode='sandbox';
+insert into private.member_subscriptions(account_id,tier,paid_until,source)
+select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles
+on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
 update private.private_locations set verified_at=now() where profile_id::text like '10000000-%';
 set local search_path = extensions, public, private;
 
@@ -28,6 +36,7 @@ select ok((select relrowsecurity from pg_class where oid='public.album_view_sess
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select is((select count(*) from public.albums), 2::bigint, 'an owner can list their albums');
@@ -44,12 +53,14 @@ select throws_ok($$select public.share_albums_with_profiles(array[
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is((select count(*) from public.albums), 0::bigint, 'unshared albums are isolated by RLS');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok($$select public.share_albums_with_profiles(
     array['10000000-0000-0000-0000-000000000002'::uuid, '10000000-0000-0000-0000-000000000003'::uuid],
@@ -61,6 +72,7 @@ select is((select count(*) from public.messages where message_kind = 'album_shar
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is((select count(*) from public.albums), 0::bigint, 'a pending request reveals no album name or metadata');
 select lives_ok(
@@ -92,12 +104,15 @@ select throws_ok(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+reset role;
 select lives_ok(
   $$insert into public.album_items (album_id, owner_id, storage_path, media_type, position, byte_size)
     values ('30000000-0000-0000-0000-000000000001', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/later.png', 'image', 3, 1600)$$,
-  'owners can add later album content'
+  'verified processing can add later album content'
 );
+set local role authenticated;
 select ok((select a.content_version > s.last_viewed_version from public.albums a join public.album_shares s on s.album_id = a.id where s.recipient_id = '10000000-0000-0000-0000-000000000002' and a.id = '30000000-0000-0000-0000-000000000001'), 'later additions produce an unseen-content version');
 select lives_ok(
   $$select public.share_albums('10000000-0000-0000-0000-000000000002', array['30000000-0000-0000-0000-000000000002'::uuid], 'view_once')$$,
@@ -107,6 +122,7 @@ select lives_ok(
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.respond_to_album_share((select id from public.album_shares where album_id = '30000000-0000-0000-0000-000000000002' and recipient_id = auth.uid()), true)$$,
@@ -128,6 +144,7 @@ select ok(not private.can_view_album_media_object('10000000-0000-0000-0000-00000
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$select public.respond_to_album_share((select id from public.album_shares where album_id = '30000000-0000-0000-0000-000000000001' and recipient_id = auth.uid()), true)$$,
@@ -142,11 +159,13 @@ reset role;
 delete from public.blocks where blocker_id = '10000000-0000-0000-0000-000000000003' and blocked_id = '10000000-0000-0000-0000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select is((select status from public.album_shares where album_id = '30000000-0000-0000-0000-000000000001' and recipient_id = auth.uid()), 'revoked', 'unblocking never restores the revoked share');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select lives_ok(
   $$insert into public.reports (reporter_id, reported_id, album_share_id, album_item_id, category, details)
@@ -160,7 +179,8 @@ reset role;
 select set_config('test.album_report',(select id::text from public.reports where album_item_id='31000000-0000-0000-0000-000000000001'),true);
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(private.can_view_album_media_object('10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/first.jpg'), 'staff can request only reported album evidence');
 select ok(not private.can_view_album_media_object('10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/second.webp'), 'staff cannot browse unreported album items');
@@ -175,6 +195,7 @@ select is((select count(*) from private.admin_audit_log where action = 'album_ev
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select is((public.delete_album_item('31000000-0000-0000-0000-000000000001') ->> 'preserved')::boolean, true, 'deleting reported media preserves the evidence record');
 select ok((select deleted_at is not null from public.album_items where id = '31000000-0000-0000-0000-000000000001'), 'reported evidence is soft-deleted');
@@ -182,25 +203,31 @@ select ok((select deleted_at is not null from public.album_items where id = '310
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '90000000-0000-0000-0000-000000000001', true);
-select set_config('request.jwt.claims','{"aal":"aal2"}',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(private.can_view_album_media_object('10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/first.jpg'), 'reported evidence remains available to staff after soft deletion');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select ok(not private.can_view_album_media_object('10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/first.jpg'), 'soft-deleted evidence is no longer available to the recipient');
 
 reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+-- Verified fixture media is installed by the operator; clients use quarantine reservations.
+reset role;
 insert into public.album_items (album_id, owner_id, storage_path, media_type, position, byte_size)
 select '30000000-0000-0000-0000-000000000001', auth.uid(),
   '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/fill-' || position || '.jpg',
   'image', position, 1000
 from unnest(array[1,4,5,6,7,8,9,10]) position;
+set local role authenticated;
 select throws_ok($$insert into public.album_items (album_id, owner_id, storage_path, media_type, position, byte_size)
     values ('30000000-0000-0000-0000-000000000001', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/eleventh.jpg', 'image', 11, 1000)$$,
   '23514', 'album_photo_limit_reached', 'the database enforces ten photos per album'
@@ -212,10 +239,10 @@ select throws_ok($$insert into public.album_items (album_id, owner_id, storage_p
     values ('30000000-0000-0000-0000-000000000002', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000002/too-big.jpg', 'image', 2, 31457281)$$, null::text, null::text, 'files over 30 MB are rejected');
 
 insert into public.albums (owner_id, name)
-select auth.uid(), 'Limit ' || number from generate_series(1, 8) number;
+select auth.uid(), 'Limit ' || number from generate_series(1, 1) number;
 select throws_ok(
   $$insert into public.albums (owner_id, name) values (auth.uid(), 'Eleventh album')$$,
-  '23514', 'album_limit_reached', 'the database enforces ten active albums per owner'
+  '23514', 'album_limit_reached', 'the database enforces three active albums for Plus'
 );
 
 select * from finish();

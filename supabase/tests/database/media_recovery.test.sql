@@ -1,0 +1,24 @@
+begin;
+set local search_path=extensions,public,private;
+select no_plan();
+select ok(not has_function_privilege('authenticated','public.get_recovery_media_manifest(text,integer)','execute'),'members cannot enumerate recovery object names');
+select ok(not has_function_privilege('anon','public.recovery_media_is_current(text,text)','execute'),'anonymous callers cannot probe media existence');
+select ok(not has_table_privilege('service_role','private.recoverable_media','select'),'operator cannot select private recovery view');
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select throws_ok($$select public.get_recovery_media_manifest('',501)$$,'P0001','invalid_manifest_page','manifest page size is bounded');
+select is(public.recovery_media_is_current('media-quarantine','private'),'false'::boolean,'quarantine can never be restored');
+select is(public.recovery_media_is_current('profile-photos','missing'),'false'::boolean,'unreferenced objects cannot be restored');
+reset role;
+-- Use an existing approved seeded photo to prove deletion-aware eligibility without altering fixtures permanently.
+select set_config('test.recovery_owner',(select profile_id::text from public.profile_photos where approval_status='approved' limit 1),true);
+select set_config('test.recovery_path',(select storage_path from public.profile_photos where profile_id::text=current_setting('test.recovery_owner') and approval_status='approved' limit 1),true);
+select ok(length(current_setting('test.recovery_path'))>0,'seed supplies approved media fixture');
+set local role service_role;
+select is(public.recovery_media_is_current('profile-photos',current_setting('test.recovery_path')),true,'active approved photo can be backed up');
+reset role;
+update public.profiles set deletion_requested_at=now() where id::text=current_setting('test.recovery_owner');
+set local role service_role;
+select is(public.recovery_media_is_current('profile-photos',current_setting('test.recovery_path')),false,'requested account deletion prevents restoration immediately');
+select * from finish();
+rollback;

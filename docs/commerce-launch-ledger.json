@@ -1,0 +1,54 @@
+{
+  "updatedAt": "2026-09-21",
+  "environment": "local-sandbox-only",
+  "corePublicLaunch": {
+    "status": "blocked",
+    "evidence": "launch-readiness.json"
+  },
+  "subscriptions": {
+    "status": "disabled",
+    "implemented": "Separate native App Store/Play Store and Test Store configuration, account-bound purchase/restore, server-authoritative snapshots, durable callback reconciliation, alias/transfer/refund/billing states and provider erasure",
+    "tested": "Local client, server, signature, environment-boundary and erasure regressions; final counts are recorded in current verification evidence",
+    "deployed": false,
+    "externallyBlocked": [
+      "Store and RevenueCat accounts/product configuration",
+      "Signed-device genuine sandbox receipts and purchase/restore/renewal/refund/transfer verification",
+      "Written provider acceptance and funding for all promised cash benefits"
+    ],
+    "remainingEngineering": [
+      "Connect and verify provider-specific funding and real-money benefits after written acceptance",
+      "Resolve any issues found in connected store and account lifecycle testing"
+    ]
+  },
+  "realMoney": {
+    "status": "disabled",
+    "implemented": "Sandbox ledger, provenance, shared pools, QR claims, reviewed settlements, quotes, reserves and durable client retries",
+    "tested": "Local permission, conservation, provenance, duplicate, failure, deletion and concurrency tests",
+    "deployed": false,
+    "externallyBlocked": [
+      "Payment and payout provider approval",
+      "Verified payout identities and permitted event categories",
+      "Funded principal and bonus reserves",
+      "Financial operations and approved retention policy"
+    ],
+    "remainingEngineering": [
+      "Provider-specific authorization, reconciliation, fee/limit quotes, financial recovery and chargeback settlement",
+      "Production-scale ledger and worker workload verification"
+    ]
+  },
+  "shopFulfilment": {
+    "status": "disabled",
+    "implemented": "Clearly labelled sandbox voucher, reserved orders, fulfilment interface and traceable refunds",
+    "tested": "Local order and origin-preservation tests",
+    "deployed": false,
+    "externallyBlocked": [
+      "Approved supplier and verified stock",
+      "Provider denominations/custom-amount limits",
+      "Refund and delivery operations"
+    ],
+    "remainingEngineering": [
+      "Selected supplier adapter and end-to-end fulfilment/reconciliation"
+    ]
+  },
+  "details": "tiers-and-commerce-implementation.md"
+}

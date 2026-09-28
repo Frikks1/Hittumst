@@ -1,8 +1,9 @@
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapInstance, MapLayerMouseEvent } from 'maplibre-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import { hittingarFeature } from './config';
 import { MapAttribution, MapUnavailable } from './components';

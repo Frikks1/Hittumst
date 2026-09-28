@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text } from '@/components/Typography';
+import { StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import type { GeoCoordinate } from '@/types/domain';
 

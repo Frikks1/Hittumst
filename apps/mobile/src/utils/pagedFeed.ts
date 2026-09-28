@@ -12,6 +12,7 @@ export class PagedFeed<T extends { id: string }, Q> {
   ) {}
   private publish(next: FeedSnapshot<T>) { this.snapshot = next; this.commit(next); }
   clear() { this.revision++; this.query = null; this.publish(emptyFeed<T>()); }
+  pause() { this.revision++; this.publish({ ...this.snapshot, loading: false }); }
   async refresh(query: Q) {
     this.query = query;
     const revision = ++this.revision;

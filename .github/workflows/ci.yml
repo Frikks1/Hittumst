@@ -16,22 +16,41 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm install --global npm@11.19.1
       - run: npm ci
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify private native diagnostics policy and session queue offline
+        run: node scripts/test-private-native-diagnostics.mjs
+      - name: Install media validation binaries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
       - run: npm run check
-      - run: npm run build --workspace @rummal/admin
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_configuration_only
+          FFMPEG_PATH: /usr/bin/ffmpeg
+          FFPROBE_PATH: /usr/bin/ffprobe
+      - run: npm run verify:admin-release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: admin-production-verification
+          path: |
+            artifacts/operations/admin-production-build.log
+            artifacts/operations/admin-production-http.json
+          if-no-files-found: error
+          retention-days: 14
       - run: npm run build:web --workspace @rummal/mobile -- --output-dir dist-ci
         env:
           EXPO_PUBLIC_APP_ENV: staging
           EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_configuration_only
           EXPO_PUBLIC_DEV_BYPASS_AUTH: 'false'
-          EXPO_PUBLIC_HITTINGAR_ENABLED: 'false'
+          EXPO_PUBLIC_HITTINGAR_ENABLED: 'true'
 
   functions:
     runs-on: ubuntu-latest
@@ -53,14 +72,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        if: matrix.installation == 'upgrade'
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm install --global npm@11.19.1
-        if: matrix.installation == 'upgrade'
       - run: npm ci
-        if: matrix.installation == 'upgrade'
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
@@ -77,3 +93,49 @@ jobs:
         if: matrix.installation == 'upgrade'
       - run: supabase test db
       - run: supabase db lint --local --schema public,private --level error --fail-on error
+
+      - name: Verify real Auth, REST, Storage, Realtime and deletion workflows
+        if: matrix.installation == 'clean'
+        run: npm run test:services
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.installation == 'clean'
+        with:
+          name: real-service-workflows
+          path: tmp/service-workflows-result.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Rehearse application backup restoration and replay database security tests
+        if: matrix.installation == 'clean'
+        run: npm run recovery:local
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.installation == 'clean'
+        with:
+          name: local-application-recovery
+          path: artifacts/operations/local-restore.json
+          if-no-files-found: error
+          retention-days: 14
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --global npm@11.19.1
+      - run: npm ci
+      - name: Build deployment image and verify standalone web, assets, worker and media binaries offline
+        run: node scripts/check-docker-runtime.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-container-verification
+          path: |
+            artifacts/operations/docker-runtime.json
+            artifacts/operations/docker-build.log
+            artifacts/operations/docker-worker-startup.log
+          if-no-files-found: error
+          retention-days: 14

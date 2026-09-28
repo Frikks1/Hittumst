@@ -2,6 +2,8 @@
 
 This is a development checkpoint, not launch approval. Production Hittingar remains disabled.
 
+This historical checkpoint predates the tier work. See [tiers-verification-2026-09-08.md](tiers-verification-2026-09-08.md) for the latest local migrations, checks, builds and dependency results. Historical counts below are preserved as prior evidence, not current totals.
+
 ## Verified
 
 - The existing Supabase project `yztxwdhajgoqvtsqmcdw` was restored and observed ACTIVE_HEALTHY. Its inspected baseline has seven public tables and no recorded migrations. A read-only catalog comparison and local upgrade under the stricter hosted grants passed; see [database-reconciliation.md](database-reconciliation.md). No hosted schema migration was applied.

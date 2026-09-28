@@ -1,0 +1,22 @@
+begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+set local search_path=extensions,public,private;
+select no_plan();
+update private.commerce_configuration set mode='sandbox';
+select public.finance_save(0,'{"environment":"sandbox","members":{"10000000-0000-0000-0000-000000000003":{"tier":"plebbi","paidUntil":null,"premiumMonths":0,"suspended":false,"payoutIdentity":"sandbox-test"}},"journal":[],"balances":{},"events":{"fixture":{"hostId":"10000000-0000-0000-0000-000000000003","settled":false,"cancelled":false}}}'::jsonb);
+set local role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
+select public.delete_my_account();
+reset role;
+select is((select state->'members'->'10000000-0000-0000-0000-000000000003'->>'suspended' from private.finance_state),'true','deletion immediately holds pending financial claims');
+select is((select state->'members'->'10000000-0000-0000-0000-000000000003'->'payoutIdentity' from private.finance_state),'null'::jsonb,'deletion removes the sandbox payout identity');
+select is((select state->'events'->'fixture'->>'cancelled' from private.finance_state),'true','host deletion marks the shared pool for refund');
+select is((select revision from private.finance_state),2::bigint,'deletion invalidates in-flight ledger revisions');
+select ok(not public.finance_save(1,(select state from private.finance_state)),'a stale writer cannot restore the deleted member');
+delete from auth.users where id='10000000-0000-0000-0000-000000000003';
+select lives_ok($$select public.finance_save((select revision from private.finance_state),(select state from private.finance_state))$$,'deleting a profile does not break subsequent ledger commits');
+select is((select count(*) from private.member_subscriptions where account_id='10000000-0000-0000-0000-000000000003'),0::bigint,'future commits do not resurrect deleted entitlements');
+select * from finish();
+rollback;

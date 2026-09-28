@@ -1,0 +1,22 @@
+begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+set local search_path=extensions,public,private;
+select no_plan();
+select ok(not has_function_privilege('authenticated','public.prepare_media_restore(uuid)','execute'),'members cannot quarantine or reopen restored accounts');
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select lives_ok($$select public.prepare_media_restore(gen_random_uuid())$$,'synthetic restore invalidates sessions and quarantines every account');
+reset role;
+select ok(not exists(select 1 from auth.sessions),'restored session tokens cannot survive quarantine');
+select ok(not exists(select 1 from auth.refresh_tokens),'restored refresh tokens cannot survive quarantine');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claim.role','authenticated',true);
+select is(private.account_is_active(),false,'old JWT cannot access restrictive member or Storage policies');
+select is((select count(*) from public.profiles),0::bigint,'restored member cannot read profile rows with old JWT');
+reset role;
+select throws_ok($$insert into auth.sessions(id,user_id) values(gen_random_uuid(),'10000000-0000-0000-0000-000000000001')$$,'28000','account_recovery_verification_required','new sign-in session cannot reopen unverified restored account');
+select * from finish();
+rollback;

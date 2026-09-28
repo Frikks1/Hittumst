@@ -1,7 +1,8 @@
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceRef, Layer, Map } from '@maplibre/maplibre-react-native';
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import { hittingarFeature } from './config';
 import { MapAttribution, MapUnavailable } from './components';

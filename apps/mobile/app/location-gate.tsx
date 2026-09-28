@@ -1,7 +1,8 @@
+import { Text } from '@/components/Typography';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Screen, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 
@@ -12,7 +13,10 @@ export default function LocationGateScreen() {
   const verify = async () => {
     setStatus('checking');
     const result = await verifyLocation();
-    if (result === 'verified') router.back(); else setStatus(result);
+    if (result === 'verified') {
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/discover');
+    } else setStatus(result);
   };
   const title = status === 'denied' ? t('location.deniedTitle') : status === 'outside_iceland' ? t('location.outsideTitle') : status === 'poor_accuracy' ? t('location.accuracyTitle') : status === 'error' ? t('location.serverTitle') : t('onboarding.locationTitle');
   const body = status === 'denied' ? t('location.deniedBody') : status === 'outside_iceland' ? t('location.outsideBody') : status === 'poor_accuracy' ? t('location.accuracyBody') : status === 'error' ? t('location.serverBody') : t('onboarding.locationBody');

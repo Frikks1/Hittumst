@@ -1,0 +1,30 @@
+begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
+insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000001','90000000-0000-0000-0000-000000000001');
+set local search_path=extensions,public,private;
+select no_plan();
+insert into public.albums(id,owner_id,name) values('93000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Appeal fixture');
+insert into private.media_uploads(id,owner_id,album_id,media_type,object_path,status) values
+ ('93000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','image','10000000-0000-0000-0000-000000000001/appeal-test','rejected');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select lives_ok($$select public.appeal_media_upload('93000000-0000-0000-0000-000000000002')$$,'owner can appeal rejected media');
+select throws_ok($$select public.admin_media_appeals()$$,'42501','admin_required','ordinary members cannot read the appeal queue');
+select throws_ok($$select public.admin_review_media('93000000-0000-0000-0000-000000000002',true,'I approve my own attachment.')$$,'42501','admin_required','members cannot approve their own uploads');
+select set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','90000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:90000000-0000-0000-0000-000000000001')::uuid))::text,true);
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal1"}',true);
+select throws_ok($$select public.admin_media_evidence('93000000-0000-0000-0000-000000000002')$$,'42501','admin_required','staff evidence access requires MFA');
+select set_config('request.jwt.claims','{"session_id":"99000000-0000-4000-8000-000000000001","aal":"aal2"}',true);
+select is(jsonb_array_length(public.admin_media_appeals()),1,'MFA staff see the waiting case');
+select lives_ok($$select public.admin_media_evidence('93000000-0000-0000-0000-000000000002')$$,'staff can request scoped evidence');
+select throws_ok($$select public.admin_review_media('93000000-0000-0000-0000-000000000002',true,'ok')$$,'P0001','review_reason_required','decision requires a meaningful reason');
+select lives_ok($$select public.admin_review_media('93000000-0000-0000-0000-000000000002',true,'Reviewed the entire attachment against the policy.')$$,'human approval resumes processing');
+select throws_ok($$select public.admin_review_media('93000000-0000-0000-0000-000000000002',false,'Changed my mind after the decision.')$$,'P0001','case_unavailable','completed decision cannot be silently overwritten');
+reset role;
+select is((select status from private.media_uploads where id='93000000-0000-0000-0000-000000000002'),'reserved','approval does not bypass normalization or directly publish media');
+select is((select count(*) from private.admin_audit_log where target_id='93000000-0000-0000-0000-000000000002'),2::bigint,'evidence view and decision are audited separately');
+select * from finish();
+rollback;

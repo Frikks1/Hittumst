@@ -1,5 +1,6 @@
+import { Text } from '@/components/Typography';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, Field, Screen, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';

@@ -3,7 +3,7 @@ import type { ChatMessage, ConversationSummary, OwnProfile, PublicProfile } from
 const photo = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=900&q=82`;
 
 export const mockOwnProfile: OwnProfile = {
-  id: 'demo-me', displayName: 'Aron', age: 29, dateOfBirth: '1997-04-12', pronouns: 'hann/hans',
+  id: 'demo-me', gender:'man', friendsOfFriendsDiscovery:false, displayName: 'Aron', age: 29, dateOfBirth: '1997-04-12', pronouns: 'hann/hans',
   identity: ['gay'], lookingFor: ['chat', 'dates'], bio: 'Hönnuður, sundmaður og óþarflega mikill kaffinörd.',
   tags: ['gaming', 'gym', 'kissing', 'dating'], customTags: ['coffee lover'],
   videos: [], profileVideos: [], socials: [], interests: ['Sund', 'Kaffi', 'Hönnun'],
@@ -13,46 +13,46 @@ export const mockOwnProfile: OwnProfile = {
 
 export const mockProfiles: PublicProfile[] = [
   {
-    id: 'p-bjarni', displayName: 'Bjarni', age: 31, pronouns: 'hann/hans', identity: ['gay'],
+    id: 'p-bjarni', gender:'man', displayName: 'Bjarni', age: 31, pronouns: 'hann/hans', identity: ['gay'],
     lookingFor: ['dates', 'relationship'], bio: 'Arkitekt. Fjöll, jazz og sunnudagskaffi.', region: 'capital',
     tags: ['hiking', 'music', 'romantic', 'dating'], customTags: [],
     videos: [], profileVideos: [], socials: [{ platform: 'instagram', handle: '@bjarni' }], interests: ['Arkitektúr', 'Jazz'],
     isOnline: true, distanceBand: 'under1', photos: [{ id: 'b-1', url: photo('photo-1507003211169-0a1dd7228f2d'), status: 'approved' }]
   },
   {
-    id: 'p-elias', displayName: 'Elías', age: 26, pronouns: 'hann/hans', identity: ['bi'],
+    id: 'p-elias', gender:'man', displayName: 'Elías', age: 26, pronouns: 'hann/hans', identity: ['bi'],
     lookingFor: ['chat', 'friends'], bio: 'Nýkominn heim. Segðu mér hvar besta súpan er.', region: 'capital',
     tags: ['cooking', 'gaming', 'chill'],
     videos: [], profileVideos: [], customTags: [], socials: [], interests: ['Súpa', 'Leikjaspil'],
     isOnline: true, distanceBand: '1to3', photos: [{ id: 'e-1', url: photo('photo-1506794778202-cad84cf45f1d'), status: 'approved' }]
   },
   {
-    id: 'p-salka', displayName: 'Salka', age: 34, pronouns: 'hún/hennar', identity: ['lesbian', 'queer'],
+    id: 'p-salka', gender:'woman', displayName: 'Salka', age: 34, pronouns: 'hún/hennar', identity: ['lesbian', 'queer'],
     lookingFor: ['friends', 'dates'], bio: 'Keramik, kuldi og langar göngur.', region: 'capital',
     tags: ['art', 'hiking', 'kind'],
     videos: [], profileVideos: [], customTags: [], socials: [], interests: ['Keramik', 'Göngur'],
     isOnline: false, distanceBand: '1to3', photos: [{ id: 's-1', url: photo('photo-1494790108377-be9c29b29330'), status: 'approved' }]
   },
   {
-    id: 'p-noa', displayName: 'Nóa', age: 24, pronouns: 'hán/háns', identity: ['nonbinary', 'queer'],
+    id: 'p-noa', gender:'nonbinary', diagnosisIds:['adhd'], displayName: 'Nóa', age: 24, pronouns: 'hán/háns', identity: ['nonbinary', 'queer'],
     lookingFor: ['chat', 'friends'], bio: 'Tónlist, plöntur og skrýtnar kvikmyndir.', region: 'capital',
     tags: ['movies', 'music', 'anime'],
     videos: [], profileVideos: [], customTags: [], socials: [{ platform: 'tiktok', handle: '@noa' }], interests: ['Plöntur', 'Kvikmyndir'],
     isOnline: true, distanceBand: '3to10', photos: [{ id: 'n-1', url: photo('photo-1527980965255-d3b416303d12'), status: 'approved' }]
   },
   {
-    id: 'p-dagur', displayName: 'Dagur', age: 38, pronouns: 'hann/hans', identity: ['gay'],
+    id: 'p-dagur', gender:'man', displayName: 'Dagur', age: 38, pronouns: 'hann/hans', identity: ['gay'],
     lookingFor: ['relationship'], bio: 'Matreiðslumaður með veiðidellu og hund.', region: 'south',
     tags: ['cooking', 'dogperson', 'mature'],
     videos: [], profileVideos: [], customTags: [], socials: [], interests: ['Matreiðsla', 'Veiði'],
-    isOnline: false, distanceBand: '3to10', photos: [{ id: 'd-1', url: photo('photo-1534528741775-53994a69daeb'), status: 'approved' }]
+    isOnline: false, distanceBand: null, photos: [{ id: 'd-1', url: photo('photo-1534528741775-53994a69daeb'), status: 'approved' }]
   },
   {
-    id: 'p-embla', displayName: 'Embla', age: 28, pronouns: 'hún/hennar', identity: ['trans', 'queer'],
+    id: 'p-embla', gender:'woman', displayName: 'Embla', age: 28, pronouns: 'hún/hennar', identity: ['trans', 'queer'],
     lookingFor: ['dates', 'friends'], bio: 'Forritari, plötusafnari og eilíf næturugla.', region: 'capital',
     tags: ['music', 'geek', 'trans'],
     videos: [], profileVideos: [], customTags: [], socials: [], interests: ['Forritun', 'Plötur'],
-    isOnline: true, distanceBand: '3to10', photos: [{ id: 'em-1', url: photo('photo-1531123897727-8f129e1688ce'), status: 'approved' }]
+    isOnline: false, distanceBand: '3to10', photos: [{ id: 'em-1', url: photo('photo-1531123897727-8f129e1688ce'), status: 'approved' }]
   },
   {
     id: 'p-oli', displayName: 'Óli', age: 42, pronouns: 'hann/hans', identity: ['gay'],

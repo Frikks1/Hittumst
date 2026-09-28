@@ -1,4 +1,7 @@
+import { communityCoverSchema, communityFollowsSchema, communityReputationSchema, communityPastGatheringSchema } from './community';
+import { discoveryExtensions, defaultDiscoveryExtensions } from './discovery';
 import { z } from 'zod';
+import { meetupEventProfileSchema } from './meetup-profile';
 import { reportCategorySchema } from './reports';
 
 const optionalText = (max: number) =>
@@ -278,6 +281,7 @@ export type MeetupBounds = z.infer<typeof meetupBoundsSchema>;
 
 export const meetupFiltersSchema = z
   .object({
+    ...discoveryExtensions,
     timing: meetupTimingFilterSchema.default('all'),
     category: meetupCategorySchema.nullable().default(null),
     intention: meetupIntentionSchema.nullable().default(null),
@@ -291,6 +295,7 @@ export const meetupFiltersSchema = z
 export type MeetupFilters = z.infer<typeof meetupFiltersSchema>;
 
 export const defaultMeetupFilters: MeetupFilters = {
+  ...defaultDiscoveryExtensions,
   timing: 'all',
   category: null,
   intention: null,
@@ -573,6 +578,25 @@ export const meetupHostSchema = z
   .strict();
 export type MeetupHost = z.infer<typeof meetupHostSchema>;
 
+export const meetupPoolSummarySchema = z.object({
+  hostBps: z.number().int().min(0).max(10_000),
+  locked: z.boolean(),
+  total: z.number().int().nonnegative(),
+  fundedTotal: z.number().int().nonnegative(),
+  paidTotal: z.number().int().nonnegative(),
+  refundedTotal: z.number().int().nonnegative(),
+  status: z.enum(['accepting', 'locked', 'awaiting_settlement', 'paid_out', 'refunded']),
+  estimatedParticipantReward: z.number().int().nonnegative().nullable(),
+  eligibleParticipantCount: z.number().int().nonnegative(),
+}).strict();
+export type MeetupPoolSummary = z.infer<typeof meetupPoolSummarySchema>;
+export type MeetupSponsorship = {
+  quoteId: string;
+  amount: number;
+  expectedHostBps: number;
+  requestId: string;
+};
+
 const meetupSummaryShape = {
   id: z.uuid(),
   title: z.string().trim().min(3).max(100),
@@ -582,6 +606,7 @@ const meetupSummaryShape = {
   seriesId: z.uuid().nullable().default(null),
   occurrenceIndex: z.number().int().min(1).nullable().default(null),
   tags: meetupTagListSchema,
+    eventProfile: meetupEventProfileSchema.optional(),
   startsAt: z.iso.datetime({ offset: true }),
   endsAt: z.iso.datetime({ offset: true }).optional(),
   effectiveEnd: z.iso.datetime({ offset: true }),
@@ -592,6 +617,11 @@ const meetupSummaryShape = {
   locationVisibility: meetupLocationVisibilitySchema,
   releasePolicy: meetupReleasePolicySchema,
   participantCount: z.number().int().nonnegative(),
+  reservedPlaces: z.number().int().nonnegative().optional(),
+  // Older servers may omit pool data; missing does not mean an empty pool.
+  pool: meetupPoolSummarySchema.optional(),
+  cover: communityCoverSchema.nullable().optional(),
+  follows: communityFollowsSchema.optional(),
   capacity: z.number().int().min(1).max(1_000).nullable(),
   isFull: z.boolean(),
   isExplicit: z.boolean(),
@@ -600,6 +630,8 @@ const meetupSummaryShape = {
   status: meetupStatusSchema,
   location: meetupLocationStateSchema,
   viewerState: meetupViewerStateSchema,
+  diagnosisRestricted: z.boolean().default(false),
+  requiresDiagnosisVerification: z.boolean().default(false),
   capabilities: meetupViewerCapabilitiesSchema,
 } as const;
 
@@ -675,6 +707,7 @@ const meetupDraftInputObjectSchema = z
     intention: meetupIntentionSchema.default('friends_social'),
     venueMode: meetupVenueModeSchema.default('in_person'),
     tags: meetupTagListSchema,
+    eventProfile: meetupEventProfileSchema.optional(),
     startsAt: z.iso.datetime({ offset: true }),
     endsAt: z.iso.datetime({ offset: true }).nullable().optional(),
     accessMode: meetupAccessModeSchema,
@@ -913,6 +946,10 @@ export function extractSafeHttpLinks(body: string): Array<{ url: string; hostnam
 }
 
 export const meetupNotificationKinds = [
+  'community_published',
+  'community_announcement',
+  'community_waitlist_offer',
+  'community_reminder',
   'request_received',
   'access_requested',
   'joined',
@@ -1032,3 +1069,10 @@ export type HittingurDraft = MeetupDraftInput;
 export type HittingurParticipation = MeetupParticipation;
 export type HittingurNotification = MeetupNotification;
 export type HittingurPlaceResult = MeetupPlaceResult;
+
+export const communityHostSummarySchema = z.object({
+  hostId: z.string(), displayName: z.string(), profileVisible: z.boolean(), followerCount: z.number().int().nonnegative(),
+  following: z.boolean().default(false), notifications: z.boolean().default(true),
+  reputation: communityReputationSchema, pastGatherings: z.array(communityPastGatheringSchema), upcomingGatherings: z.array(meetupSummarySchema),
+});
+export type CommunityHostSummary = z.infer<typeof communityHostSummarySchema>;

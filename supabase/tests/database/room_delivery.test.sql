@@ -1,9 +1,12 @@
 begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
 set local search_path=extensions,public,private;
 select no_plan();
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true where id=1;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('test.event',public.create_meetup_draft(jsonb_build_object(
   'title','Room delivery fixture','description','Synthetic adults test occurrence chat authorization.',
@@ -18,6 +21,7 @@ select ('72000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid,current_setting(
   '10000000-0000-0000-0000-000000000001','Synthetic history '||n,now() from generate_series(1,125)n;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000002',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000002','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid))::text,true);
 select throws_ok($$select public.list_meetup_room_message_page(current_setting('test.room')::uuid)$$,'42501','active_room_membership_required','unrelated users cannot read room history');
 select lives_ok($$select public.join_meetup(current_setting('test.event')::uuid)$$,'open joining authorizes the occurrence room');
 select is(public.get_meetup(current_setting('test.event')::uuid)#>>'{location,state}','protected_locked','chat admission does not release the protected location early');
@@ -36,6 +40,7 @@ select is((select count(*) from public.meetup_room_messages where id='73000000-0
 select is((select link_hostnames from public.meetup_room_messages where id='73000000-0000-0000-0000-000000000001'),array['example.com'],'external link labels contain the real hostname');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select public.join_meetup(current_setting('test.event')::uuid);
 insert into public.blocks(blocker_id,blocked_id) values((select auth.uid()),'10000000-0000-0000-0000-000000000002');
 select throws_ok($$select public.list_meetup_room_message_page(current_setting('test.room')::uuid)$$,'42501','active_room_membership_required','peer conflicts pause chat access');
@@ -46,6 +51,7 @@ select is((select count(*) from public.meetup_participations where meetup_id=cur
 update public.meetup_rooms set status='locked',posting_closes_at=now()-interval '1 second',locked_at=now() where id=current_setting('test.room')::uuid;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid))::text,true);
 select lives_ok($$select public.list_meetup_room_message_page(current_setting('test.room')::uuid)$$,'locking posts retains authorized reading');
 select throws_ok($$select public.send_meetup_room_message_once(current_setting('test.room')::uuid,gen_random_uuid(),'Too late')$$,'55000','room_posting_closed','posting deadline is enforced server-side');
 reset role;

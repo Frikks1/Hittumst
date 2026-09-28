@@ -14,7 +14,8 @@
         "NSLocationWhenInUseUsageDescription": "Hittumst notar staðsetningu þína á meðan appið er opið til að staðfesta að þú sért á Íslandi og raða nálægum prófílum. Nákvæm staðsetning er ekki birt.",
         "NSPhotoLibraryUsageDescription": "Veldu myndir fyrir prófílinn þinn eða samtöl.",
         "NSCameraUsageDescription": "Taktu mynd fyrir prófílinn þinn eða samtöl.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "Hittumst notar hljóðnemann þegar þú tekur þátt í talspjalli hóps."
       }
     },
     "android": {
@@ -27,13 +28,25 @@
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO"
-      ]
+        "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH_CONNECT"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "allowBackup": false
     },
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Skannaðu mætingarkóða gestgjafa á hittingi.",
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "expo-location",
         {
@@ -55,7 +68,23 @@
           "defaultChannel": "hittingar",
           "icon": "./assets/brand/notification.png"
         }
-      ]
+      ],
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          }
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Hittumst notar hljóðnemann þegar þú tekur þátt í talspjalli hóps.",
+          "cameraPermission": false
+        }
+      ],
+      "./plugins/private-native-diagnostics/index.cjs"
     ],
     "experiments": {
       "typedRoutes": true

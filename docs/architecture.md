@@ -1,3 +1,7 @@
+> **Current feature scope and verification:** [feature-verification.md](feature-verification.md) is the authoritative route inventory as of 21 September 2026. Groups and native group voice are included; explicit sexual events/media and person ratings are owner exclusions. Older implementation statements and counts below are historical.
+
+> **Current launch implementation record:** [release-checklist.md](release-checklist.md). Historical restrictions below must be read with the current capability checklist; permanent groups have been restored and tested locally.
+
 # Hittumst architecture
 
 Hittumst is split into a native mobile client, a protected moderation console, shared domain

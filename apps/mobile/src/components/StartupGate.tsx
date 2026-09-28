@@ -1,4 +1,5 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Text } from '@/components/Typography';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Brand, Button, Screen } from './ui';
 import { useApp } from '@/providers/AppProvider';
 export function StartupGate({ unavailable = false, retry }: { unavailable?: boolean; retry?: () => void }) {

@@ -1,0 +1,88 @@
+# Provision with --region eu-central-1 after AWS privacy/processor settings are approved.
+# This is a transient moderation bucket, NOT an account-media backup.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Hittumst private transient AWS Rekognition media bucket
+Parameters:
+  ModerationBucketName:
+    Type: String
+    MinLength: 3
+    MaxLength: 63
+    AllowedPattern: '[a-z0-9][a-z0-9-]+[a-z0-9]'
+    Description: Globally unique bucket name for this environment only
+Resources:
+  ModerationBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref ModerationBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: RemoveFailedTransientModerationCopies
+            Status: Enabled
+            Prefix: moderation/
+            ExpirationInDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+  ModerationBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ModerationBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RequireTLS
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt ModerationBucket.Arn
+              - !Sub '${ModerationBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+  WorkerModerationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Attach only to the dedicated worker credential; no general Storage access
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - rekognition:DetectModerationLabels
+              - rekognition:StartContentModeration
+              - rekognition:GetContentModeration
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: eu-central-1
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+            Resource: !Sub '${ModerationBucket.Arn}/moderation/*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: eu-central-1
+          - Effect: Allow
+            Action: s3:GetBucketLocation
+            Resource: !GetAtt ModerationBucket.Arn
+Outputs:
+  BucketName:
+    Value: !Ref ModerationBucket
+  WorkerPolicyArn:
+    Value: !Ref WorkerModerationPolicy

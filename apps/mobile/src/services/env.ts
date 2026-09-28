@@ -39,15 +39,17 @@ export function readRuntimeEnvironment(
   let websiteUrl: string | null = null;
   try {
     const website = new URL(source.EXPO_PUBLIC_WEBSITE_URL?.trim() ?? '');
-    if (website.protocol === 'https:' && !website.username && !website.password && !website.port && website.pathname === '/' && !website.search && !website.hash) websiteUrl = website.origin;
+    const localWebsite = appEnvironment === 'development' && website.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(website.hostname) && website.port === '3001';
+    if ((website.protocol === 'https:' && !website.port || localWebsite) && !website.username && !website.password && website.pathname === '/' && !website.search && !website.hash) websiteUrl = website.origin;
   } catch { /* An absent public site remains unavailable until configured. */ }
 
   if (invalidMode) configurationIssue = 'Unknown application environment.';
   else if (!isDemo) {
     try {
       const parsed = new URL(url ?? '');
-      if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.supabase.co') ||
-          parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash ||
+      const localBackend = appEnvironment === 'development' && parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname) && parsed.port === '54321';
+      if ((!localBackend && (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.supabase.co') || parsed.port)) ||
+          parsed.username || parsed.password || parsed.search || parsed.hash ||
           parsed.pathname !== '/') configurationIssue = 'An HTTPS Supabase project URL is required.';
     } catch {
       configurationIssue = 'An HTTPS Supabase project URL is required.';

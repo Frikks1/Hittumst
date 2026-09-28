@@ -1,15 +1,21 @@
+import { HostCommunity } from '@/features/hittingar/CommunityPanels';
+import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { TextInput } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { confirmAction } from '@/utils/confirmAction';
+
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Button, ChoiceChip, Screen, TrustBanner, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
-import { api, runtimeEnv } from '@/services';
+import { FavoriteButton } from '@/components/FavoriteButton';
+import { useProfileTransition } from '@/providers/ProfileTransitionProvider';
+import { PremiumProfile } from '@/components/PremiumProfile';
+import { api } from '@/services';
 import { profileTagById } from '@/data/profileTags';
-import type { ContentReaction, MeetupProfileHistoryItem, MeetupProfileUpcomingItem, ProfileReactionEmoji, PublicProfile, StarredItem } from '@/types/domain';
+import type { ContentReaction, ProfileReactionEmoji, PublicProfile, StarredItem } from '@/types/domain';
 import { socialUrl } from '@/utils/profileExtras';
 
 function ProfileVideo({ uri }: { uri: string }) {
@@ -21,54 +27,99 @@ function FeedbackBlock({ targetType, targetId, title }: { targetType: 'profile' 
   const { theme, t } = useApp();
   const [feedback, setFeedback] = useState<{ ratings: Array<{ userId: string; value: -1 | 1 }>; comments: Array<{ id: string; authorName: string; body: string }>; reactions: ContentReaction[] }>({ ratings: [], comments: [], reactions: [] });
   const [comment, setComment] = useState('');
-  useEffect(() => { void api.listFeedback(targetType, targetId).then(setFeedback); }, [targetType, targetId]);
-  const showRatings = runtimeEnv.appEnvironment === 'development';
-  const rate = async (value: -1 | 1) => { await api.rateContent(targetType, targetId, value); setFeedback(await api.listFeedback(targetType, targetId)); };
-  const addComment = async () => { if (!comment.trim()) return; await api.commentOnContent(targetType, targetId, comment); setComment(''); setFeedback(await api.listFeedback(targetType, targetId)); };
-  const react = async (emoji: ProfileReactionEmoji) => { await api.toggleContentReaction(targetType, targetId, emoji); setFeedback(await api.listFeedback(targetType, targetId)); };
-  return <View style={[styles.feedback, { borderColor: theme.colors.border }]}><Text style={[styles.feedbackTitle, { color: theme.colors.text }]}>{showRatings ? title : t('feedback.community')}</Text><View style={styles.reactionRow}>{feedback.reactions.map((item) => <Pressable key={item.emoji} accessibilityRole="button" accessibilityState={{ selected: item.reacted }} onPress={() => void react(item.emoji)} style={[styles.reaction, { borderColor: item.reacted ? theme.colors.accent : theme.colors.border, backgroundColor: item.reacted ? theme.colors.accentSoft : theme.colors.surface }]}><Text>{item.emoji}</Text><Text style={{ color: theme.colors.text, fontWeight: '800' }}>{item.count}</Text></Pressable>)}</View>{showRatings && <View style={styles.ratingRow}><Pressable accessibilityLabel={t('feedback.like')} onPress={() => void rate(1)} style={styles.ratingPress}><Ionicons name="thumbs-up-outline" size={19} color={theme.colors.text} /><Text style={{ color: theme.colors.text }}>{feedback.ratings.filter((r) => r.value === 1).length}</Text></Pressable><Pressable accessibilityLabel={t('feedback.dislike')} onPress={() => void rate(-1)} style={styles.ratingPress}><Ionicons name="thumbs-down-outline" size={19} color={theme.colors.text} /><Text style={{ color: theme.colors.text }}>{feedback.ratings.filter((r) => r.value === -1).length}</Text></Pressable><Text style={{ color: theme.colors.textMuted }}>{t('feedback.anonymous')}</Text></View>}<View style={styles.commentRow}><TextInput value={comment} onChangeText={setComment} placeholder={t('feedback.commentPlaceholder')} placeholderTextColor={theme.colors.textMuted} style={[styles.commentInput, { borderColor: theme.colors.border, color: theme.colors.text }]} /><Pressable onPress={() => void addComment()}><Text style={{ color: theme.colors.accent, fontWeight: '800' }}>{t('feedback.comment')}</Text></Pressable></View>{feedback.comments.slice(0, 3).map((item) => <Text key={item.id} style={{ color: theme.colors.textMuted }}><Text style={{ fontWeight: '800', color: theme.colors.text }}>{item.authorName}: </Text>{item.body}</Text>)}</View>;
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const pending = useRef<number | null>(null);
+  const generation = useRef(0);
+  const load = useCallback(async () => {
+    const revision = generation.current;
+    try { const next = await api.listFeedback(targetType, targetId); if (revision === generation.current) { setFeedback(next); setFailed(false); } }
+    catch { if (revision === generation.current) setFailed(true); }
+  }, [targetType, targetId]);
+  useEffect(() => { generation.current++; setBusy(false); setFeedback({ ratings: [], comments: [], reactions: [] }); setComment(''); void load(); return () => { generation.current++; }; }, [load]);
+  const run = async (task: () => Promise<unknown>, onSuccess?: () => void) => {
+    const revision = generation.current;
+    if (pending.current === revision) return;
+    pending.current = revision; setBusy(true); setFailed(false);
+    try { await task(); if (revision === generation.current) { onSuccess?.(); await load(); } }
+    catch { if (revision === generation.current) setFailed(true); }
+    finally { if (pending.current === revision) pending.current = null; if (revision === generation.current) setBusy(false); }
+  };
+  const showRatings = false; // Person ratings are excluded from the first release, including demo builds.
+  const rate = (value: -1 | 1) => run(() => api.rateContent(targetType, targetId, value));
+  const addComment = () => run(() => api.commentOnContent(targetType, targetId, comment), () => setComment(''));
+  const react = (emoji: ProfileReactionEmoji) => run(() => api.toggleContentReaction(targetType, targetId, emoji));
+  return <View style={[styles.feedback, { borderColor: theme.colors.border }]}>{failed && <View><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('privacy.actionFailed')}</Text><Button disabled={busy} variant="secondary" label={t('common.retry')} onPress={() => void load()} /></View>}<Text style={[styles.feedbackTitle, { color: theme.colors.text }]}>{showRatings ? title : t('feedback.community')}</Text><View style={styles.reactionRow}>{feedback.reactions.map((item) => <Pressable disabled={busy} key={item.emoji} accessibilityRole="button" accessibilityState={{ selected: item.reacted }} onPress={() => void react(item.emoji)} style={[styles.reaction, { borderColor: item.reacted ? theme.colors.accent : theme.colors.border, backgroundColor: item.reacted ? theme.colors.accentSoft : theme.colors.surface }]}><Text>{item.emoji}</Text><Text style={{ color: theme.colors.text, fontWeight: '800' }}>{item.count}</Text></Pressable>)}</View>{showRatings && <View style={styles.ratingRow}><Pressable accessibilityLabel={t('feedback.like')} onPress={() => void rate(1)} style={styles.ratingPress}><Ionicons name="thumbs-up-outline" size={19} color={theme.colors.text} /><Text style={{ color: theme.colors.text }}>{feedback.ratings.filter((r) => r.value === 1).length}</Text></Pressable><Pressable accessibilityLabel={t('feedback.dislike')} onPress={() => void rate(-1)} style={styles.ratingPress}><Ionicons name="thumbs-down-outline" size={19} color={theme.colors.text} /><Text style={{ color: theme.colors.text }}>{feedback.ratings.filter((r) => r.value === -1).length}</Text></Pressable><Text style={{ color: theme.colors.textMuted }}>{t('feedback.anonymous')}</Text></View>}<View style={styles.commentRow}><TextInput accessibilityLabel={t('feedback.commentPlaceholder')} editable={!busy} maxLength={2000} value={comment} onChangeText={setComment} placeholder={t('feedback.commentPlaceholder')} placeholderTextColor={theme.colors.textMuted} style={[styles.commentInput, { borderColor: theme.colors.border, color: theme.colors.text }]} /><Pressable accessibilityRole="button" disabled={busy || !comment.trim()} onPress={() => void addComment()}><Text style={{ color: theme.colors.accent, fontWeight: '800' }}>{t('feedback.comment')}</Text></Pressable></View>{feedback.comments.slice(0, 3).map((item) => <Text key={item.id} style={{ color: theme.colors.textMuted }}><Text style={{ fontWeight: '800', color: theme.colors.text }}>{item.authorName}: </Text>{item.body}</Text>)}</View>;
 }
 
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { discoveryFilters, setDiscoveryFilters, t, theme, locationAllowed } = useApp();
+  const transition = useProfileTransition();
+  const hero = useRef<View>(null);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [publicStars, setPublicStars] = useState<StarredItem[]>([]);
-  const [meetupHistory, setMeetupHistory] = useState<MeetupProfileHistoryItem[]>([]);
-  const [upcomingMeetups, setUpcomingMeetups] = useState<MeetupProfileUpcomingItem[]>([]);
-  useEffect(() => { if (id) { void api.getProfile(id).then(setProfile).catch(() => router.back()); void api.listStarredItems(id).then(setPublicStars).catch(() => setPublicStars([])); void api.listProfileMeetupHistory(id).then((page) => setMeetupHistory(page.items)).catch(() => setMeetupHistory([])); void api.listProfileUpcomingMeetups(id).then((page) => setUpcomingMeetups(page.items)).catch(() => setUpcomingMeetups([])); } }, [id, router]);
-
-  if (!profile) return <Screen back><View style={styles.loading}><Text style={{ color: theme.colors.textMuted }}>{t('common.loading')}</Text></View></Screen>;
-  const message = async () => {
-    if (!locationAllowed) return router.push('/location-gate');
-    const conversation = await api.startConversation(profile.id);
-    router.push(`/chat/${conversation}?name=${encodeURIComponent(profile.displayName)}&profileId=${profile.id}`);
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const pending = useRef<number | null>(null);
+  const generation = useRef(0);
+  const load = useCallback(async () => {
+    if (!id) return;
+    const revision = generation.current;
+    setLoading(true); setFailed(false);
+    const results = await Promise.allSettled([api.getProfile(id), api.listStarredItems(id)]);
+    if (revision !== generation.current) return;
+    const [profileResult, stars] = results;
+    if (profileResult.status === 'fulfilled') setProfile(profileResult.value); else setProfile(null);
+    setPublicStars(stars.status === 'fulfilled' ? stars.value : []);
+    setFailed(results.some(result => result.status === 'rejected')); setLoading(false);
+  }, [id]);
+  useEffect(() => { generation.current++; setBusy(false); setProfile(null); setNotice(''); void load(); return () => { generation.current++; }; }, [load]);
+  const action = async <T,>(task: () => Promise<T>, onSuccess?: (value: T) => void) => {
+    const revision = generation.current;
+    if (pending.current === revision) return;
+    pending.current = revision; setBusy(true); setFailed(false); setNotice('');
+    try { const value = await task(); if (revision === generation.current) onSuccess?.(value); }
+    catch { if (revision === generation.current) setFailed(true); }
+    finally { if (pending.current === revision) pending.current = null; if (revision === generation.current) setBusy(false); }
   };
-  const block = () => Alert.alert(t('block.confirmTitle', { name: profile.displayName }), t('block.confirmBody'), [
-    { text: t('common.cancel'), style: 'cancel' },
-    { text: t('block.action'), style: 'destructive', onPress: () => void api.block(profile.id).then(() => router.replace('/(tabs)/discover')) },
-  ]);
+  if (!profile) return <Screen back><View style={{ padding: 22, gap: 16 }}>{loading ? <Text style={{ color: theme.colors.textMuted }}>{t('common.loading')}</Text> : <HostCommunity key={id} hostId={id} />}</View></Screen>;
+  const message = () => {
+    if (!locationAllowed) { router.push('/location-gate'); return; }
+    return action(() => api.startConversation(profile.id), conversation => router.push(('/chat/' + conversation + '?name=' + encodeURIComponent(profile.displayName) + '&profileId=' + profile.id) as never));
+  };
+  const block = () => confirmAction({ title: t('block.confirmTitle', { name: profile.displayName }), message: t('block.confirmBody'), cancelLabel: t('common.cancel'), confirmLabel: t('block.action'), destructive: true,
+    onConfirm: () => action(() => api.block(profile.id), () => router.replace('/(tabs)/discover')),
+  });
 
   return (
     <Screen back>
       <View style={styles.page}>
-        <View style={styles.hero}>
+        <View ref={hero} onLayout={() => hero.current?.measureInWindow((x, y, width, height) => transition.finish(profile.id, { x, y, width, height }))} style={styles.hero}>
           {profile.photos[0]?.url ? <Image source={profile.photos[0].url} style={styles.heroImage} /> : <View style={[styles.heroImage, styles.placeholder, { backgroundColor: theme.colors.surfaceMuted }]}><Ionicons name="person" size={70} color={theme.colors.textMuted} /></View>}
           <View style={styles.heroOverlay}>
             <View style={styles.statusLine}>
               {profile.isOnline && <View style={styles.onlineDot} />}
-              <Text style={styles.statusText}>{profile.isOnline ? 'Online' : t(`distance.${profile.distanceBand}`)}</Text>
+              <Text style={styles.statusText}>{profile.isOnline ? t('common.online') : profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
             </View>
             <Text style={styles.heroName}>{profile.displayName}, {profile.age}</Text>
-            <Text style={styles.heroMeta}>{profile.pronouns} · {t(`distance.${profile.distanceBand}`)}</Text>
+            <FavoriteButton key={profile.id} profileId={profile.id} name={profile.displayName} />
+            {profile.diagnosisIds?.map(id=><Text key={id} style={styles.heroMeta}>{t(`diagnosis.${id}`)} · {t('diagnosis.approved')}</Text>)}
+            <Text style={styles.heroMeta}>{profile.pronouns} · {profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
           </View>
         </View>
         <View style={styles.body}>
+          {failed && <View><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('privacy.actionFailed')}</Text><Button loading={loading} disabled={busy} variant="secondary" label={t('common.retry')} onPress={() => void load()} /></View>}
+          {!!notice && <Text accessibilityRole="alert" style={{ color: theme.colors.text }}>{notice}</Text>}
+          <PremiumProfile profileId={profile.id}/>
+          <HostCommunity key={profile.id} hostId={profile.id} showTitle={false} />
+          {profile.coverPhotoId && profile.photos.some(photo => photo.id === profile.coverPhotoId) && <Image source={profile.photos.find(photo => photo.id === profile.coverPhotoId)?.url} accessibilityLabel={t('profile.cover')} contentFit="cover" style={{ width: '100%', height: 170, borderRadius: 20 }} />}
+          {!!profile.conversationPrompt && <View style={[styles.extraSection, { borderColor: theme.colors.accent }]}><Text style={[textStyles.eyebrow, { color: theme.colors.accent }]}>{t('profile.prompt')}</Text><Text style={[textStyles.heading, { color: theme.colors.text }]}>{profile.conversationPrompt}</Text><Button variant="secondary" label={t('profile.promptReply')} onPress={() => void message()} /></View>}
           {profile.commentWallEnabled !== false && <FeedbackBlock targetType="profile" targetId={profile.id} title={t('feedback.title')} />}
           {publicStars.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('social.starred')}</Text><View style={styles.chips}>{publicStars.map((item) => <ChoiceChip key={item.id} label={item.label} selected onPress={() => undefined} />)}</View></View>}
-          {upcomingMeetups.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.upcomingHittingar')}</Text>{upcomingMeetups.map((item) => <Pressable key={item.meetupId} onPress={() => router.push(`/hittingar/${item.meetupId}`)} style={styles.externalLink}><Ionicons name="calendar-outline" size={18} color={theme.colors.accent} /><Text style={[styles.externalLinkText, { color: theme.colors.accent }]}>{item.title} · {new Date(item.startsAt).toLocaleDateString()}</Text></Pressable>)}</View>}
-          {meetupHistory.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.hittingarHistory')}</Text>{meetupHistory.map((item) => <Pressable key={item.meetupId} onPress={() => router.push(`/hittingar/${item.meetupId}`)} style={styles.externalLink}><Ionicons name="calendar-outline" size={18} color={theme.colors.accent} /><Text style={[styles.externalLinkText, { color: theme.colors.accent }]}>{item.title} · {new Date(item.startsAt).toLocaleDateString()}</Text></Pressable>)}</View>}
           <View style={styles.chips}>{profile.identity.map((item) => <ChoiceChip key={item} label={t(`identity.${item}`)} selected onPress={() => undefined} />)}</View>
           <Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.about')}</Text>
           <Text style={[textStyles.body, { color: theme.colors.text }]}>{profile.bio}</Text>
@@ -82,14 +133,14 @@ export default function PublicProfileScreen() {
           {profile.commentWallEnabled !== false && profile.photos.map((photo) => <FeedbackBlock key={`feedback-${photo.id}`} targetType="photo" targetId={photo.id} title={t('feedback.photoTitle')} />)}
           <TrustBanner icon="shield-checkmark-outline" title={t('chat.safety')} body={t('location.lockedHint')} />
           <View style={styles.safetyRow}>
-            <View style={styles.flex}><Button variant="secondary" icon="person-add-outline" label={t('social.addFriend')} onPress={() => void api.setFriendship(profile.id, 'request')} /></View>
-            <View style={styles.flex}><Button variant="secondary" icon="star-outline" label={t('social.star')} onPress={() => void api.toggleStarredItem('friend', profile.id, profile.displayName)} /></View>
+            <View style={styles.flex}><Button variant="secondary" icon="person-add-outline" label={t('social.addFriend')} disabled={busy} onPress={() => void action(() => api.setFriendship(profile.id, 'request'), () => setNotice(t('common.done')))} /></View>
+            <View style={styles.flex}></View>
           </View>
-          <Button icon="chatbubble-outline" label={t('profile.message')} onPress={() => void message()} />
+          <Button icon="chatbubble-outline" disabled={busy} label={t('profile.message')} onPress={() => void message()} />
           <Button variant="secondary" icon="lock-closed-outline" label={t('chat.shareAlbum')} onPress={() => router.push(`/albums/share?profileId=${profile.id}&name=${encodeURIComponent(profile.displayName)}`)} />
           <View style={styles.safetyRow}>
             <View style={styles.flex}><Button variant="secondary" icon="flag-outline" label={t('profile.report')} onPress={() => router.push(`/report/${profile.id}?name=${encodeURIComponent(profile.displayName)}`)} /></View>
-            <View style={styles.flex}><Button variant="secondary" icon="ban-outline" label={t('profile.block')} onPress={block} /></View>
+            <View style={styles.flex}><Button variant="secondary" icon="ban-outline" disabled={busy} label={t('profile.block')} onPress={block} /></View>
           </View>
         </View>
       </View>

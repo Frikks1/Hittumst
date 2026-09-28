@@ -1,0 +1,108 @@
+# Deploy only after the runbook's account/configuration steps. No services are provisioned by this file.
+# Each environment has a web service and ONE continuous worker. Do not add cron schedulers.
+services:
+  - type: web
+    name: hittumst-production-web
+    runtime: docker
+    region: frankfurt
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/operations/live
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: hittumst-production
+      - key: WORKER_EXECUTION_ROLE
+        value: web
+  - type: worker
+    name: hittumst-production-worker
+    runtime: docker
+    region: frankfurt
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node apps/admin/dist-worker/worker.mjs
+    maxShutdownDelaySeconds: 300
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: hittumst-production
+      - key: WORKER_EXECUTION_ROLE
+        value: worker
+  - type: web
+    name: hittumst-staging-web
+    runtime: docker
+    region: frankfurt
+    plan: 0.5c-512mb
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/operations/live
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: hittumst-staging
+      - key: WORKER_EXECUTION_ROLE
+        value: web
+  - type: worker
+    name: hittumst-staging-worker
+    runtime: docker
+    region: frankfurt
+    plan: 1c-2g
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node apps/admin/dist-worker/worker.mjs
+    maxShutdownDelaySeconds: 300
+    autoDeployTrigger: off
+    envVars:
+      - fromGroup: hittumst-staging
+      - key: WORKER_EXECUTION_ROLE
+        value: worker
+# Fill required provider/project values in each environment group before the first deploy.
+# Render ignores sync:false inside groups; values are deliberately absent here.
+# See docs/render-deployment.md. Never share project keys between environments.
+envVarGroups:
+  - name: hittumst-production
+    envVars:
+      - key: HITTUMST_APP_ENV
+        value: production
+      - key: WORKER_SCHEDULER
+        value: render
+      - key: AWS_REGION
+        value: eu-central-1
+      - key: AWS_MEDIA_PRIVACY_VERIFIED
+        value: "false"
+      - key: HITTUMST_GROUP_VOICE_ENABLED
+        value: "false"
+      - key: HITTUMST_PUBLIC_RELEASE
+        value: "false"
+      - key: HITTUMST_POLICIES_APPROVED
+        value: "false"
+      - key: COMMERCE_MODE
+        value: disabled
+      - key: CRON_SECRET
+        generateValue: true
+      - key: PUSH_WORKER_SECRET
+        generateValue: true
+      - key: VOICE_WORKER_SECRET
+        generateValue: true
+  - name: hittumst-staging
+    envVars:
+      - key: HITTUMST_APP_ENV
+        value: staging
+      - key: STAGING_SYNTHETIC_DATA_CONFIRMED
+        value: "true"
+      - key: WORKER_SCHEDULER
+        value: render
+      - key: AWS_REGION
+        value: eu-central-1
+      - key: AWS_MEDIA_PRIVACY_VERIFIED
+        value: "false"
+      - key: HITTUMST_GROUP_VOICE_ENABLED
+        value: "false"
+      - key: HITTUMST_PUBLIC_RELEASE
+        value: "false"
+      - key: HITTUMST_POLICIES_APPROVED
+        value: "false"
+      - key: COMMERCE_MODE
+        value: disabled
+      - key: CRON_SECRET
+        generateValue: true
+      - key: PUSH_WORKER_SECRET
+        generateValue: true
+      - key: VOICE_WORKER_SECRET
+        generateValue: true
+

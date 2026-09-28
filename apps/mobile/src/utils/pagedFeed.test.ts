@@ -3,6 +3,22 @@ import { emptyFeed, PagedFeed } from './pagedFeed';
 type Item = { id: string };
 const deferred = <T>() => { let resolve!: (value: T) => void; let reject!: (reason?: unknown) => void; const promise = new Promise<T>((a,b) => {resolve=a;reject=b;}); return {promise,resolve,reject}; };
 describe('discovery request ordering', () => {
+  it('keeps visible cards behind a modal while ignoring an unfinished page', async () => {
+    const page = deferred<{items: Item[];nextCursor: string|null}>();
+    let result = emptyFeed<Item>();
+    const feed = new PagedFeed<Item,string>(async (_q, cursor) => cursor
+      ? page.promise : {items:[{id:'visible'}],nextCursor:'next'}, s => {result=s;});
+    await feed.refresh('x');
+    const pending = feed.more();
+    feed.pause();
+    expect(result.items).toEqual([{id:'visible'}]);
+    expect(result.loading).toBe(false);
+    page.resolve({items:[{id:'late'}],nextCursor:null});
+    await pending;
+    expect(result.items).toEqual([{id:'visible'}]);
+    feed.clear();
+    expect(result).toEqual(emptyFeed());
+  });
   it('discards responses from a previous filter', async () => {
     const first = deferred<{items: Item[];nextCursor: string|null}>();
     let result = emptyFeed<Item>();

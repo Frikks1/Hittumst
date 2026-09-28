@@ -1,12 +1,15 @@
+import { Text } from '@/components/Typography';
 import { type Href, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
+import { useHittingarNotifications } from '@/features/hittingar/notifications';
 import { Button, ChoiceChip, Screen, SettingRow, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';
 
 export default function SettingsScreen() {
   const {locale,setLocale,themeMode,setThemeMode,t,theme,signOut,clearLocation,verifyLocation}=useApp();
+  const notifications = useHittingarNotifications({ api, locale });
   const [locationSharing,setLocationSharing]=useState<boolean|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(false);
@@ -29,10 +32,15 @@ export default function SettingsScreen() {
       <View style={styles.choices}><ChoiceChip label="Íslenska" selected={locale==='is'} onPress={()=>setLocale('is')} /><ChoiceChip label="English" selected={locale==='en'} onPress={()=>setLocale('en')} /></View>
       <Text accessibilityRole="header" style={[styles.label,{color:theme.colors.text}]}>{t('settings.chooseAppearance')}</Text>
       <View style={styles.choices}>{(['system','light','dark'] as const).map(mode=><ChoiceChip key={mode} label={t(`settings.${mode}`)} selected={themeMode===mode} onPress={()=>setThemeMode(mode)} />)}</View>
+      {notifications.supported && <><Button variant="secondary" icon="notifications-outline" loading={notifications.busy} label={notifications.status === 'enabled' ? (locale === 'is' ? 'Tilkynningar virkar' : 'Notifications enabled') : (locale === 'is' ? 'Virkja tilkynningar' : 'Enable notifications')} onPress={() => void notifications.enable()} />{notifications.status === 'error' && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('privacy.actionFailed')}</Text>}{notifications.status === 'denied' && <Button variant="secondary" label={locale === 'is' ? 'Opna stillingar tilkynninga' : 'Open notification settings'} onPress={() => void Linking.openSettings().catch(() => setError(true))} />}</>}
+      <SettingRow icon="color-palette-outline" title={t('appearance.title')} subtitle={t('appearance.subtitle')} href="/appearance" />
+      <SettingRow icon="ribbon-outline" title={locale==='is'?'Áskrift og fríðindi':'Membership'} href={'/membership' as Href} />
+      <SettingRow icon="wallet-outline" title={locale==='is'?'Veski':'Wallet'} href={'/wallet' as Href} />
     </View>
     <Text style={[textStyles.eyebrow,styles.section,{color:theme.colors.textMuted}]}>{t('settings.privacy')}</Text>
     <View style={[styles.group,{backgroundColor:theme.colors.surface,borderColor:theme.colors.border}]}>
       <SettingRow icon="people-outline" title={t('social.friends')} href={'/friends' as Href} />
+      <SettingRow icon="people-circle-outline" title={t('social.groups')} href={'/groups' as Href} />
       <SettingRow icon="star-outline" title={t('social.starred')} href={'/starred' as Href} />
       <SettingRow icon="shield-checkmark-outline" title={t('settings.privacy')} href="/privacy" />
       <SettingRow icon="ban-outline" title={t('settings.blocked')} href="/blocked" />
@@ -40,6 +48,7 @@ export default function SettingsScreen() {
     </View>
     <Text style={[textStyles.eyebrow,styles.section,{color:theme.colors.textMuted}]}>{t('settings.safety')}</Text>
     <View style={[styles.group,{backgroundColor:theme.colors.surface,borderColor:theme.colors.border}]}>
+      <SettingRow icon="images-outline" title={locale === 'is' ? 'Upphleðslur og yfirferð' : 'Uploads and review'} href={'/uploads' as Href} />
       <SettingRow icon="help-buoy-outline" title={t('settings.support')} href="/support" />
       <SettingRow icon="log-out-outline" title={t('settings.signOut')} danger onPress={()=>{void signOut().catch(()=>setError(true));}} />
     </View>

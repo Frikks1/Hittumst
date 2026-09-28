@@ -1,13 +1,23 @@
+import type { CommunityState } from '@rummal/shared';
+import { communityApi } from '@/services/community';
+import { EventCover } from '@/features/hittingar/EventCover';
+import { EventFollowing, EventAdmission, EventAnnouncements, CommunityError } from '@/features/hittingar/CommunityPanels';
+import { PoolSummary } from '@/features/hittingar/PoolSummary';
+import { useEntitlement } from '@/hooks/useEntitlement';
+import { EventGender } from '@/features/hittingar/EventGender';
+import { EventMediaGallery } from '@/features/hittingar/EventMedia';
+import { EventReviews } from '@/features/hittingar/EventReviews';
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
-import { Button, DemoBanner, Screen, textStyles } from '@/components/ui';
+import { Alert, AppState, Linking, StyleSheet, View } from 'react-native';
+import { Button, Screen, textStyles } from '@/components/ui';
 import { formatHittingurDate, HittingurPrimaryButton, SafetyNotice, StatusPill } from '@/features/hittingar/components';
 import { categoryKey, generalAreaLabel, tagKey } from '@/features/hittingar/model';
 import { useApp } from '@/providers/AppProvider';
 import { api, type RummalApi } from '@/services';
-import type { MeetupDetail, MeetupRosterEntry, MeetupRsvpVisibility } from '@/types/domain';
+import type { MeetupDetail } from '@/types/domain';
 import { confirmAction } from '@/utils/confirmAction';
 
 type DetailParams = { id?: string };
@@ -22,11 +32,13 @@ export default function HittingurDetailScreen() {
 function HittingurDetailSession({ id }: DetailParams) {
   const router = useRouter();
   const { locale, t, theme } = useApp();
+  const { entitlement } = useEntitlement();
   const [detail, setDetail] = useState<MeetupDetail | null>(null);
-  const [roster, setRoster] = useState<MeetupRosterEntry[]>([]);
+  const [community, setCommunity] = useState<CommunityState | null>(null);
+  const [communityError, setCommunityError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [actionError, setActionError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const active = useRef(false);
   const revision = useRef(0);
@@ -39,20 +51,18 @@ function HittingurDetailSession({ id }: DetailParams) {
     setError(false);
     try {
       const nextDetail = await meetupApi.getMeetup(id);
-      const nextRoster = nextDetail.capabilities.canViewRoster
-        ? (await meetupApi.listPublicMeetupRoster(id)).items
-        : [];
+      const nextCommunity = await communityApi.getState(id).catch(() => null);
       if (!active.current || ticket !== revision.current) return;
-      setDetail(nextDetail); setRoster(nextRoster);
+      setDetail(nextDetail); setCommunity(nextCommunity); setCommunityError(nextCommunity === null);
     } catch {
-      if (active.current && ticket === revision.current) { setDetail(null); setRoster([]); setError(true); }
+      if (active.current && ticket === revision.current) { setDetail(null); setCommunity(null); setError(true); }
     } finally {
       if (active.current && ticket === revision.current) setLoading(false);
     }
   }, [id]);
 
   useFocusEffect(useCallback(() => {
-    const clear = () => { active.current = false; ++revision.current; setDetail(null); setRoster([]); setLoading(Boolean(id)); };
+    const clear = () => { active.current = false; ++revision.current; setDetail(null); setCommunity(null); setLoading(Boolean(id)); };
     const resume = () => { active.current = true; void load(); };
     if (AppState.currentState === 'active') resume();
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') resume(); else clear(); });
@@ -65,15 +75,15 @@ function HittingurDetailSession({ id }: DetailParams) {
       detail.onlineAccess.state === 'revealed' ? detail.onlineAccess.accessExpiresAt : undefined]
       .filter((value): value is string => Boolean(value)).map(value => new Date(value).getTime()).filter(value => value > Date.now());
     if (!deadlines.length) return;
-    const timer = setTimeout(() => { setDetail(null); setRoster([]); void load(); }, Math.min(2_147_483_647, Math.max(1, Math.min(...deadlines) - Date.now())));
+    const timer = setTimeout(() => { setDetail(null); setCommunity(null); void load(); }, Math.min(2_147_483_647, Math.max(1, Math.min(...deadlines) - Date.now())));
     return () => clearTimeout(timer);
   }, [detail, load]);
 
   const runAction = async (operation: () => Promise<unknown>) => {
     if (acting.current || !active.current) return;
-    acting.current = true; setActionBusy(true); setActionError(false);
+    acting.current = true; setActionBusy(true); setActionError(null);
     try { await operation(); await load(); }
-    catch { if (active.current) { setActionError(true); await load(); } }
+    catch (failure) { if (active.current) { setActionError(failure instanceof Error ? failure.message : 'failed'); await load(); } }
     finally { acting.current = false; if (active.current) setActionBusy(false); }
   };
 
@@ -95,7 +105,7 @@ function HittingurDetailSession({ id }: DetailParams) {
     if (kind === 'manage') return router.push(`/hittingar/${detail.id}/manage` as Href);
     const run = () => runAction(async () => {
         if (kind === 'join') await meetupApi.joinMeetup(detail.id);
-        if (kind === 'request') await meetupApi.requestMeetupAccess(detail.id);
+        if (kind === 'request') return; // Applications are submitted with introduction and accepted rules below.
         if (kind === 'cancel_request') await meetupApi.cancelMeetupRequest(detail.id);
         if (kind === 'leave') await meetupApi.leaveMeetup(detail.id);
     });
@@ -122,9 +132,6 @@ function HittingurDetailSession({ id }: DetailParams) {
     onConfirm: () => runAction(() => meetupApi.block(detail.host.id).then(() => router.replace('/(tabs)/hittingar' as Href))),
   });
 
-  const setRsvpVisibility = async (visibility: MeetupRsvpVisibility) => {
-    await runAction(() => meetupApi.setMeetupRsvpVisibility(detail.id, visibility));
-  };
 
   const openOnlineAccess = () => {
     if (detail.onlineAccess.state !== 'revealed') return;
@@ -145,9 +152,8 @@ function HittingurDetailSession({ id }: DetailParams) {
 
   return (
     <Screen back title={t('hittingar.detail.title')}>
-      <DemoBanner />
       <View style={styles.page}>
-        {actionError && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('hittingar.actionFailed')}</Text>}
+        {actionError && <View style={{ gap: 8 }}><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) ? (locale === 'is' ? 'Þú hefur náð þátttökumörkum fyrir mánuð þessa hittings.' : 'You have reached your joining allowance for this event’s month.') : t('hittingar.actionFailed')}</Text>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) && <Button label={locale === 'is' ? 'Skoða áskriftir' : 'View membership options'} onPress={() => router.push('/membership' as Href)} />}</View>}
         {detail.isExplicit && (
           <View style={[styles.adultBanner, { backgroundColor: theme.colors.surfaceMuted }]}>
             <Text style={[styles.adultMark, { color: theme.colors.danger }]}>18+</Text>
@@ -155,35 +161,57 @@ function HittingurDetailSession({ id }: DetailParams) {
           </View>
         )}
         {detail.status !== 'published' && <StatusPill label={t(`hittingar.status.${detail.status}`)} tone={detail.status === 'cancelled' || detail.status === 'moderation_hidden' ? 'danger' : 'warning'} />}
+        <EventCover cover={community?.cover ?? detail.cover} title={detail.title} playable />
+        <EventMediaGallery id={detail.id} />
+        {detail.diagnosisRestricted&&<View style={{gap:10}}><Text style={{color:theme.colors.text,fontWeight:'700'}}>{t('diagnosis.required')}</Text><Text style={{color:theme.colors.textMuted}}>{t('diagnosis.requiredHelp')}</Text>{detail.requiresDiagnosisVerification&&<Button variant="secondary" label={t('diagnosis.title')} onPress={()=>router.push('/diagnoses' as Href)}/>}</View>}
         <Text style={[textStyles.title, { color: theme.colors.text }]}>{detail.title}</Text>
+        <PoolSummary pool={detail.pool} />
+        {detail.pool?.status === 'accepting' && detail.status === 'published' && <Button label={entitlement?.tier && entitlement.tier !== 'plebbi' ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor this meetup') : (locale === 'is' ? 'Gerast áskrifandi og styrkja' : 'Upgrade to sponsor')} onPress={() => router.push((entitlement?.tier && entitlement.tier !== 'plebbi' ? `/wallet?meetupId=${encodeURIComponent(detail.id)}` : '/membership') as Href)} />}
         <View style={styles.pills}>
           <StatusPill label={t(categoryKey(detail.category))} />
+          {detail.eventProfile?.customTags.map(tag => <StatusPill key={tag} label={tag} />)}
           {detail.tags.map((tag) => <StatusPill key={tag} label={t(tagKey(tag))} />)}
-          <StatusPill icon={detail.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={t(`hittingar.access.${detail.accessMode}`)} tone="accent" />
+          <StatusPill icon={detail.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={detail.eventProfile ? t(`event.${detail.eventProfile.joinMode}`) : t(`hittingar.access.${detail.accessMode}`)} tone="accent" />
           {detail.locationVisibility === 'protected' && <StatusPill icon="shield-checkmark-outline" label={t('hittingar.location.protected')} tone="warning" />}
         </View>
         <View style={[styles.heroCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <InfoRow icon="calendar-outline" title={formatHittingurDate(detail.startsAt, locale)} body={detail.endsAt ? t('hittingar.detail.ends', { value: formatHittingurDate(detail.endsAt, locale) }) : t('hittingar.detail.defaultEnd')} />
-          <InfoRow icon="location-outline" title={area} body={detail.location.marker.isApproximate ? t('hittingar.location.approximateBody') : t('hittingar.location.publicBody')} />
-          <InfoRow icon="people-outline" title={detail.capacity ? t('hittingar.capacityCount', { count: detail.participantCount, capacity: detail.capacity }) : t('hittingar.participantCount', { count: detail.participantCount })} body={detail.isFull ? t('hittingar.action.full') : t(`hittingar.access.${detail.accessMode}Body`)} />
+          {detail.venueMode !== 'online' && <InfoRow icon="location-outline" title={area} body={detail.location.marker.isApproximate ? t('hittingar.location.approximateBody') : t('hittingar.location.publicBody')} />}
+          <InfoRow icon="people-outline" title={detail.capacity ? t('hittingar.capacityCount', { count: detail.participantCount, capacity: detail.capacity }) : t('hittingar.participantCount', { count: detail.participantCount })} body={detail.isFull ? t('hittingar.action.full') : detail.eventProfile?.joinMode === 'invite' ? t('event.invite') : t(`hittingar.access.${detail.accessMode}Body`)} />
         </View>
         <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.detail.about')}</Text>
         <Text style={[textStyles.body, { color: theme.colors.text }]}>{detail.description}</Text>
+        {detail.eventProfile && <>
+          {[{ title: t('event.rules'), body: detail.eventProfile.rules }, { title: t('event.prerequisites'), body: detail.eventProfile.prerequisites }, ...detail.eventProfile.sections].filter(item => item.body).map((item, index) => <View key={index} style={[styles.heroCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{item.title}</Text>
+            <Text style={[textStyles.body, { color: theme.colors.text }]}>{item.body}</Text>
+          </View>)}
+          <View style={[styles.heroCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('event.ages')}: {detail.eventProfile.minAge}–{detail.eventProfile.maxAge ?? '120'}</Text>
+            {detail.eventProfile.ageLimits.map((rule, index) => <Text key={index} style={{ color: theme.colors.text }}>{rule.minAge}–{rule.maxAge}: {t('event.maxRsvp')} {rule.maxRsvp}</Text>)}
+            {detail.eventProfile.genderLimits.map(rule => <Text key={rule.gender} style={{ color: theme.colors.text }}>{t(`event.gender.${rule.gender}`)}: {t('event.maxRsvp')} {rule.maxRsvp}</Text>)}
+          </View>
+        </>}
+        {Boolean(detail.eventProfile?.genderLimits.length) && detail.viewerState.participationStatus !== 'host' && <EventGender id={detail.id} onSaved={() => { void load(); }} />}
+        {community && <EventFollowing detail={detail} value={community} reload={load} />}
+        {communityError && <><CommunityError /><Button variant="secondary" label={t('common.retry')} onPress={() => void load()} /></>}
+        <EventAnnouncements id={detail.id} />
+        <EventReviews detail={detail} />
         <View style={[styles.hostCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={[styles.hostIcon, { backgroundColor: theme.colors.accentSoft }]}><Ionicons name="person" size={24} color={theme.colors.accent} /></View>
           <View style={styles.hostCopy}>
             <Text style={[styles.label, { color: theme.colors.textMuted }]}>{t('hittingar.detail.host')}</Text>
             <Text style={[styles.hostName, { color: theme.colors.text }]}>{detail.host.displayName}</Text>
           </View>
-          <Button label={t('hittingar.detail.profile')} variant="ghost" onPress={() => router.push(`/profile/${detail.host.id}` as Href)} />
+          <Button label={locale === 'is' ? 'Hittingar gestgjafa' : 'Host gatherings'} variant="ghost" onPress={() => router.push(`/hittingar/host/${detail.host.id}` as Href)} />
         </View>
-        {detail.location.state === 'protected_locked' && (
+        {detail.venueMode !== 'online' && detail.location.state === 'protected_locked' && (
           <SafetyNotice title={t('hittingar.location.lockedTitle')}>
             <Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t(detail.viewerState.participationStatus === 'pending' ? 'hittingar.location.pendingBody' : 'hittingar.location.lockedBody')}</Text>
             <Text style={[styles.releaseAt, { color: theme.colors.text }]}>{t('hittingar.location.releasesAt', { value: formatHittingurDate(detail.location.releaseAt, locale) })}</Text>
           </SafetyNotice>
         )}
-        {exactLocation && (
+        {detail.venueMode !== 'online' && exactLocation && (
           <View style={[styles.exactCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.warning }]}>
             <View style={styles.exactHeader}>
               <Ionicons name="shield-checkmark" size={24} color={theme.colors.warning} />
@@ -210,42 +238,19 @@ function HittingurDetailSession({ id }: DetailParams) {
             <Button variant="secondary" icon="open-outline" label={t('hittingar.online.open')} onPress={openOnlineAccess} />
           </View>
         )}
-        {(['joined', 'approved'] as const).includes(detail.viewerState.participationStatus as 'joined' | 'approved') && (
-          <View style={[styles.heroCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.rsvp.title')}</Text>
-            <Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t('hittingar.rsvp.body')}</Text>
-            <View style={styles.visibilityActions}>
-              {(['inherit', 'visible', 'private'] as MeetupRsvpVisibility[]).map((visibility) => <Button key={visibility} variant={detail.viewerState.rsvpVisibility === visibility ? undefined : 'secondary'} label={t(visibility === 'inherit' ? 'hittingar.rsvp.inherit' : visibility === 'visible' ? 'hittingar.rsvp.visible' : 'hittingar.rsvp.private')} onPress={() => void setRsvpVisibility(visibility)} />)}
-            </View>
-          </View>
-        )}
-        {detail.capabilities.canViewRoster && roster.length > 0 && (
-          <View style={[styles.heroCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.roster.title')}</Text>
-            {roster.map((entry) => <Button key={entry.profile.id} variant="ghost" icon="person-outline" label={entry.profile.displayName} onPress={() => router.push(`/profile/${entry.profile.id}` as Href)} />)}
-          </View>
-        )}
         <SafetyNotice title={t('hittingar.consent.title')} tone="accent">
           <Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t('hittingar.consent.body')}</Text>
         </SafetyNotice>
-        <HittingurPrimaryButton item={detail} busy={loading || actionBusy} onAction={(kind) => void act(kind)} />
+        {community && <EventAdmission detail={detail} value={community} reload={load} />}
+        {(detail.eventProfile?.joinMode ?? (detail.accessMode === 'private' ? 'request' : 'public')) !== 'request' || detail.capabilities.canLeave || detail.capabilities.canCancelRequest || detail.capabilities.canEdit ? <HittingurPrimaryButton item={detail} busy={loading || actionBusy} onAction={(kind) => void act(kind)} /> : null}
+        {detail.status === 'published' && ['joined', 'approved', 'host'].includes(detail.viewerState.participationStatus) && <Button variant="secondary" icon="qr-code-outline" label={locale === 'is' ? 'Skrá mætingu' : 'Check in'} onPress={() => router.push(`/check-in?meetupId=${detail.id}` as Href)} />}
+        <Text style={{ color: theme.colors.textMuted }}>{locale === 'is' ? 'Aðeins gestgjafi sér hverjir taka þátt. Aðrir sjá aðeins fjölda.' : 'Only the host sees who is attending. Other people see counts only.'}</Text>
         <View style={styles.safetyActions}>
           <Button variant="secondary" icon="star-outline" label={t('social.star')} onPress={() => void meetupApi.toggleStarredItem('event', detail.id, detail.title)} />
           {detail.capabilities.canViewRoom && <Button variant="secondary" icon="chatbubbles-outline" label={t('hittingar.room.open')} onPress={() => router.push(`/hittingar/${detail.id}/room` as Href)} />}
           {detail.capabilities.canConfirmAttendance && detail.viewerState.attendanceState === 'confirmation_pending' && <>
             {detail.viewerState.confirmationDeadlineAt && <Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t('hittingar.confirmBefore', { value: formatHittingurDate(detail.viewerState.confirmationDeadlineAt, locale) })}</Text>}
             <Button disabled={actionBusy} loading={actionBusy} icon="checkmark-circle-outline" label={t('hittingar.confirmAttendance')} onPress={() => void runAction(() => meetupApi.confirmMeetupAttendance(detail.id))} />
-          </>}
-          {detail.capabilities.canCompleteAttendance && detail.viewerState.attendanceState === 'completion_pending' && <>
-            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.finishTitle')}</Text>
-            <Button disabled={actionBusy} label={t('hittingar.attended')} onPress={() => void runAction(() => meetupApi.completeMeetupAttendance(detail.id, 'attended', 'private'))} />
-            <Button disabled={actionBusy} variant="secondary" label={t('hittingar.didNotAttend')} onPress={() => void runAction(() => meetupApi.completeMeetupAttendance(detail.id, 'did_not_attend'))} />
-            <Button disabled={actionBusy} variant="ghost" label={t('hittingar.dismiss')} onPress={() => void runAction(() => meetupApi.completeMeetupAttendance(detail.id, 'dismiss'))} />
-          </>}
-          {detail.viewerState.attendanceState === 'completed' && detail.viewerState.attendanceOutcome === 'attended' && <>
-            <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.historyVisibility')}</Text>
-            <Button disabled={actionBusy} variant={detail.viewerState.historyVisibility === 'visible' ? undefined : 'secondary'} label={t('hittingar.historyVisible')} onPress={() => void runAction(() => meetupApi.setMeetupHistoryVisibility(detail.id, 'visible'))} />
-            <Button disabled={actionBusy} variant={detail.viewerState.historyVisibility === 'private' ? undefined : 'secondary'} label={t('hittingar.historyPrivate')} onPress={() => void runAction(() => meetupApi.setMeetupHistoryVisibility(detail.id, 'private'))} />
           </>}
         </View>
         {(detail.capabilities.canReport || detail.capabilities.canBlockHost) && (

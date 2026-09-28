@@ -53,7 +53,7 @@ describe('Hittingar UI behavior', () => {
   });
 
   it('builds marker data only from the sanitized marker supplied by the API', () => {
-    const item: MeetupSummary = {
+    const item: MeetupSummary = { diagnosisRestricted:false, requiresDiagnosisVerification:false,
       id: '00000000-0000-4000-8000-000000000001',
       title: 'Kaffi',
       category: 'coffee_food',

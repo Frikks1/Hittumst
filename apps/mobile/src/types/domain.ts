@@ -1,7 +1,8 @@
+import { defaultDiscoveryExtensions, type DiscoveryExtensions, type ProfileGender, type DiagnosisId } from '@rummal/shared';
 export type Identity = 'gay' | 'bi' | 'queer' | 'trans' | 'nonbinary' | 'lesbian';
 export type Intent = 'chat' | 'dates' | 'friends' | 'relationship';
 export type IcelandRegion = 'capital' | 'south' | 'west' | 'westfjords' | 'north' | 'east';
-export type DistanceBand = 'under1' | '1to3' | '3to10' | '10to25' | '25plus';
+export type DistanceBand = 'under1' | '1to3' | '3to10' | '10to25' | '25plus' | '10to30' | '30plus';
 export type PhotoStatus = 'pending' | 'approved' | 'rejected';
 export type ProfileTagCategory = 'kinks' | 'hobbies' | 'personality' | 'other';
 export type ProfileTag = { id: string; label: string; category: ProfileTagCategory; sortOrder: number };
@@ -17,7 +18,6 @@ export type {
   FriendshipStatus,
   GroupMessage,
   GroupRole,
-  GroupSummary,
   GroupVoiceSession,
   ProfileAudience,
   ProfileReactionEmoji,
@@ -74,8 +74,12 @@ export type AlbumViewer = {
   contentVersion: number;
   sessionId?: string;
   sessionExpiresAt?: string;
+  accessExpiresAt?: string;
+  urlsExpireAt?: string;
   items: AlbumItem[];
 };
+
+export type NotificationTarget = { type: 'meetup' | 'conversation' | 'group'; id: string; profileId?: string; displayName?: string };
 
 export type PublicProfile = {
   id: string;
@@ -90,17 +94,26 @@ export type PublicProfile = {
   socials: ProfileSocial[];
   customTags: string[];
   interests: string[];
+  coverPhotoId?: string | null;
+  conversationPrompt?: string;
   bio: string;
   region: IcelandRegion;
   isOnline: boolean;
-  distanceBand: DistanceBand;
+  distanceBand: DistanceBand | null;
+  gender?: ProfileGender | null;
+  diagnosisIds?: DiagnosisId[];
   photos: Array<{ id: string; url: string; status: PhotoStatus; tags?: string[] }>;
   commentWallEnabled?: boolean;
   anonymousRatingsEnabled?: boolean;
 };
 
+export type GroupSummary = import('@rummal/shared').GroupSummary & { membershipStatus?: 'active' | 'invited'; status?: 'active' | 'locked' };
+export type GroupMember = { profileId: string; displayName: string; role: import('@rummal/shared').GroupRole; status: 'active' | 'invited' };
+export type GroupAction = 'accept' | 'decline' | 'leave' | 'lock' | 'unlock' | 'archive' | 'remove_member' | 'set_role' | 'hide_message';
+
 export type OwnProfile = Omit<PublicProfile, 'distanceBand'> & {
   dateOfBirth?: string;
+  friendsOfFriendsDiscovery?: boolean;
   isHidden: boolean;
   showOnline: boolean;
   locationSharing: boolean;
@@ -111,12 +124,14 @@ export type OwnProfile = Omit<PublicProfile, 'distanceBand'> & {
   anonymousRatingsEnabled?: boolean;
 };
 
-export type DiscoveryFilters = {
+export type DiscoveryFilters = DiscoveryExtensions & {
   ageMin: number;
   ageMax: number;
   identities: Identity[];
   intents: Intent[];
-  onlineOnly: boolean;
+  activity: 'all' | 'now' | 'recent' | 'month';
+  /** Legacy saved-filter input only. */
+  onlineOnly?: boolean;
   tags: string[];
 };
 
@@ -125,7 +140,8 @@ export const defaultFilters: DiscoveryFilters = {
   ageMax: 99,
   identities: [],
   intents: [],
-  onlineOnly: false,
+  ...defaultDiscoveryExtensions,
+  activity: 'all',
   tags: []
 };
 
@@ -140,6 +156,7 @@ export type ConversationSummary = {
 export type MessageStatus = 'sending' | 'sent' | 'failed';
 
 export type ChatMessage = {
+  mediaStatus?: 'pending' | 'approved' | 'rejected';
   id: string;
   conversationId: string;
   senderId: string | null;

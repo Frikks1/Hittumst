@@ -1,58 +1,360 @@
-import { useRouter } from 'expo-router';
+import {
+  FilterSection,
+  RadiusControl,
+  GenderChoices,
+  SocialChoices,
+  DiagnosisChoices,
+} from '@/components/DiscoveryControls';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { Button, ChoiceChip, Screen, SectionHeader } from '@/components/ui';
+import { StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '@/components/Typography';
+import { Button, ChoiceChip, Field, IconButton, SectionHeader } from '@/components/ui';
+import { FilterSheet } from '@/components/FilterSheet';
 import { profileTags } from '@/data/profileTags';
+import { interestLabel } from '@/data/interestLabels';
 import { useApp } from '@/providers/AppProvider';
-import type { Identity, Intent } from '@/types/domain';
+import { defaultFilters, type DiscoveryFilters, type Identity, type Intent } from '@/types/domain';
+import { genderChoices, orientationChoices } from '@/utils/discoveryPreferences';
 
 export default function FiltersScreen() {
-  const router = useRouter();
-  const { discoveryFilters, setDiscoveryFilters, t, theme } = useApp();
-  const initialAge = discoveryFilters.ageMin === 18 && discoveryFilters.ageMax === 25 ? '18to25' : discoveryFilters.ageMin === 26 && discoveryFilters.ageMax === 35 ? '26to35' : discoveryFilters.ageMin === 36 ? '36plus' : 'all';
-  const [age, setAge] = useState(initialAge);
-  const [identities, setIdentities] = useState<Identity[]>(discoveryFilters.identities);
-  const [intents, setIntents] = useState<Intent[]>(discoveryFilters.intents);
-  const [online, setOnline] = useState(discoveryFilters.onlineOnly);
-  const [tags, setTags] = useState(discoveryFilters.tags);
+  const {
+    discoveryEnabled,
+    discoveryFilters,
+    setDiscoveryFilters,
+    savedFilters,
+    saveFilter,
+    removeFilter,
+    savedFiltersReady,
+    savedFiltersError,
+    retrySavedFilters,
+    locale,
+    t,
+    theme,
+  } = useApp();
+  const [draft, setDraft] = useState<DiscoveryFilters>(discoveryFilters);
+  const [ageMin, setAgeMin] = useState(String(draft.ageMin));
+  const [ageMax, setAgeMax] = useState(String(draft.ageMax));
   const [query, setQuery] = useState('');
-  const matchingTags = useMemo(() => profileTags.filter((tag) => tag.label.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 40), [query]);
-  const toggle = <T,>(value: T, values: T[], setValues: (values: T[]) => void) => setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  const [name, setName] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const section = (key: string) => ({
+    open: open === key,
+    onPress: () => setOpen(open === key ? null : key),
+  });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<'saved' | 'error' | null>(null);
+  const agesValid =
+    /^\d{2}$/.test(ageMin) &&
+    /^\d{2}$/.test(ageMax) &&
+    +ageMin >= 18 &&
+    +ageMax <= 99 &&
+    +ageMin <= +ageMax;
+  const filters = { ...draft, ageMin: +ageMin, ageMax: +ageMax };
+  const matchingTags = useMemo(
+    () =>
+      profileTags.filter(
+        (tag) =>
+          tag.category === 'hobbies' &&
+          interestLabel(tag.id, locale)
+            .toLocaleLowerCase()
+            .includes(query.trim().toLocaleLowerCase()),
+      ),
+    [locale, query],
+  );
+  const selectDraft = (value: DiscoveryFilters) => {
+    setDraft(value);
+    setAgeMin(String(value.ageMin));
+    setAgeMax(String(value.ageMax));
+    setNotice(null);
+  };
+  const toggleIdentity = (value: Identity) =>
+    setDraft({
+      ...draft,
+      identities: draft.identities.includes(value)
+        ? draft.identities.filter((id) => id !== value)
+        : [...draft.identities, value],
+    });
+  const save = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await saveFilter(name, filters);
+      setName('');
+      setNotice('saved');
+    } catch {
+      setNotice('error');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <Screen back title={t('filters.title')}>
-      <View style={styles.page}>
-        <SectionHeader title={t('filters.title')} detail={t('discover.subtitle')} />
-        <View style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>{t('filters.age')}</Text>
-          <View style={styles.chips}>{['all', '18to25', '26to35', '36plus'].map((item) => <ChoiceChip key={item} label={t(`filters.age${item === 'all' ? 'All' : item[0]!.toUpperCase() + item.slice(1)}` as Parameters<typeof t>[0])} selected={age === item} onPress={() => setAge(item)} />)}</View>
-          <Text style={[styles.label, { color: theme.colors.text }]}>{t('filters.identity')}</Text>
-          <View style={styles.chips}>{(['gay', 'bi', 'queer', 'trans', 'nonbinary', 'lesbian'] as Identity[]).map((item) => <ChoiceChip key={item} label={t(`identity.${item}`)} selected={identities.includes(item)} onPress={() => toggle(item, identities, setIdentities)} />)}</View>
-          <Text style={[styles.label, { color: theme.colors.text }]}>{t('filters.intent')}</Text>
-          <View style={styles.chips}>{(['chat', 'dates', 'friends', 'relationship'] as Intent[]).map((item) => <ChoiceChip key={item} label={t(`intent.${item}`)} selected={intents.includes(item)} onPress={() => toggle(item, intents, setIntents)} />)}</View>
-          <ChoiceChip label={t('filters.onlineOnly')} selected={online} onPress={() => setOnline(!online)} />
-        </View>
-        <View style={[styles.group, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>{t('filters.tags')} ({tags.length}/3)</Text>
-          <TextInput value={query} onChangeText={setQuery} placeholder={t('filters.searchTags')} placeholderTextColor={theme.colors.textMuted} style={[styles.search, { color: theme.colors.text, backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border }]} />
-          <View style={styles.chips}>{matchingTags.map((tag) => <ChoiceChip key={tag.id} label={tag.label} selected={tags.includes(tag.id)} onPress={() => setTags(tags.includes(tag.id) ? tags.filter((item) => item !== tag.id) : tags.length < 3 ? [...tags, tag.id] : tags)} />)}</View>
-        </View>
-        <View style={styles.spacer} />
-        <Button variant="secondary" label={t('filters.clear')} onPress={() => { setAge('all'); setIdentities([]); setIntents([]); setOnline(false); setTags([]); setQuery(''); }} />
-        <Button label={t('filters.apply')} onPress={() => {
-          const ages = age === '18to25' ? [18, 25] : age === '26to35' ? [26, 35] : age === '36plus' ? [36, 99] : [18, 99];
-          setDiscoveryFilters({ ageMin: ages[0]!, ageMax: ages[1]!, identities, intents, onlineOnly: online, tags });
-          router.back();
-        }} />
-      </View>
-    </Screen>
+    <FilterSheet
+      footer={(close) => (
+        <>
+          <Button
+            label={t('filters.apply')}
+            disabled={!agesValid}
+            onPress={() => {
+              setDiscoveryFilters(filters);
+              close();
+            }}
+          />
+          <Button
+            variant="ghost"
+            label={t('filters.clear')}
+            onPress={() => {
+              selectDraft({ ...defaultFilters });
+              setQuery('');
+            }}
+          />
+        </>
+      )}
+    >
+      {() => (
+        <>
+          {discoveryEnabled && (
+            <RadiusControl
+              value={draft.radiusKm}
+              onChange={(radiusKm) => setDraft({ ...draft, radiusKm })}
+            />
+          )}
+          <FilterSection
+            title={t('discovery.people')}
+            summary={
+              draft.genders.length
+                ? draft.genders.map((g) => t(`discovery.gender.${g}`)).join(', ')
+                : t('discovery.gender.all')
+            }
+            {...section('people')}
+          >
+            {discoveryEnabled && (
+              <GenderChoices
+                value={draft.genders}
+                onChange={(genders) => setDraft({ ...draft, genders })}
+              />
+            )}
+            <SectionHeader title={t('filters.age')} />
+            <View style={styles.row}>
+              <View style={styles.flex}>
+                <Field
+                  label={t('filters.minAge')}
+                  value={ageMin}
+                  onChangeText={setAgeMin}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <Text style={{ color: theme.colors.text }}>–</Text>
+              <View style={styles.flex}>
+                <Field
+                  label={t('filters.maxAge')}
+                  value={ageMax}
+                  onChangeText={setAgeMax}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+            {!agesValid && (
+              <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>
+                {t('filters.invalidAge')}
+              </Text>
+            )}
+            {(
+              [
+                ['filters.orientation', orientationChoices],
+                ['filters.gender', genderChoices],
+              ] as const
+            ).map(([key, choices]) => (
+              <View key={key} style={styles.group}>
+                <SectionHeader
+                  title={
+                    key === 'filters.gender'
+                      ? locale === 'is'
+                        ? 'Prófílmerkingar'
+                        : 'Profile labels'
+                      : t(key)
+                  }
+                  detail={key === 'filters.orientation' ? t('filters.identityHelp') : undefined}
+                />
+                <View style={styles.chips}>
+                  {choices.map((value) => (
+                    <ChoiceChip
+                      key={value}
+                      label={t(`identity.${value}`)}
+                      selected={draft.identities.includes(value)}
+                      onPress={() => toggleIdentity(value)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ))}
+          </FilterSection>
+          {discoveryEnabled && (
+            <FilterSection
+              title={t('discovery.connections')}
+              summary={t(`discovery.social.${draft.social}`)}
+              {...section('connections')}
+            >
+              <SocialChoices
+                value={draft.social}
+                onChange={(social) => setDraft({ ...draft, social })}
+              />
+            </FilterSection>
+          )}
+          <FilterSection
+            title={t('discovery.activity')}
+            summary={t(`discovery.activity.${draft.activity}`)}
+            {...section('activity')}
+          >
+            <View style={styles.chips}>
+              {(['all', 'now', 'recent', 'month'] as const)
+                .filter((a) => discoveryEnabled || a === 'all' || a === 'now')
+                .map((activity) => (
+                  <ChoiceChip
+                    key={activity}
+                    label={t(`discovery.activity.${activity}`)}
+                    selected={draft.activity === activity}
+                    onPress={() => setDraft({ ...draft, activity })}
+                  />
+                ))}
+            </View>
+            <Text style={{ color: theme.colors.textMuted }}>{t('discovery.activityHelp')}</Text>
+          </FilterSection>
+          <FilterSection title={t('discovery.interests')} {...section('interests')}>
+            <SectionHeader title={t('filters.intent')} />
+            <View style={styles.chips}>
+              {(['chat', 'dates', 'friends', 'relationship'] as Intent[]).map((value) => (
+                <ChoiceChip
+                  key={value}
+                  label={t(`intent.${value}`)}
+                  selected={draft.intents.includes(value)}
+                  onPress={() =>
+                    setDraft({
+                      ...draft,
+                      intents: draft.intents.includes(value)
+                        ? draft.intents.filter((item) => item !== value)
+                        : [...draft.intents, value],
+                    })
+                  }
+                />
+              ))}
+            </View>
+            <SectionHeader title={`${t('filters.tags')} (${draft.tags.length}/3)`} />
+            <TextInput
+              accessibilityLabel={t('filters.searchTags')}
+              value={query}
+              onChangeText={setQuery}
+              placeholder={t('filters.searchTags')}
+              placeholderTextColor={theme.colors.textMuted}
+              style={[
+                styles.search,
+                {
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            />
+            <View style={styles.chips}>
+              {[...new Set([...draft.tags, ...matchingTags.map((tag) => tag.id)])].map((id) => (
+                <ChoiceChip
+                  key={id}
+                  label={interestLabel(id, locale)}
+                  selected={draft.tags.includes(id)}
+                  onPress={() =>
+                    setDraft({
+                      ...draft,
+                      tags: draft.tags.includes(id)
+                        ? draft.tags.filter((item) => item !== id)
+                        : draft.tags.length < 3
+                          ? [...draft.tags, id]
+                          : draft.tags,
+                    })
+                  }
+                />
+              ))}
+            </View>
+          </FilterSection>
+          {discoveryEnabled && (
+            <FilterSection
+              title={t('discovery.community')}
+              summary={draft.diagnosisIds.map((id) => t(`diagnosis.${id}`)).join(', ')}
+              {...section('community')}
+            >
+              <DiagnosisChoices
+                value={draft.diagnosisIds}
+                onChange={(diagnosisIds) => setDraft({ ...draft, diagnosisIds })}
+              />
+              <Text style={{ color: theme.colors.textMuted }}>{t('discovery.presetsPrivate')}</Text>
+            </FilterSection>
+          )}
+          <FilterSection title={t('filters.saved')} {...section('saved')}>
+            <SectionHeader title={t('filters.saved')} detail={t('filters.savedHint')} />
+            {savedFiltersError && !savedFiltersReady && (
+              <Button label={t('common.retry')} onPress={retrySavedFilters} />
+            )}
+            {!savedFilters.length && (
+              <Text style={{ color: theme.colors.textMuted }}>{t('filters.savedEmpty')}</Text>
+            )}
+            {savedFilters.map((item) => (
+              <View key={item.id} style={styles.row}>
+                <View style={styles.flex}>
+                  <Button
+                    variant="secondary"
+                    label={item.name}
+                    onPress={() => selectDraft(item.filters)}
+                  />
+                </View>
+                <IconButton
+                  icon="trash-outline"
+                  label={t('filters.removeSaved', { name: item.name })}
+                  onPress={() => {
+                    if (busy) return;
+                    setBusy(true);
+                    void removeFilter(item.id)
+                      .catch(() => setNotice('error'))
+                      .finally(() => setBusy(false));
+                  }}
+                />
+              </View>
+            ))}
+            {savedFilters.length < 5 ? (
+              <>
+                <Field
+                  label={t('filters.saveName')}
+                  value={name}
+                  onChangeText={(value) => setName(value.slice(0, 40))}
+                  placeholder={t('filters.savePlaceholder')}
+                />
+                <Button
+                  variant="secondary"
+                  label={t('filters.save')}
+                  icon="bookmark-outline"
+                  loading={busy}
+                  disabled={!name.trim() || !agesValid || !savedFiltersReady}
+                  onPress={() => void save()}
+                />
+              </>
+            ) : (
+              <Text style={{ color: theme.colors.textMuted }}>{t('filters.saveLimit')}</Text>
+            )}
+            {(notice || savedFiltersError) && (
+              <Text
+                accessibilityRole="alert"
+                style={{ color: notice === 'saved' ? theme.colors.success : theme.colors.danger }}
+              >
+                {t(notice === 'saved' ? 'filters.savedSuccess' : 'filters.saveError')}
+              </Text>
+            )}
+          </FilterSection>
+        </>
+      )}
+    </FilterSheet>
   );
 }
-
 const styles = StyleSheet.create({
-  page: { padding: 20, gap: 16, flex: 1 },
-  group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 22, padding: 16, gap: 15 },
-  label: { fontWeight: '900', marginTop: 2 },
+  group: { gap: 12, marginTop: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  row: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  flex: { flex: 1 },
   search: { minHeight: 50, borderWidth: 1, borderRadius: 15, paddingHorizontal: 15, fontSize: 16 },
-  spacer: { flex: 1, minHeight: 16 },
 });

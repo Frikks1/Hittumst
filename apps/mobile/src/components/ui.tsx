@@ -1,19 +1,14 @@
+import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type Href, useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  type KeyboardTypeOptions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useRef, type ReactNode } from 'react';
+import { useAppearance } from '@/providers/AppearanceProvider';
+import { useProfileTransition } from '@/providers/ProfileTransitionProvider';
+import { profilePersonality } from '@/utils/discoveryPreferences';
+import { interestLabel } from '@/data/interestLabels';
+import { ActivityIndicator, type KeyboardTypeOptions, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '@/providers/AppProvider';
 import type { PublicProfile } from '@/types/domain';
@@ -23,12 +18,14 @@ export function Screen({
   scroll = true,
   title,
   back,
+  onBack,
   right,
 }: {
   children: ReactNode;
   scroll?: boolean;
   title?: string;
   back?: boolean;
+  onBack?: () => void;
   right?: ReactNode;
 }) {
   const { theme, t } = useApp();
@@ -38,6 +35,7 @@ export function Screen({
   );
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]} edges={['top']}>
+      <DemoBanner />
       {(title || back || right) && (
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
           <View style={styles.headerSide}>
@@ -45,11 +43,11 @@ export function Screen({
               <IconButton
                 icon="chevron-back"
                 label={t('common.back')}
-                onPress={() => router.back()}
+                onPress={onBack ?? (() => router.canGoBack() ? router.back() : router.replace('/'))}
               />
             )}
           </View>
-          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>{title}</Text>
+          <Text accessibilityRole={title ? "header" : undefined} style={[styles.headerTitle, { color: theme.colors.text }]}>{title}</Text>
           <View style={[styles.headerSide, styles.headerRight]}>{right}</View>
         </View>
       )}
@@ -93,6 +91,7 @@ export function Button({
   loading?: boolean;
 }) {
   const { theme } = useApp();
+  const { reducedMotion } = useAppearance();
   const background =
     variant === 'primary'
       ? theme.colors.accent
@@ -117,7 +116,7 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: background, borderColor: theme.colors.border },
-        pressed && [styles.pressed, variant === 'primary' && { backgroundColor: theme.colors.accentPressed }],
+        pressed && [reducedMotion ? { opacity: 0.78 } : styles.pressed, variant === 'primary' && { backgroundColor: theme.colors.accentPressed }],
         (disabled || loading) && styles.disabled,
       ]}
     >
@@ -167,6 +166,9 @@ export function Field({
   keyboardType,
   multiline,
   onBlur,
+  maxLength,
+  onSubmitEditing,
+  editable,
 }: {
   label: string;
   value: string;
@@ -175,6 +177,9 @@ export function Field({
   keyboardType?: KeyboardTypeOptions;
   multiline?: boolean;
   onBlur?: () => void;
+  maxLength?: number;
+  onSubmitEditing?: () => void;
+  editable?: boolean;
 }) {
   const { theme } = useApp();
   return (
@@ -189,6 +194,9 @@ export function Field({
         keyboardType={keyboardType}
         multiline={multiline}
         onBlur={onBlur}
+        maxLength={maxLength}
+        onSubmitEditing={onSubmitEditing}
+        editable={editable}
         style={[
           styles.input,
           multiline && styles.multiline,
@@ -276,18 +284,30 @@ export function SettingRow({
   );
 }
 
-export function ProfileTile({ profile, onPress }: { profile: PublicProfile; onPress: () => void }) {
-  const { theme, t } = useApp();
+export function ProfileTile({ profile, onPress, compact = false, ownInterests = [], ownTags = [] }: { profile: PublicProfile; onPress: () => void; compact?: boolean; ownInterests?: string[]; ownTags?: string[] }) {
+  const { theme, t, locale } = useApp();
+  const { appearance, reducedMotion } = useAppearance();
+  const transition = useProfileTransition();
+  const tile = useRef<View>(null);
+  const personality = profilePersonality(profile, ownInterests, ownTags);
+  const detail = personality ? personality.kind === 'intent' ? t(`intent.${personality.value}`) : personality.kind === 'sharedTag' ? t('discovery.sharedInterest', { interest: interestLabel(personality.value, locale) }) : personality.kind === 'shared' ? t('discovery.sharedInterest', { interest: personality.value }) : personality.value : '';
+  const open = () => {
+    const uri = profile.photos[0]?.url;
+    if (!uri || reducedMotion || !tile.current) { onPress(); return; }
+    tile.current.measureInWindow((x, y, width, height) => { transition.start(profile.id, uri, { x, y, width, height }); onPress(); });
+  };
   const source = profile.photos[0]?.url;
   return (
     <Pressable
+      ref={tile}
       accessibilityRole="button"
-      accessibilityLabel={`${profile.displayName}, ${profile.age}. ${profile.lookingFor.map(intent => t(`intent.${intent}`)).join(", ")}. ${t(`distance.${profile.distanceBand}`)}${profile.isOnline ? `. ${t("common.online")}` : ""}`}
-      onPress={onPress}
+      accessibilityLabel={`${profile.displayName}, ${profile.age}. ${profile.lookingFor.map(intent => t(`intent.${intent}`)).join(", ")}. ${profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}${detail ? `. ${detail}` : ""}${profile.isOnline ? `. ${t("common.online")}` : ""}`}
+      onPress={open}
       style={({ pressed }) => [
         styles.tile,
+        { aspectRatio: appearance.discoveryLayout === 'large' ? 1.1 : compact ? 0.72 : appearance.density === 'compact' ? 0.82 : 0.67 },
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-        pressed && styles.tilePressed,
+        pressed && (reducedMotion ? { opacity: 0.9 } : styles.tilePressed),
       ]}
     >
       {source ? (
@@ -297,14 +317,15 @@ export function ProfileTile({ profile, onPress }: { profile: PublicProfile; onPr
           <Ionicons name="person" size={46} color={theme.colors.textMuted} />
         </LinearGradient>
       )}
-      <LinearGradient colors={['transparent', 'rgba(3,10,8,.95)']} locations={[0.34, 1]} style={styles.tileOverlay}>
+      <LinearGradient colors={['transparent', 'rgba(3,10,8,.95)']} locations={[0.45, 1]} style={[styles.tileOverlay, { padding: compact ? 8 : appearance.density === 'compact' ? 9 : 13 }]}>
         <View style={styles.nameLine}>
-          {profile.isOnline && <View style={styles.onlineDot} />}
-          <Text numberOfLines={1} style={styles.tileName}>{profile.displayName}, {profile.age}</Text>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileName, compact && styles.tileNameCompact]}>{profile.displayName}</Text>
+          <Text numberOfLines={1} style={[styles.tileAge, compact && styles.tileNameCompact]}>{profile.age}</Text>
         </View>
-        {profile.lookingFor[0] && <Text numberOfLines={1} style={styles.tileIntent}>{t(`intent.${profile.lookingFor[0]}`)}</Text>}
-        <Text style={styles.tileMeta}>{t(`distance.${profile.distanceBand}`)}</Text>
+        {!compact && detail ? <Text numberOfLines={1} ellipsizeMode="tail" style={styles.tileIntent}>{detail}</Text> : null}
+        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileMeta, compact && styles.tileMetaCompact]}>{profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
       </LinearGradient>
+      {profile.isOnline && <View style={styles.onlineDot} />}
     </Pressable>
   );
 }
@@ -313,7 +334,7 @@ export function DemoBanner() {
   const { demo, t, theme } = useApp();
   if (!demo) return null;
   return (
-    <View style={[styles.demoBanner, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+    <View accessible accessibilityRole="text" accessibilityLabel={t('demo.banner')} style={[styles.demoBanner, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
       <Ionicons name="sparkles" size={15} color={theme.colors.lava} />
       <Text style={[styles.demoText, { color: theme.colors.textMuted }]}>{t('demo.banner')}</Text>
     </View>
@@ -418,13 +439,16 @@ const styles = StyleSheet.create({
   tilePressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   tileImage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   tileOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', padding: 13 },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#7EF0AD' },
-  tileName: { color: '#FFFFFF', fontSize: 17, fontWeight: '900', flexShrink: 1, letterSpacing: -0.35 },
-  tileIntent: { color: "#C0F3E2", fontSize: 12, fontWeight: "800", marginTop: 5 },
-  tileMeta: { color: '#E6ECE8', fontSize: 12, marginTop: 3, fontWeight: '600' },
+  nameLine: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  onlineDot: { position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: '#163226', backgroundColor: '#7EF0AD' },
+  tileName: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '700', flexShrink: 1, minWidth: 0 },
+  tileAge: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '500', flexShrink: 0 },
+  tileNameCompact: { fontSize: 13, lineHeight: 17 },
+  tileIntent: { color: '#C0F3E2', fontSize: 12, lineHeight: 16, fontWeight: '600', marginTop: 3 },
+  tileMeta: { color: '#E6ECE8', fontSize: 12, lineHeight: 16, marginTop: 2, fontWeight: '500' },
+  tileMetaCompact: { fontSize: 11, lineHeight: 14 },
   demoBanner: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-  demoText: { fontSize: 11, fontWeight: '700' },
+  demoText: { flexShrink: 1, fontSize: 11, fontWeight: '700' },
   trustBanner: { borderRadius: 20, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center' },
   trustIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   trustCopy: { flex: 1, gap: 2 },

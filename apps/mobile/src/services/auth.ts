@@ -1,3 +1,6 @@
+import { suspendNativeDiagnostics } from './nativeDiagnostics';
+import { retainAppleAuthorization } from './appleAccount';
+import * as Crypto from 'expo-crypto';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
@@ -5,8 +8,9 @@ import { Platform } from 'react-native';
 import type { AuthProvider, AuthService, AuthUser } from './types';
 import { runtimeEnv } from './env';
 import { supabase } from './supabase';
+import { createOAuthCodeExchange, readOAuthCallbackCode } from './oauthCallback';
 
-WebBrowser.maybeCompleteAuthSession();
+export const browserAuthCompletion = WebBrowser.maybeCompleteAuthSession();
 
 const demoUser: AuthUser = { id: 'demo-me', email: 'demo@example.com' };
 
@@ -14,18 +18,38 @@ function toUser(user: { id: string; email?: string | null }): AuthUser {
   return { id: user.id, email: user.email ?? null };
 }
 
-class DemoAuthService implements AuthService {
+export class DemoAuthService implements AuthService {
   private user: AuthUser | null = demoUser;
+  private listeners = new Set<(user: AuthUser | null) => void>();
+  private update(user: AuthUser | null) {
+    this.user = user;
+    this.listeners.forEach(listener => listener(user));
+  }
   async getUser() { return this.user; }
   async requestEmailOtp(_email: string) {}
-  async verifyEmailOtp(email: string, _token: string) { this.user = { ...demoUser, email }; return this.user; }
-  async signInWithProvider(_provider: AuthProvider) { this.user = demoUser; return this.user; }
-  async signOut() { this.user = null; }
-  onAuthStateChange(_callback: (user: AuthUser | null) => void) { return () => undefined; }
+  async verifyEmailOtp(email: string, _token: string) { const user = { ...demoUser, email }; this.update(user); return user; }
+  async signInWithProvider(_provider: AuthProvider) { this.update(demoUser); return demoUser; }
+  async signOut() { this.update(null); }
+  onAuthStateChange(callback: (user: AuthUser | null) => void) {
+    this.listeners.add(callback);
+    return () => { this.listeners.delete(callback); };
+  }
 }
 
-class SupabaseAuthService implements AuthService {
+const oauthExchange = createOAuthCodeExchange(async code => {
+  if (!supabase) throw new Error('auth_unavailable');
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error || !data.user) throw error ?? new Error('OAuth session missing');
+  return toUser(data.user);
+});
+export const completeOAuthCallback = (code: string) => oauthExchange.complete(code);
+
+export class SupabaseAuthService implements AuthService {
+  private applePending: Promise<AuthUser> | null = null;
+  private listeners = new Set<(user: AuthUser | null) => void>();
+  private authRevision = 0;
   async getUser() {
+    if (this.applePending) return this.applePending.catch(() => null);
     const { data, error } = await supabase!.auth.getUser();
     if (error && error.name !== 'AuthSessionMissingError') throw error;
     return data.user ? toUser(data.user) : null;
@@ -43,14 +67,39 @@ class SupabaseAuthService implements AuthService {
   }
 
   async signInWithProvider(provider: AuthProvider) {
+    if (this.applePending) throw new Error('authentication_in_progress');
     if (provider === 'apple' && Platform.OS === 'ios' && await AppleAuthentication.isAvailableAsync()) {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL]
-      });
-      if (!credential.identityToken) throw new Error('Apple did not return an identity token');
-      const { data, error } = await supabase!.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
-      if (error || !data.user) throw error ?? new Error('Missing user after Apple sign-in');
-      return toUser(data.user);
+      const revision = this.authRevision;
+      const pending = (async () => {
+        const nonce = Crypto.randomUUID();
+        const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, nonce);
+        const credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL], nonce: hashedNonce
+        });
+        if (!credential.identityToken) throw new Error('Apple did not return an identity token');
+        if (revision !== this.authRevision) throw new Error('authentication_cancelled');
+        const { data, error } = await supabase!.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken, nonce });
+        if (error || !data.user) throw error ?? new Error('Missing user after Apple sign-in');
+        try {
+          await retainAppleAuthorization(credential.authorizationCode ?? '', data.user.id);
+          if (revision !== this.authRevision) throw new Error('authentication_cancelled');
+        } catch (failure) {
+          await supabase!.auth.signOut({ scope: 'local' });
+          throw failure;
+        }
+        return toUser(data.user);
+      })();
+      this.applePending = pending;
+      try {
+        const user = await pending;
+        this.applePending = null;
+        this.listeners.forEach(listener => listener(user));
+        return user;
+      } catch (failure) {
+        this.applePending = null;
+        this.listeners.forEach(listener => listener(null));
+        throw failure;
+      }
     }
 
     const redirectTo = makeRedirectUri({ scheme: 'rummal', path: 'auth/callback' });
@@ -61,22 +110,24 @@ class SupabaseAuthService implements AuthService {
     if (error || !data.url) throw error ?? new Error('OAuth URL was not returned');
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type !== 'success') throw new Error('OAuth sign-in was cancelled');
-    const callback = new URL(result.url);
-    const code = callback.searchParams.get('code');
-    if (!code) throw new Error('OAuth callback did not include a code');
-    const exchanged = await supabase!.auth.exchangeCodeForSession(code);
-    if (exchanged.error || !exchanged.data.user) throw exchanged.error ?? new Error('OAuth session missing');
-    return toUser(exchanged.data.user);
+    return completeOAuthCallback(readOAuthCallbackCode(result.url, redirectTo));
   }
 
   async signOut() {
+    this.authRevision += 1;
+    await suspendNativeDiagnostics();
     const { error } = await supabase!.auth.signOut({ scope: 'global' });
     if (error) throw error;
+    oauthExchange.clear();
   }
 
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    const { data } = supabase!.auth.onAuthStateChange((_event, session) => callback(session?.user ? toUser(session.user) : null));
-    return () => data.subscription.unsubscribe();
+    this.listeners.add(callback);
+    const { data } = supabase!.auth.onAuthStateChange((_event, session) => {
+      // Native Apple custody must finish before navigation observes the authenticated member.
+      if (!this.applePending) callback(session?.user ? toUser(session.user) : null);
+    });
+    return () => { this.listeners.delete(callback); data.subscription.unsubscribe(); };
   }
 }
 

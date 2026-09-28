@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="is">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hittumst</title></head>
+<body style="margin:0;background:#f3f5f2;color:#10201b;font-family:Arial,sans-serif;line-height:1.6">
+  <main style="max-width:520px;margin:32px auto;padding:28px;background:#ffffff;border-radius:16px">
+    <h1 style="font-size:24px">Hittumst</h1>
+    <h2 style="font-size:20px">Staðfestingarkóðinn þinn</h2>
+    <p>Sláðu þennan einnota kóða inn í appinu. Ekki deila honum með öðrum.</p>
+    <p style="font-size:32px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+    <p>Ef þú óskaðir ekki eftir innskráningu geturðu hunsað þennan póst.</p>
+    <hr style="border:0;border-top:1px solid #d7dfd9;margin:24px 0">
+    <section lang="en">
+      <h2 style="font-size:20px">Your verification code</h2>
+      <p>Enter the one-time code above in the app. Do not share it with anyone.</p>
+      <p>If you did not request this sign-in, you can ignore this email.</p>
+    </section>
+    <p><a href="{{ .ConfirmationURL }}" style="color:#285d46">Opna innskráningu / Open sign-in</a></p>
+  </main>
+</body>
+</html>

@@ -1,23 +1,31 @@
+import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ChoiceChip, EmptyState, IconButton, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
+import { ChatBackdrop, chatBubbleColors } from '@/components/ChatAppearance';
+import { useAppearance } from '@/providers/AppearanceProvider';
 import { api } from '@/services';
 import type { AlbumShare, ChatMessage } from '@/types/domain';
 import { mergeMessages, validMessageBody } from '@/utils/chatDelivery';
+import { loadChatCatchup } from '@/utils/chatSync';
 
 export default function ChatScreen() {
   const { id, name, profileId } = useLocalSearchParams<{ id: string; name?: string; profileId?: string }>();
   const router = useRouter();
   const { t, theme, user, locationAllowed, locale } = useApp();
+  const { appearance } = useAppearance();
+  const bubbles = chatBubbleColors(theme, appearance);
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const confirmedMessages = useRef<ChatMessage[]>([]);
+  confirmedMessages.current = messages.filter(message => message.status === 'sent');
   const [draft, setDraft] = useState('');
   const [shares, setShares] = useState<AlbumShare[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,18 +57,40 @@ export default function ChatScreen() {
       const latest = items.filter(item => item.status === 'sent').at(-1);
       if (latest && focused.current && AppState.currentState === 'active') void api.markConversationRead(id, latest.createdAt).catch(() => undefined);
     };
-    void api.listMessages(id).then(page => {
+    let refreshing = false;
+    let refreshAgain = false;
+    const refresh = async () => {
       if (!active || context !== scope.current) return;
-      setMessages(current => mergeMessages(current, page.items)); setNextCursor(page.nextCursor); markRead(page.items);
-    }).catch(() => { if (active && context === scope.current) setError('load'); })
-      .finally(() => { if (active && context === scope.current) setLoading(false); });
-    void api.listAlbumShares().then(items => { if (active && context === scope.current) setShares(items); }).catch(() => undefined);
+      if (refreshing) { refreshAgain = true; return; }
+      refreshing = true;
+      const anchor = confirmedMessages.current.at(-1);
+      try {
+        const page = await loadChatCatchup(cursor => api.listMessages(id, cursor), anchor);
+        if (!active || context !== scope.current) return;
+        setMessages(current => mergeMessages(current, page.items));
+        setNextCursor(current => anchor ? current : page.nextCursor);
+        setError(current => current === 'load' ? null : current); markRead(page.items);
+        const albums = await api.listAlbumShares();
+        if (active && context === scope.current) setShares(albums);
+      } catch (failure) {
+        if (active && context === scope.current) {
+          setError('load');
+          if ((failure as { code?: string }).code === '42501') { setMessages([]); setShares([]); }
+        }
+      } finally {
+        refreshing = false;
+        if (active && context === scope.current) setLoading(false);
+        if (refreshAgain && active) { refreshAgain = false; void refresh(); }
+      }
+    };
+    void refresh();
     const unsubscribe = api.subscribeMessages(id, message => {
       if (!active || context !== scope.current) return;
       setMessages(items => mergeMessages(items, [message])); markRead([message]);
-    }, () => { if (active && context === scope.current) setReload(value => value + 1); });
-    const appState = AppState.addEventListener('change', state => { if (state === 'active') setReload(value => value + 1); });
-    return () => { active = false; unsubscribe(); appState.remove(); };
+    }, () => { void refresh(); });
+    const appState = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
+    const timer = setInterval(() => { if (focused.current && AppState.currentState === 'active') void refresh(); }, 8000);
+    return () => { active = false; unsubscribe(); appState.remove(); clearInterval(timer); };
   }, [id, locationAllowed, user, reload]);
 
   const loadOlder = async () => {
@@ -128,6 +158,7 @@ export default function ChatScreen() {
   return <Screen scroll={false} back title={name ?? t('chats.title')}
     right={profileId ? <IconButton icon="shield-checkmark-outline" label={t('chat.safetyOptions')} onPress={() => router.push(`/report/${profileId}?name=${encodeURIComponent(name ?? '')}&conversationId=${id}`)} /> : undefined}>
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+      <ChatBackdrop />
       <View style={styles.safety}><Ionicons name="shield-checkmark-outline" size={15} color={theme.colors.accent} /><Text style={[styles.safetyText, { color: theme.colors.textMuted }]}>{t('chat.safety')}</Text></View>
       {error && <View accessibilityRole="alert" style={styles.error}>
         <Text style={{ color: theme.colors.danger }}>{t(error === 'load' ? 'chat.loadingError' : error === 'album' ? 'chat.albumError' : 'chat.sendFailed')}</Text>
@@ -155,9 +186,11 @@ export default function ChatScreen() {
             {share?.isIncoming && share.status==='accepted' && <Button label={t('albums.open')} onPress={()=>router.push(`/album-share/${share.id}?ownerId=${share.ownerId}`)} />}
           </View></View>;
           return <View style={[styles.row,mine&&styles.mine]}><View style={styles.message}>
-            <View style={[styles.bubble,{backgroundColor:mine?theme.colors.accent:theme.colors.surfaceRaised}]}>
+            <View style={[styles.bubble,{backgroundColor:mine?bubbles.sent:bubbles.received}]}>
               {item.imageUrl&&<Image source={item.imageUrl} recyclingKey={item.id} cachePolicy="memory" accessibilityLabel={t('chat.image')} style={styles.messageImage} />}
-              {item.body&&<Text style={{color:mine?theme.colors.textOnAccent:theme.colors.text,fontSize:16,lineHeight:23}}>{item.body}</Text>}
+              {item.mediaStatus === 'pending' && <Text accessibilityLiveRegion="polite" style={{ color: mine ? bubbles.sentText : theme.colors.text }}>{locale === 'is' ? 'Mynd í öryggisyfirferð…' : 'Image awaiting safety review…'}</Text>}
+              {item.mediaStatus === 'rejected' && <Text accessibilityRole="alert" style={{ color: mine ? bubbles.sentText : theme.colors.text }}>{locale === 'is' ? 'Myndin var ekki birt.' : 'This image was not published.'}</Text>}
+              {item.body&&<Text style={{color:mine?bubbles.sentText:theme.colors.text,fontSize:16,lineHeight:23}}>{item.body}</Text>}
             </View>
             <Text accessibilityLiveRegion="polite" style={[styles.timestamp,{color:theme.colors.textMuted}]}>
               {new Date(item.createdAt).toLocaleTimeString(locale==='is'?'is-IS':'en-GB',{hour:'2-digit',minute:'2-digit'})}{mine?` · ${t(item.status==='sending'?'chat.sending':item.status==='failed'?'chat.sendFailed':'chat.sent')}`:''}
@@ -165,7 +198,7 @@ export default function ChatScreen() {
             {mine&&item.status==='failed'&&<Button variant="secondary" disabled={sending} label={t('chat.retrySend')} onPress={()=>void send(item)} />}
           </View></View>;
         }} />
-      {draft.trim()&&!validMessageBody(draft)&&<Text accessibilityRole="alert" style={[styles.error,{color:theme.colors.danger}]}>{t('chat.tooLong')}</Text>}
+      {!!draft.trim()&&!validMessageBody(draft)&&<Text accessibilityRole="alert" style={[styles.error,{color:theme.colors.danger}]}>{t('chat.tooLong')}</Text>}
       <View style={[styles.composer,{backgroundColor:theme.colors.surface,borderTopColor:theme.colors.border,paddingBottom:Math.max(insets.bottom,10)}]}>
         {profileId&&<Pressable accessibilityRole="button" accessibilityLabel={t('chat.shareAlbum')} style={styles.composerIcon} onPress={()=>router.push(`/albums/share?profileId=${profileId}&name=${encodeURIComponent(name??'')}`)}><Ionicons name="lock-closed-outline" size={21} color={theme.colors.accent} /></Pressable>}
         <Pressable accessibilityRole="button" disabled={sending} accessibilityState={{disabled:sending}} accessibilityLabel={t('chat.image')} style={styles.composerIcon} onPress={()=>void sendImage()}><Ionicons name="image-outline" size={22} color={theme.colors.accent} /></Pressable>

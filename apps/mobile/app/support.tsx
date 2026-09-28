@@ -1,6 +1,7 @@
+import { Text } from '@/components/Typography';
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Screen, TrustBanner, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { runtimeEnv } from '@/services';

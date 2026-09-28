@@ -1,8 +1,8 @@
-/** Release scope shared by native, web and the moderation console. */
+/** Agreed launch scope. Server capability gates separately require connected-service verification. */
 export const launchScope = Object.freeze({
   hittingar: true,
-  permanentGroups: false,
-  voice: false,
+  permanentGroups: true,
+  voice: true,
   personRatings: false,
   explicitEvents: false,
   explicitMedia: false,

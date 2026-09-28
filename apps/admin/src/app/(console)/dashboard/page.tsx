@@ -21,7 +21,7 @@ export default async function DashboardPage() {
     <main className="page-shell">
       <PageHeader
         eyebrow="Safety overview"
-        title="Good day, Sólveig"
+        title="Moderation overview"
         description="Here is what needs attention across the Hittumst community."
         actions={<Link href="/reports" className="button button-secondary">Open report queue <Icons.ChevronRight aria-hidden="true" /></Link>}
       />
@@ -29,7 +29,7 @@ export default async function DashboardPage() {
       <section className="metric-grid" aria-label="Moderation metrics">
         <MetricCard label="Open reports" value={data.stats.openReports} note="Across all categories" icon={Icons.MessageSquareWarning} />
         <MetricCard label="Priority" value={data.stats.urgentReports} note="Critical or urgent" icon={Icons.ShieldAlert} tone="warning" />
-        <MetricCard label="Photos waiting" value={data.stats.pendingPhotos} note="Oldest is 43 min" icon={Icons.Camera} />
+        <MetricCard label="Photos waiting" value={data.stats.pendingPhotos} note="Awaiting human review" icon={Icons.Camera} />
         <MetricCard label="Actions today" value={data.stats.actionsToday} note="Fully audited" icon={Icons.Activity} tone="positive" />
       </section>
 

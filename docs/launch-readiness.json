@@ -1,31 +1,58 @@
 {
   "backend": {
     "status": "blocked",
-    "reason": "Live project has 7 public tables; albums, meetups and groups are absent. Migration history is empty. Rehearse and reconcile schema before deployment."
+    "reason": "All 43 source migrations are installed in isolated hosted staging with matching version history; all 97 application tables have RLS and all storage buckets are private. The clean local database suite passed 1,108 assertions on 27 September 2026. Hosted Auth health and anonymous-access rejection were checked. Web/worker deployment, provider configuration, authenticated hosted workflows, recovery and reconciliation of the preserved original hosted baseline remain required; see google-play-launch.md."
   },
   "privacy": {
     "status": "pending",
-    "reason": "Legal operator, DPIA, consent/retention review, public policies and verified deletion/export needed."
+    "reason": "Bilingual policy drafts, member export/deletion portal and minimal diagnostics are implemented. Native diagnostic transports are separately gated off; iOS compilation and signed-device cache/restart/upload interception remain unverified. Operator identity, approved retention/DPIA/processor terms, public domain and hosted privacy verification remain required."
   },
   "moderation": {
     "status": "pending",
-    "reason": "Named safety contact, child-safety standards, staffed queue and escalation drills needed."
+    "reason": "Moderation, appeals, audit and queue workflows exist locally. The owner has not selected safety/support contacts or a backup moderator; provider checks, staffed coverage and escalation drills remain unverified."
   },
   "deviceTesting": {
     "status": "pending",
-    "reason": "Physical iOS/Android, auth, reconnect, large text and assistive technology tests needed."
+    "reason": "A development-signed standalone Android demo APK is built and its signature, app identity, bundled code and native alignment are verified. This is separate from a connected release candidate. Physical iPhone, Android and supported iPad tests of authentication, media, calls, purchases, notifications, accessibility and recovery remain unverified."
   },
   "storeMetadata": {
     "status": "pending",
-    "reason": "Native icons are configured; device appearance, splash/store assets, support/privacy/deletion URLs, content rating and reviewer access remain unverified."
+    "reason": "Brand icons, localized Play feature graphics, descriptions, privacy worksheet and reviewer instructions are prepared. Actual signed-device screenshots, public policy/contact URLs, age declarations and geographically usable review accounts remain required."
   },
   "recovery": {
     "status": "pending",
-    "reason": "Monitoring, backup restoration, incident response and rollback rehearsal needed."
+    "reason": "Encrypted media backup/restore, independent deletion tombstones, account quarantine and rollback tooling are implemented. Hosted PITR plus Storage recovery, signing-key rotation, financial reconciliation, alerts and the eight-hour RTO/24-hour general-data RPO drill remain unverified."
   },
-  "hittingar": { "status": "pending", "reason": "Meetup and room database tests pass locally; maps, protected online access, recurrence, notifications, concurrency and physical-device evidence remain." },
-  "capacity": { "status": "pending", "reason": "1,000 synthetic accounts, 200 occurrences and the 100-user 30-minute staging workload have not been run." },
-  "media": { "status": "blocked", "reason": "Quarantine, durable normalization, full-video moderation, AWS opt-out verification and appeals remain incomplete." },
-  "accountLifecycle": { "status": "pending", "reason": "Deletion job and old-token restrictions pass local database tests; deployed worker cleanup, complete export and storage retry rehearsal remain." },
-  "operations": { "status": "blocked", "reason": "Publisher, domain, monitored support, moderation coverage, retention approval, provider budgets and verified recovery are required." }
+  "hittingar": {
+    "status": "pending",
+    "reason": "Meetup, recurring occurrence, room and protected-location workflows have local tests. Connected maps, permissions, private notifications, concurrency and physical-device verification remain required."
+  },
+  "capacity": {
+    "status": "pending",
+    "reason": "The guarded staging harness now includes writes, uploads, messaging and Realtime. The qualifying run of 1,000 synthetic accounts, 200 events and 100 concurrent users for 30 minutes has not been executed."
+  },
+  "media": {
+    "status": "blocked",
+    "reason": "Quarantine, normalization, appeals, renewable album sessions and a continuous bounded FFmpeg worker are implemented. Actual AWS image/full-video processing, privacy configuration, delivered alerts and hosted worker throughput remain unverified."
+  },
+  "accountLifecycle": {
+    "status": "pending",
+    "reason": "Hosted export/deletion, Apple encrypted token custody/revocation, RevenueCat erasure, live-session denial and deletion-aware recovery are implemented with local checks. Connected-provider erasure, physical file sharing, approved retention and full hosted recovery remain required."
+  },
+  "operations": {
+    "status": "blocked",
+    "reason": "Render staging/production configuration, a separate continuous worker, readiness/backlog checks, minimal EU diagnostics and an operator handbook are prepared. Domain, public operator name, monitored support/safety addresses and backup moderator are not chosen. Provisioning, alert delivery and operational drills remain required."
+  },
+  "subscriptions": {
+    "status": "blocked",
+    "reason": "Native store purchase/restore and server-authoritative RevenueCat reconciliation cover renewal, refund, transfer, alias and billing issues. Production sales are closed until accepted providers fund promised cash benefits. Genuine store/RevenueCat sandbox receipts and device lifecycle verification remain required."
+  },
+  "commerce": {
+    "status": "blocked",
+    "reason": "Sandbox wallet, pools, withdrawals, reserves and supplier contracts exist. Written acceptance of the complete funds flow must precede provider-specific production collection, identity, payout, voucher, dispute and reconciliation adapters. No production balances or provider approval are claimed."
+  },
+  "voice": {
+    "reason": "LiveKit group audio, member-authorized grants, muted join, leave, moderation/removal, reporting, short leases, reconnect and interruption handling are implemented. Separate EU LiveKit projects and actual signed-device audio/revocation tests remain required; recording and transcription stay disabled.",
+    "status": "blocked"
+  }
 }

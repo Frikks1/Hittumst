@@ -1,3 +1,6 @@
+import { signCommunityCovers } from './communityMedia';
+import { queueMediaUpload } from './mediaUpload';
+import { meetupMediaSchema, meetupReviewSchema, meetupReviewInputSchema, type MeetupMedia, type MeetupReview } from '@rummal/shared';
 import * as Crypto from 'expo-crypto';
 import { decodeMessageCursor } from '@/utils/messagePagination';
 import {
@@ -119,6 +122,9 @@ function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unkno
       ? normalizeMeetupRegion(generalArea.region)
       : null;
   return {
+    eventProfile: row.eventProfile,
+    cover: row.cover, follows: row.follows,
+    diagnosisRestricted: row.diagnosisRestricted, requiresDiagnosisVerification: row.requiresDiagnosisVerification,
     id: row.id,
     title: row.title,
     category: row.category,
@@ -143,6 +149,8 @@ function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unkno
     locationVisibility: row.locationVisibility,
     releasePolicy: row.releasePolicy,
     participantCount: row.participantCount,
+    reservedPlaces: row.reservedPlaces ?? 0,
+    ...(row.pool !== undefined ? { pool: row.pool } : {}),
     capacity: row.capacity ?? null,
     isFull: row.isFull,
     isExplicit: row.isExplicit,
@@ -171,21 +179,27 @@ async function meetupAvatarUrls(values: unknown[]) {
   return signedProfileUrls(paths);
 }
 
-async function parseMeetupSummaries(value: unknown): Promise<MeetupSummary[]> {
+export async function parseMeetupSummaries(value: unknown): Promise<MeetupSummary[]> {
   const rows = asArray(value);
   const urls = await meetupAvatarUrls(rows);
-  return rows.map((row) => meetupSummarySchema.parse(normalizeMeetupRecord(row, urls)));
+  const parsed = rows.map((row) => meetupSummarySchema.parse(normalizeMeetupRecord(row, urls)));
+  const covers = await signCommunityCovers(parsed.map(row => row.cover));
+  return parsed.map((row, index) => ({ ...row, cover: covers[index] ?? null }));
 }
 
 async function parseMeetupDetails(value: unknown): Promise<MeetupDetail[]> {
   const rows = asArray(value);
   const urls = await meetupAvatarUrls(rows);
-  return rows.map((row) => meetupDetailSchema.parse(normalizeMeetupRecord(row, urls)));
+  const parsed = rows.map((row) => meetupDetailSchema.parse(normalizeMeetupRecord(row, urls)));
+  const covers = await signCommunityCovers(parsed.map(row => row.cover));
+  return parsed.map((row, index) => ({ ...row, cover: covers[index] ?? null }));
 }
 
 async function parseMeetupDetail(value: unknown): Promise<MeetupDetail> {
   const urls = await meetupAvatarUrls([value]);
-  return meetupDetailSchema.parse(normalizeMeetupRecord(value, urls));
+  const parsed = meetupDetailSchema.parse(normalizeMeetupRecord(value, urls));
+  const [cover] = await signCommunityCovers([parsed.cover]);
+  return { ...parsed, cover: cover ?? null };
 }
 
 async function parseMeetupRequests(value: unknown): Promise<MeetupRequest[]> {
@@ -310,6 +324,7 @@ export class LiveMeetupService {
         accessMode: parsed.accessMode,
         region: parsed.region,
         bounds: parsed.bounds,
+        radiusKm: parsed.radiusKm, genders: parsed.genders, social: parsed.social, diagnosisIds: parsed.diagnosisIds,
         includeExplicit: false,
       }),
     });
@@ -322,6 +337,40 @@ export class LiveMeetupService {
     if (error) throw error;
     return parseMeetupDetail(data);
   }
+
+
+  private async profileAction(id: string, action: string, input: unknown = {}) {
+    const { data, error } = await supabase!.rpc('meetup_profile_action', { meetup_id: id, action, input: toJson(input) });
+    if (error) throw error;
+    return data;
+  }
+  async getGender(id: string): Promise<string | null> { const data = await this.profileAction(id, 'gender'); return typeof data === 'string' ? data : null; }
+  async setGender(id: string, gender: string | null) { await this.profileAction(id, 'set_gender', { gender }); }
+  async listMedia(id: string): Promise<MeetupMedia[]> {
+    const rows = asArray(await this.profileAction(id, 'media')).map(asRecord).filter((x): x is JsonRecord => x !== null);
+    if (!rows.length) return [];
+    const paths = rows.map(row => String(row.path));
+    const { data, error } = await supabase!.storage.from('meetup-media').createSignedUrls(paths, 300);
+    if (error) throw error;
+    return rows.flatMap((row, i) => data[i]?.signedUrl ? [meetupMediaSchema.parse({ id: row.id, kind: row.kind, position: row.position, url: data[i].signedUrl })] : []);
+  }
+  async uploadMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string) {
+    return queueMediaUpload('meetup', id, uri, kind === 'photo' ? 'image' : 'video', mimeType);
+  }
+  async removeMedia(id: string, mediaId: string) {
+    const path = await this.profileAction(id, 'remove_media', { id: mediaId });
+    if (typeof path === 'string') {
+      const { error } = await supabase!.storage.from('meetup-media').remove([path]);
+      if (error) throw error;
+    }
+  }
+  async listReviews(id: string): Promise<MeetupReview[]> {
+    return asArray(await this.profileAction(id, 'reviews')).map(value => meetupReviewSchema.parse(value));
+  }
+  async saveReview(id: string, rating: number, body: string) { await this.profileAction(id, 'review', meetupReviewInputSchema.parse({ rating, body })); }
+  async deleteReview(id: string) { await this.profileAction(id, 'delete_review'); }
+  async listInvitations(id: string): Promise<string[]> { return asArray(await this.profileAction(id, 'invitations')).filter((x): x is string => typeof x === 'string'); }
+  async setInvitation(id: string, profileId: string, invited: boolean) { await this.profileAction(id, invited ? 'invite' : 'uninvite', { profileId }); }
 
   async listMine() {
     const { data, error } = await supabase!.rpc('list_my_meetups');
@@ -347,8 +396,6 @@ export class LiveMeetupService {
     const { data, error } = await supabase!.rpc('create_meetup_draft', { input: toJson(parsed) });
     if (error) throw error;
     if (typeof data !== 'string') throw new Error('Invalid create meetup response');
-    const expansion = await supabase!.rpc('set_meetup_expansion', { meetup_id: data, input: toJson(parsed) });
-    if (expansion.error) throw expansion.error;
     return data;
   }
 
@@ -360,8 +407,6 @@ export class LiveMeetupService {
       input: toJson(parsed),
     });
     if (error) throw error;
-    const expansion = await supabase!.rpc('set_meetup_expansion', { meetup_id: id, input: toJson(parsed) });
-    if (expansion.error) throw expansion.error;
     return this.get(id);
   }
 

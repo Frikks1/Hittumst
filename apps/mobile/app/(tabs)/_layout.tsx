@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { hittingarFeature } from '@/features/hittingar/config';
 import { useApp } from '@/providers/AppProvider';
+import { useAppearance } from '@/providers/AppearanceProvider';
 
 const icon = (name: keyof typeof Ionicons.glyphMap) =>
   ({ color, size, focused }: { color: unknown; size: number; focused: boolean }) => (
@@ -13,10 +14,13 @@ const icon = (name: keyof typeof Ionicons.glyphMap) =>
 
 export default function TabLayout() {
   const { t, theme } = useApp();
+  const { reducedMotion, appearance } = useAppearance();
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        animation: reducedMotion ? 'none' : 'fade',
+        transitionSpec: { animation: 'timing', config: { duration: 150 } },
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: {
@@ -27,7 +31,7 @@ export default function TabLayout() {
           paddingBottom: 11,
         },
         tabBarItemStyle: { borderRadius: 18 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '900', letterSpacing: -0.1 },
+        tabBarLabelStyle: { fontSize: 12 * appearance.textScale, fontWeight: '900', letterSpacing: -0.1 },
       } as never}
     >
       <Tabs.Screen name="discover" options={{ title: t('tabs.discover'), tabBarIcon: icon('grid-outline') }} />

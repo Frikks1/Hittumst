@@ -1,5 +1,7 @@
 # Database reconciliation evidence — 8 September 2026
 
+Later tier-delivery verification replayed **17 migrations** and passed **501 database assertions**, including a fresh synthetic upgrade under these stricter grants. See [tiers-verification-2026-09-08.md](tiers-verification-2026-09-08.md). The earlier comparison and CI counts below remain historical evidence; no hosted migration was applied by the tier delivery.
+
 The restored hosted project remains unchanged. Its migration history is empty, with seven application tables in public and four in private. A read-only catalog query compared its structure with a disposable local installation of `20260831150105_initial_rummal_schema.sql`. No hosted member data was copied.
 
 The inventory covers relation and column definitions, constraints, indexes, functions and grants, row-security policies, application triggers (including the Auth trigger), schema/default privileges, publication membership and media bucket configuration. The hosted catalog contained 305 objects, compared with 304 locally. After normalizing CRLF/LF function-source line endings, 277 objects match. Twenty-eight functions differed only in line endings.

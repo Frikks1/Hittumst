@@ -1,23 +1,27 @@
 begin;
+-- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
+insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
 set local search_path=extensions,public,private;
 select no_plan();
 select ok(not has_function_privilege('authenticated','public.claim_account_deletions(uuid,integer)','execute'),'members cannot claim deletion jobs');
 select ok(not has_table_privilege('authenticated','private.account_deletion_jobs','select'),'cleanup manifests stay private');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
+select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);
 select set_config('request.jwt.claim.role','authenticated',true);
 select ok(private.account_is_active(),'member starts active');
 select lives_ok($$select public.delete_my_account()$$,'account deletion is durably requested');
 select ok(not private.account_is_active(),'old access token loses account access immediately');
 select is((select count(*) from public.profiles),0::bigint,'old token cannot read even its own profile');
 select throws_ok($$select public.check_account_access()$$,'42501','account_unavailable','Data API gate blocks old tokens before privileged RPCs');
-select lives_ok($$select public.delete_my_account()$$, 'request retry is idempotent');
+select throws_ok($$select public.delete_my_account()$$,'42501','active_session_required','deleted account cannot reuse the revoked JWT; the existing job remains unique');
 reset role;
 select is((select count(*) from private.account_deletion_jobs where account_id='10000000-0000-0000-0000-000000000003'),1::bigint,'only one cleanup job exists');
 select is((select count(*) from auth.users where id='10000000-0000-0000-0000-000000000003'),1::bigint,'Auth record remains until media cleanup');
 select is((select is_profile_visible from public.profiles where id='10000000-0000-0000-0000-000000000003'),false,'pending account is hidden from discovery');
 set local role service_role;
 select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claims','{}',true);
 select set_config('request.jwt.claim.role','service_role',true);
 select set_config('test.delete_token',gen_random_uuid()::text,true);
 select set_config('test.delete_job',public.claim_account_deletions(current_setting('test.delete_token')::uuid)::text,true);

@@ -1,10 +1,14 @@
+import { EventCover } from './EventCover';
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { formatMeetupReykjavikDate } from '@rummal/shared';
 import { Image } from 'expo-image';
-import type { ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { useAppearance } from '@/providers/AppearanceProvider';
 import { Button, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
+import { PoolSummary } from './PoolSummary';
 import { categoryKey, generalAreaLabel, participationKey, primaryHittingurAction, type HittingurListModel } from './model';
 
 export function formatHittingurDate(value: string, locale: 'is' | 'en'): string {
@@ -34,26 +38,32 @@ export function StatusPill({ icon, label, tone = 'neutral' }: {
   );
 }
 
-export function HittingurCard({ item, onPress, primary = false }: {
+export function HittingurCard({ item, onPress, primary = false, paidSponsor = false, onSponsor }: {
   item: HittingurListModel;
   onPress: () => void;
   primary?: boolean;
+  paidSponsor?: boolean;
+  onSponsor?: () => void;
 }) {
   const { locale, t, theme } = useApp();
+  const { appearance } = useAppearance();
   const participation = participationKey(item.viewerState.participationStatus);
   const area = generalAreaLabel(item, locale);
   return (
+    <View style={{ gap: 6 }}>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${item.title}, ${area}, ${formatHittingurDate(item.startsAt, locale)}`}
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
+        appearance.density === 'compact' && { padding: 12, gap: 8 },
         primary && styles.cardPrimary,
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
         pressed && styles.pressed,
       ]}
     >
+      <EventCover cover={item.cover} title={item.title} compact={!primary} />
       <View style={styles.cardTop}>
         <View style={styles.cardCopy}>
           <Text numberOfLines={2} style={[primary ? textStyles.heading : styles.cardTitle, { color: theme.colors.text }]}>{item.title}</Text>
@@ -67,6 +77,8 @@ export function HittingurCard({ item, onPress, primary = false }: {
           </View>
         )}
       </View>
+      {item.diagnosisRestricted&&<Text style={{color:theme.colors.textMuted}}>{t('diagnosis.required')}</Text>}
+      <PoolSummary pool={item.pool} compact />
       <View style={styles.metaRow}>
         <Ionicons name="location-outline" size={17} color={theme.colors.textMuted} />
         <Text numberOfLines={1} style={[styles.meta, { color: theme.colors.textMuted }]}>{area}</Text>
@@ -74,11 +86,13 @@ export function HittingurCard({ item, onPress, primary = false }: {
       </View>
       <View style={styles.pills}>
         <StatusPill label={t(categoryKey(item.category))} />
-        <StatusPill icon={item.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={t(`hittingar.access.${item.accessMode}`)} tone="accent" />
+        {item.follows && <StatusPill icon="heart-outline" label={`${item.follows.event.count} ${locale === 'is' ? 'fylgjendur' : 'followers'}`} />}
+        <StatusPill icon={item.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={item.eventProfile ? t(`event.${item.eventProfile.joinMode}`) : t(`hittingar.access.${item.accessMode}`)} tone="accent" />
         {item.locationVisibility === 'protected' && <StatusPill icon="shield-checkmark-outline" label={t('hittingar.location.protected')} tone="warning" />}
         {item.isExplicit && <StatusPill label="18+" tone="danger" />}
         {participation && <StatusPill label={t(participation)} tone="success" />}
       </View>
+      {item.capacity !== null && <Text style={{ color: theme.colors.textMuted }}>{Math.max(0, item.capacity - item.participantCount - (item.reservedPlaces ?? 0))} {locale === 'is' ? 'laus pláss' : 'places available'}</Text>}
       <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
         <Text style={[styles.host, { color: theme.colors.textMuted }]}>{t('hittingar.hostedBy', { name: item.host.displayName })}</Text>
         <Text style={[styles.count, { color: theme.colors.text }]}>
@@ -88,6 +102,8 @@ export function HittingurCard({ item, onPress, primary = false }: {
         </Text>
       </View>
     </Pressable>
+    {onSponsor && item.pool?.status === 'accepting' && item.status === 'published' && <Button variant="secondary" label={paidSponsor ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor meetup') : (locale === 'is' ? 'Gerast áskrifandi og styrkja' : 'Upgrade to sponsor')} onPress={onSponsor} />}
+    </View>
   );
 }
 
@@ -96,9 +112,19 @@ export function HittingurPrimaryButton({ item, busy, onAction }: {
   busy?: boolean;
   onAction: (kind: ReturnType<typeof primaryHittingurAction>['kind']) => void;
 }) {
-  const { t } = useApp();
+  const { t, theme } = useApp();
+  const { reducedMotion } = useAppearance();
   const action = primaryHittingurAction(item);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const confirmed = action.kind === 'leave';
+  useEffect(() => {
+    if (!confirmed || reducedMotion) { opacity.setValue(1); return; }
+    opacity.setValue(0);
+    Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+  }, [confirmed, reducedMotion, opacity]);
   return (
+    <View style={{ gap: 8 }}>
+    {confirmed && <Animated.View accessibilityLiveRegion="polite" style={{ opacity, padding: 14, borderRadius: 16, backgroundColor: theme.colors.accentSoft, flexDirection: 'row', gap: 10, alignItems: 'center' }}><Ionicons name="checkmark-circle" size={24} color={theme.colors.success} /><View style={{ flex: 1 }}><Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 16 }}>{t('hittingar.confirmedTitle')}</Text><Text style={{ color: theme.colors.textMuted }}>{t('hittingar.confirmedHint')}</Text></View></Animated.View>}
     <Button
       label={t(action.labelKey)}
       icon={action.kind === 'join' ? 'add-circle-outline' : action.kind === 'request' ? 'paper-plane-outline' : action.kind === 'manage' ? 'settings-outline' : undefined}
@@ -107,6 +133,7 @@ export function HittingurPrimaryButton({ item, busy, onAction }: {
       loading={busy}
       onPress={() => onAction(action.kind)}
     />
+    </View>
   );
 }
 
@@ -175,6 +202,7 @@ export function MapUnavailable({ items, onSelect, providerMissing = false }: { i
             <View style={styles.cardCopy}>
               <Text numberOfLines={1} style={[styles.fallbackTitle, { color: theme.colors.text }]}>{item.title}</Text>
               <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{generalAreaLabel(item, locale)}</Text>
+              <PoolSummary pool={item.pool} compact />
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
@@ -199,7 +227,7 @@ const styles = StyleSheet.create({
   approximate: { fontSize: 11, fontWeight: '800' },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   pill: { minHeight: 28, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9 },
-  pillText: { fontSize: 11, fontWeight: '800' },
+  pillText: { fontSize: 12, lineHeight: 17, fontWeight: '800', flexShrink: 1 },
   cardFooter: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 11, flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   host: { flex: 1, fontSize: 12 },
   count: { fontSize: 12, fontWeight: '800' },

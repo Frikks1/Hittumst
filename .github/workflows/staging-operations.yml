@@ -1,0 +1,44 @@
+name: Staging readiness observation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hittumst-staging-operations
+  cancel-in-progress: false
+
+jobs:
+  workers:
+    # Enable only after configuring an isolated project and protected staging environment.
+    if: vars.HITTUMST_STAGING_OPERATIONS_ENABLED == 'true'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Observe readiness and record redacted status
+        run: node scripts/staging-operations.mjs --health-only
+        env:
+          HITTUMST_STAGING_OPERATIONS_ENABLED: ${{ vars.HITTUMST_STAGING_OPERATIONS_ENABLED }}
+          STAGING_SYNTHETIC_DATA_CONFIRMED: ${{ vars.STAGING_SYNTHETIC_DATA_CONFIRMED }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_ADMIN_URL: ${{ vars.STAGING_ADMIN_URL }}
+          STAGING_APPROVED_ADMIN_ORIGIN: ${{ vars.STAGING_APPROVED_ADMIN_ORIGIN }}
+          PRODUCTION_ADMIN_ORIGIN: ${{ vars.PRODUCTION_ADMIN_ORIGIN }}
+          STAGING_CRON_SECRET: ${{ secrets.STAGING_CRON_SECRET }}
+          STAGING_PUSH_WORKER_SECRET: ${{ secrets.STAGING_PUSH_WORKER_SECRET }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-worker-metrics
+          path: artifacts/operations/staging-jobs.json
+          if-no-files-found: ignore
+          retention-days: 14

@@ -8,7 +8,8 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "development",
         "EXPO_PUBLIC_DEV_BYPASS_AUTH": "true",
-        "EXPO_PUBLIC_HITTINGAR_ENABLED": "true"
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "true",
+        "EXPO_NO_DOTENV": "1"
       }
     },
     "staging": {
@@ -20,8 +21,16 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "staging",
         "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
-        "EXPO_PUBLIC_HITTINGAR_ENABLED": "false",
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "true",
         "EXPO_NO_DOTENV": "1"
+      }
+    },
+    "play-testing": {
+      "extends": "staging",
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
       }
     },
     "production": {
@@ -34,8 +43,16 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
-        "EXPO_PUBLIC_HITTINGAR_ENABLED": "false",
+        "EXPO_PUBLIC_HITTINGAR_ENABLED": "true",
         "EXPO_NO_DOTENV": "1"
+      }
+    }
+  },
+  "submit": {
+    "play-testing": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   },

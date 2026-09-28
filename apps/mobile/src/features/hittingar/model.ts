@@ -1,3 +1,4 @@
+import { defaultMeetupEventProfile, meetupEventProfileSchema, type MeetupEventProfile } from '@rummal/shared';
 import type { TranslationKey } from '@/i18n/translations';
 import {
   meetupTags,
@@ -41,6 +42,8 @@ export const HITTINGUR_GENERAL_AREAS = [
 ] as const satisfies readonly MeetupGeneralAreaId[];
 
 export type CreateHittingurForm = {
+  eventProfile: MeetupEventProfile;
+  applicationQuestions: string[];
   title: string;
   description: string;
   category: MeetupCategory;
@@ -79,6 +82,8 @@ export type CreateHittingurForm = {
 export const ICELAND_BOUNDS = [-25, 63.15, -12.7, 67.2] as const;
 
 export const initialCreateHittingurForm: CreateHittingurForm = {
+  eventProfile: defaultMeetupEventProfile(),
+  applicationQuestions: [],
   title: '',
   description: '',
   category: 'coffee_food',
@@ -102,7 +107,7 @@ export const initialCreateHittingurForm: CreateHittingurForm = {
   releasePolicy: '24_hours_before',
   publicLocationConfirmed: false,
   prohibitedServicesAttested: false,
-  rsvpVisibility: 'inherit',
+  rsvpVisibility: 'private',
   onlineUrl: '',
   onlineAccessCode: '',
   recurring: false,
@@ -187,6 +192,7 @@ export function utcToReykjavikFields(value: string | undefined): { date: string;
 
 export function validateCreateStep(step: number, form: CreateHittingurForm): TranslationKey[] {
   const errors: TranslationKey[] = [];
+  if ((step === 0 || step === 3) && !meetupEventProfileSchema.safeParse(form.eventProfile).success) errors.push('hittingar.create.error.eventProfile');
   if (step === 0) {
     if (form.title.trim().length < 3) errors.push('hittingar.create.error.title');
     if (form.description.trim().length < 10) errors.push('hittingar.create.error.description');

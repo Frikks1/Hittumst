@@ -1,0 +1,24 @@
+begin;
+set local search_path=extensions,public,private;
+select no_plan();
+select ok(not has_function_privilege('anon','public.get_worker_health()','execute'),'anonymous callers cannot inspect queues');
+select ok(not has_function_privilege('authenticated','public.get_worker_health()','execute'),'members cannot inspect queue metrics');
+select ok(not has_function_privilege('authenticated','public.record_worker_heartbeat(text,text,integer)','execute'),'members cannot spoof worker health');
+select ok(not has_table_privilege('service_role','private.worker_heartbeats','select'),'heartbeats are exposed through aggregate service functions only');
+set local role service_role;
+select set_config('request.jwt.claim.role','service_role',true);
+select lives_ok($$select public.record_worker_heartbeat('media','passed',2)$$,'service worker records successful batch');
+select is(public.get_worker_health()->'workers'->'media'->>'state','passed','health reflects last worker result');
+select is((public.get_worker_health()->'workers'->'media'->>'successAgeSeconds')::integer,0,'successful completion updates liveness');
+select lives_ok($$select public.record_worker_heartbeat('media','failed',1)$$,'failed worker result persists');
+select is(public.get_worker_health()->'workers'->'media'->>'state','failed','later failure cannot keep reporting success');
+select throws_ok($$select public.record_worker_heartbeat('member-sensitive-path','passed',1)$$,'P0001','invalid_worker_heartbeat','arbitrary member identifiers cannot be stored in metric keys');
+select throws_ok($$select public.record_worker_heartbeat('media','passed',101)$$,'P0001','invalid_worker_heartbeat','heartbeat counters are bounded');
+select ok(public.get_worker_health()->'queues' ? 'cleanup','cleanup failures have dedicated counters');
+reset role;
+update private.worker_heartbeats set updated_at=now()-interval '5 minutes' where name='media';
+set local role service_role;
+select ok((public.get_worker_health()->'workers'->'media'->>'ageSeconds')::integer>=300,'missed worker cadence is observable');
+select * from finish();
+rollback;
+

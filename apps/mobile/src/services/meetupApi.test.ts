@@ -50,6 +50,7 @@ describe('MockRummalApi Hittingar', () => {
 
   it('creates a safe draft, publishes it, and accepts capacity one', async () => {
     const api = new MockRummalApi();
+    await api.setSandboxTier('flottari_plebbi');
     const startsAt = new Date(Date.now() + 86_400_000).toISOString();
     const input: MeetupDraftInput = {
       title: 'Lítill hittingur',

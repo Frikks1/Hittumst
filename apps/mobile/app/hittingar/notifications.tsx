@@ -1,8 +1,9 @@
+import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, DemoBanner, Screen, textStyles } from '@/components/ui';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Screen, textStyles } from '@/components/ui';
 import { formatHittingurDate } from '@/features/hittingar/components';
 import { useHittingarNotifications } from '@/features/hittingar/notifications';
 import { useApp } from '@/providers/AppProvider';
@@ -13,27 +14,39 @@ const meetupApi = api as RummalApi;
 
 export default function HittingarNotificationsScreen() {
   const router = useRouter();
-  const { locale, t, theme } = useApp();
+  const { locale, t, theme, user } = useApp();
   const [items, setItems] = useState<MeetupNotification[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const revision = useRef(0);
+  const [opening, setOpening] = useState(false);
+  const openingRef = useRef(false);
+  const openRevision = useRef(0);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try { setItems(await meetupApi.listMeetupNotifications(50)); } finally { setLoading(false); }
+    const request = ++revision.current; setLoading(true); setError(false);
+    try { const value = await meetupApi.listMeetupNotifications(50); if (request === revision.current) setItems(value); }
+    catch { if (request === revision.current) setError(true); }
+    finally { if (request === revision.current) setLoading(false); }
   }, []);
   const navigateToMeetup = useCallback((id: string) => router.push(`/hittingar/${id}` as Href), [router]);
   const notifications = useHittingarNotifications({ api: meetupApi, locale, navigateToMeetup, onInboxChanged: load });
-  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => { setItems([]); setOpening(false); openingRef.current = false; void load(); return () => { revision.current++; openRevision.current++; }; }, [load, user?.id]));
 
   const open = async (item: MeetupNotification) => {
-    if (!item.readAt) await meetupApi.markMeetupNotificationRead(item.id);
-    await meetupApi.getMeetup(item.meetupId);
-    navigateToMeetup(item.meetupId);
+    if (openingRef.current) return;
+    const request = revision.current; const action = ++openRevision.current; openingRef.current = true; setOpening(true); setError(false);
+    try {
+      await meetupApi.getMeetup(item.meetupId);
+      if (request !== revision.current) return;
+      if (!item.readAt) await meetupApi.markMeetupNotificationRead(item.id);
+      if (request === revision.current) navigateToMeetup(item.meetupId);
+    } catch { if (request === revision.current) setError(true); }
+    finally { if (action === openRevision.current) { openingRef.current = false; setOpening(false); } }
   };
 
   return (
     <Screen back title={t('hittingar.notifications.title')} scroll={false}>
-      <DemoBanner />
       {notifications.supported && notifications.status !== 'enabled' && (
         <View style={[styles.permission, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={[styles.permissionIcon, { backgroundColor: theme.colors.accentSoft }]}><Ionicons name="notifications-outline" size={24} color={theme.colors.accent} /></View>
@@ -45,14 +58,15 @@ export default function HittingarNotificationsScreen() {
         </View>
       )}
       <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />} contentContainerStyle={styles.list}>
-        {items.length === 0 && !loading ? (
+        {error && <View><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('common.error')}</Text><Button label={t('common.retry')} onPress={() => void load()} /></View>}
+        {items.length === 0 && !loading && !error ? (
           <View style={styles.empty}>
             <Ionicons name="notifications-off-outline" size={42} color={theme.colors.textMuted} />
             <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.notifications.emptyTitle')}</Text>
             <Text style={[textStyles.body, styles.center, { color: theme.colors.textMuted }]}>{t('hittingar.notifications.emptyBody')}</Text>
           </View>
         ) : items.map((item) => (
-          <Pressable key={item.id} accessibilityRole="button" onPress={() => void open(item)} style={({ pressed }) => [styles.item, { backgroundColor: item.readAt ? theme.colors.surface : theme.colors.accentSoft, borderColor: theme.colors.border }, pressed && styles.pressed]}>
+          <Pressable key={item.id} accessibilityRole="button" disabled={opening} accessibilityState={{ disabled: opening }} onPress={() => void open(item)} style={({ pressed }) => [styles.item, { backgroundColor: item.readAt ? theme.colors.surface : theme.colors.accentSoft, borderColor: theme.colors.border }, pressed && styles.pressed]}>
             <View style={[styles.kindIcon, { backgroundColor: theme.colors.surfaceRaised }]}><Ionicons name="calendar-outline" size={20} color={theme.colors.accent} /></View>
             <View style={styles.copy}>
               <Text style={[styles.itemTitle, { color: theme.colors.text }]}>{t(`hittingar.notifications.kind.${item.kind}`)}</Text>

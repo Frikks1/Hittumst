@@ -74,3 +74,19 @@ describe('production failure handling', () => {
     expect(result.bypassAuth).toBe(false);expect(result.isDemo).toBe(false);
   });
 });
+
+
+describe('isolated local integration environment', () => {
+  const local = { EXPO_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321', EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test_key', EXPO_PUBLIC_WEBSITE_URL: 'http://localhost:3001', EXPO_PUBLIC_SUPPORT_EMAIL: 'support@example.test' };
+  it('allows the exact local service origins only in development', () => {
+    const env = readRuntimeEnvironment({ ...local, EXPO_PUBLIC_APP_ENV: 'development' });
+    expect(env.configurationIssue).toBeNull(); expect(env.isDemo).toBe(false); expect(env.websiteUrl).toBe('http://localhost:3001');
+  });
+  it.each(['staging', 'production'])('rejects loopback services in %s', mode => {
+    const env = readRuntimeEnvironment({ ...local, EXPO_PUBLIC_APP_ENV: mode });
+    expect(env.configurationIssue).not.toBeNull(); expect(env.websiteUrl).toBeNull();
+  });
+  it.each(['http://127.0.0.2:54321', 'http://localhost:54322', 'http://localhost.evil.test:54321', 'http://127.0.0.1:54321/other', 'http://user@localhost:54321'])('rejects unexpected local URLs: %s', url => {
+    expect(readRuntimeEnvironment({ ...local, EXPO_PUBLIC_SUPABASE_URL: url }).configurationIssue).not.toBeNull();
+  });
+});

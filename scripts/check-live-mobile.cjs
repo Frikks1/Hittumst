@@ -1,0 +1,84 @@
+const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE);
+const {randomUUID,createHash}=require('node:crypto');
+const {createClient}=require('@supabase/supabase-js');
+const {execFileSync}=require('node:child_process');
+const fs=require('node:fs');
+const pg=require('pg');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');process.chdir(root);
+const linuxRoot=root.replace(/^([A-Za-z]):/,(_,drive)=>`/mnt/${drive.toLowerCase()}`).replaceAll('\\','/');
+const quote=value=>`'${value.replaceAll("'","'\\''")}'`;
+const status=process.platform==='win32'
+  ? execFileSync('wsl.exe',['-d','Ubuntu','-u','root','--','sh','-s'],{input:`cd ${quote(linuxRoot)}\nsupabase status -o json\n`,encoding:'utf8',timeout:45000,windowsHide:true,stdio:['pipe','pipe','pipe']})
+  : execFileSync('supabase',['status','-o','json'],{cwd:root,encoding:'utf8',timeout:45000,stdio:['ignore','pipe','pipe']});
+const config=JSON.parse(status.slice(status.indexOf('{')));
+if(config.API_URL!=='http://127.0.0.1:54321')throw Error('Only disposable local backend is allowed');
+const admin=createClient(config.API_URL,config.SECRET_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+(async()=>{
+const email=`browser-${randomUUID()}@example.test`;
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce',geolocation:{latitude:64.1482,longitude:-21.9511,accuracy:20},permissions:['geolocation']});
+const db=new pg.Client({host:'127.0.0.1',port:54322,user:'postgres',password:'postgres',database:'postgres'});await db.connect();
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const results=[];const startedAt=new Date().toISOString();let completed=false;
+const pass=name=>{results.push({name,status:'passed'});console.log('PASS '+name);};
+try{
+await page.goto('http://127.0.0.1:8811/auth/email',{waitUntil:'networkidle',timeout:60000});
+await page.getByLabel('Netfang',{exact:true}).fill(email);await page.getByRole('button',{name:'Senda kóða',exact:true}).click();
+await page.getByLabel('Staðfestingarkóði',{exact:true}).waitFor({timeout:20000});
+let message;for(let i=0;i<20;i++){const listing=await(await fetch('http://127.0.0.1:54324/api/v1/messages')).json();message=listing.messages?.find(m=>m.To?.some(t=>t.Address===email));if(message)break;await new Promise(r=>setTimeout(r,500));}
+if(!message)throw Error('Local email did not arrive');
+const mail=await(await fetch(`http://127.0.0.1:54324/api/v1/message/${message.ID}`)).json();
+const token=mail.Text?.match(/\b(\d{6})\b/)?.[1];
+console.log(JSON.stringify({emailDelivered:true,subject:mail.Subject,sixDigitOtpInEmail:!!token}));
+if(!token)throw Error('Mobile asks for six-digit OTP but the actual email contains no OTP');
+await page.getByLabel('Staðfestingarkóði',{exact:true}).fill(token);await page.getByRole('button',{name:'Staðfesta',exact:true}).click();
+await page.getByText('Veldu tungumál',{exact:true}).waitFor({timeout:20000});
+pass('Actual email delivery and OTP verification reach onboarding');
+await page.getByText('English',{exact:true}).click();
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await page.getByLabel('Date of birth',{exact:true}).fill('2020-01-01');
+if(!(await page.getByRole('button',{name:'Continue',exact:true}).isDisabled()))throw Error('Underage birth date did not block onboarding');
+await page.getByLabel('Date of birth',{exact:true}).fill('1995-01-01');
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+const boxes=page.getByRole('checkbox');if(await boxes.count()!==4)throw Error('All four consent choices must be explicit');
+for(let index=0;index<4;index++)await boxes.nth(index).click();
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await page.getByLabel('Display name',{exact:true}).fill('Browser Fixture');
+await page.getByRole('checkbox',{name:'Queer',exact:true}).click();
+await page.getByRole('checkbox',{name:'Chat',exact:true}).click();
+await page.getByRole('button',{name:'Continue',exact:true}).click();
+await page.getByText('Confirm you are in Iceland',{exact:true}).waitFor({timeout:20000});
+await page.getByRole('button',{name:'Allow location',exact:true}).click();
+await page.waitForURL('**/discover',{timeout:30000});
+pass('Complete onboarding, underage exclusion, explicit consent, profile creation and synthetic Iceland location');
+const actual=(await db.query('select display_name,onboarding_completed_at,special_category_consent_at from public.profiles p join auth.users u on u.id=p.id where u.email=$1',[email])).rows[0];
+if(actual?.display_name!=='Browser Fixture'||!actual.onboarding_completed_at||!actual.special_category_consent_at)throw Error('Onboarding UI did not persist actual profile and consent');
+await page.screenshot({path:'tmp/live-discovery-browser.png',fullPage:true});
+await page.reload({waitUntil:'networkidle'});await page.waitForURL('**/discover',{timeout:20000});
+pass('Authenticated reload retains user session');
+await page.getByRole('button',{name:'Verify again',exact:true}).click();
+await page.waitForURL('**/location-gate');
+await page.getByRole('button',{name:'Verify again',exact:true}).click();
+await page.waitForURL('**/discover',{timeout:20000});
+await page.getByText('Verification expired',{exact:true}).waitFor({state:'hidden',timeout:10000});
+pass('Cold-start privacy gate rechecks location and unlocks discovery');
+await page.goto('http://127.0.0.1:8811/privacy',{waitUntil:'networkidle'});
+const downloadPending=page.waitForEvent('download',{timeout:20000});
+await page.getByRole('button',{name:'Save or share export',exact:true}).click();
+const download=await downloadPending;
+if(download.suggestedFilename()!=='hittumst-account.json')throw Error('Account export is not an actual JSON file');
+const exportPath=await download.path();
+const exported=JSON.parse(fs.readFileSync(exportPath,'utf8'));
+if(!JSON.stringify(exported).includes('Browser Fixture'))throw Error('Downloaded file does not include this actual account');
+await download.delete();
+pass('Privacy screen downloads real account JSON as a file');
+await page.getByRole('button',{name:'Download my photos and videos',exact:true}).click();
+await page.getByText('No downloadable files.',{exact:true}).waitFor({timeout:15000});
+pass('Owned-media export screen loads the actual empty owned-file manifest');
+await page.screenshot({path:'tmp/live-onboarding-browser.png',fullPage:true});
+if(errors.length)throw Error(errors.join('\n'));
+completed=true;
+}catch(e){console.log((await page.locator('body').innerText()).slice(0,2500));await page.screenshot({path:'tmp/live-browser-error.png',fullPage:true});throw e;}
+finally{const bundleDir=path.join(root,'apps/mobile/dist-live/_expo/static/js/web');const bundles=fs.readdirSync(bundleDir).filter(name=>name.endsWith('.js')).map(name=>({name,sha256:createHash('sha256').update(fs.readFileSync(path.join(bundleDir,name))).digest('hex')}));fs.writeFileSync('tmp/live-browser-result.json',JSON.stringify({scope:'Chromium web build against synthetic local Supabase, real email/Auth/REST',startedAt,completedAt:new Date().toISOString(),completed,results,bundles,limitations:['Simulated geolocation','No native device/Keychain/Keystore/accessibility approval','No hosted staging evidence']},null,2));const user=await db.query('select id from auth.users where email=$1',[email]);if(user.rows[0]){const deleted=await admin.auth.admin.deleteUser(user.rows[0].id);if(deleted.error)console.error('Synthetic browser account cleanup failed');}await db.end();await browser.close();}
+})().catch(e=>{console.error(e.message);process.exitCode=1;});

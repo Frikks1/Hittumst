@@ -24,4 +24,18 @@ describe('public release configuration', () => {
     expect(getPublicSiteConfig(release).released).toBe(true);
     expect(() => getPublicSiteConfig({ ...release, HITTUMST_IOS_STORE_URL: 'https://apps.apple.com.example.test/fake' })).toThrow();
   });
+  it('allows Google Play to launch before the App Store', () => {
+    const androidUrl = 'https://play.google.com/store/apps/details?id=is.rummal.app';
+    expect(getPublicSiteConfig({ ...approved, HITTUMST_PUBLIC_RELEASE: 'true', HITTUMST_ANDROID_STORE_URL: androidUrl, HITTUMST_IOS_STORE_URL: '  ' }))
+      .toMatchObject({ released: true, androidUrl, iosUrl: undefined });
+  });
+  it('requires a genuine store destination for every published platform', () => {
+    const release = { ...approved, HITTUMST_PUBLIC_RELEASE: 'true' };
+    expect(() => getPublicSiteConfig(release)).toThrow('at least one published store listing');
+    for (const url of ['https://play.google.com.example.test/fake', 'http://play.google.com/store/apps/details?id=is.rummal.app', 'https://user:password@play.google.com/store/apps/details?id=is.rummal.app']) {
+      expect(() => getPublicSiteConfig({ ...release, HITTUMST_ANDROID_STORE_URL: url })).toThrow();
+    }
+    expect(getPublicSiteConfig({ ...release, HITTUMST_IOS_STORE_URL: 'https://apps.apple.com/is/app/test/id123' }))
+      .toMatchObject({ released: true, androidUrl: undefined });
+  });
 });

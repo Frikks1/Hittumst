@@ -1,7 +1,8 @@
+import { Text } from '@/components/Typography';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MapInstance, MapMouseEvent } from 'maplibre-gl';
 import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import type { GeoCoordinate } from '@/types/domain';
 import { hittingarFeature } from './config';

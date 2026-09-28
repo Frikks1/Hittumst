@@ -1,9 +1,10 @@
+import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Button, ChoiceChip, DemoBanner, EmptyState, Screen } from '@/components/ui';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Button, ChoiceChip, EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';
 import type { AlbumShare, ConversationSummary } from '@/types/domain';
@@ -62,7 +63,7 @@ export default function ChatsScreen() {
     finally{actionBusy.current=false;setPending(null);}
   };
   const rows:Array<ConversationSummary|AlbumShare>=!locationAllowed?[]:section==='chats'?filtered:shares;
-  return <Screen scroll={false}><DemoBanner />
+  return <Screen scroll={false}>
     <FlatList data={rows} keyExtractor={item=>item.id} contentContainerStyle={styles.page} refreshing={loading} onRefresh={()=>void load()}
       onEndReached={()=>void loadMore()} onEndReachedThreshold={0.3}
       ListFooterComponent={section==='chats'&&cursor?<Button variant="secondary" loading={loadingMore} label={t('discovery.more')} onPress={()=>void loadMore()} />:null}
