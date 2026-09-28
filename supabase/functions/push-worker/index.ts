@@ -54,9 +54,8 @@ async function digest(value: string) {
   ).join("");
 }
 
-async function validWorkerSecret(request: Request) {
+async function validWorkerSecret(request: Request, expected: string) {
   const supplied = request.headers.get("x-worker-secret") ?? "";
-  const expected = requiredEnv("PUSH_WORKER_SECRET");
   return supplied.length > 0 &&
     await digest(supplied) === await digest(expected);
 }
@@ -182,7 +181,11 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
-  if (!await validWorkerSecret(request)) {
+  const workerSecret = Deno.env.get("PUSH_WORKER_SECRET");
+  if (!workerSecret || workerSecret.length < 32) {
+    return jsonResponse({ error: "Push processing is temporarily unavailable" }, 503);
+  }
+  if (!await validWorkerSecret(request, workerSecret)) {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
@@ -199,9 +202,14 @@ Deno.serve(async (request) => {
     ? requestedMode
     : "all";
 
-  const supabase = createClient(requiredEnv("SUPABASE_URL"), secretKey(), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  }) as unknown as RpcClient;
+  let supabase: RpcClient;
+  try {
+    supabase = createClient(requiredEnv("SUPABASE_URL"), secretKey(), {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }) as unknown as RpcClient;
+  } catch {
+    return jsonResponse({ error: "Push processing is temporarily unavailable" }, 503);
+  }
   try {
     const sent = mode === "receipts"
       ? undefined

@@ -45,6 +45,8 @@ Source-map upload is opt-in through `SENTRY_UPLOAD_SOURCEMAPS=true`, `SENTRY_ORG
 
 Set an external authenticated uptime monitor to request `/api/operations/ready` every 60 seconds, alert on two failures, and notify the pilot owner plus backup. Do not put bearer tokens into URL query parameters. Configure Sentry's fixed-code alert delivery and Render deployment/process alerts. Simulate a stopped worker, failed raw cleanup, unavailable backend and recovered queue. Record alert delivery and acknowledgement times. The manual GitHub observation is additional diagnostics and does not replace missed-worker alerting. Billing/voice intentionally remain red while the intended feature is disabled or unconfigured.
 
+The manual `--health-only` observation needs only `STAGING_CRON_SECRET` plus its nonsecret staging identity/enablement settings; it does not need `STAGING_PUSH_WORKER_SECRET` or the Supabase publishable key. Queue execution still requires those separate values. As of 28 September, external monitoring and alert delivery are not configured or verified; recipients remain an owner decision. Do not describe the manual workflow as a deployed minute-by-minute monitor.
+
 AWS objects are deleted immediately after moderation. The bucket lifecycle is a fallback after failed deletion, with eligibility after one day and asynchronous AWS execution; it is not an exact 24-hour guarantee. Inspect/delete stranded copies during incidents. The bucket is not a backup and should not have versioning/replication enabled. Operator approval of retention and provider privacy settings remains required.
 
 ## Capacity workload

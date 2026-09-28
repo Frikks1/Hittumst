@@ -1,7 +1,7 @@
 {
   "backend": {
     "status": "blocked",
-    "reason": "All 43 source migrations are installed in isolated hosted staging with matching version history; all 97 application tables have RLS and all storage buckets are private. The clean local database suite passed 1,108 assertions on 27 September 2026. Hosted Auth health and anonymous-access rejection were checked. Web/worker deployment, provider configuration, authenticated hosted workflows, recovery and reconciliation of the preserved original hosted baseline remain required; see google-play-launch.md."
+    "reason": "All 43 source migrations are installed in isolated hosted staging with matching history; all 97 application tables have RLS and all storage buckets are private. Local database regression passed 1,108 assertions on 27 September. Render staging web/worker were deployed on 28 September, with HTTP liveness/login and all six database heartbeats verified after the owner supplied the server key. The account-deletion loop passed only an empty-queue check; media, push, voice, commerce and billing remain unready. Notification/place-search v2 error-handling repairs are deployed and unauthorized-access checks passed. The owner confirmed AWS, MapTiler and LiveKit are not set up. Function secrets/providers, authenticated hosted workflows, recovery and reconciliation of the preserved original hosted baseline are still required; see google-play-launch.md."
   },
   "privacy": {
     "status": "pending",
