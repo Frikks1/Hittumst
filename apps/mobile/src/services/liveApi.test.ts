@@ -177,7 +177,7 @@ describe('live sponsorship transport and pool contracts', () => {
   const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   beforeEach(() => {
     mock.storage.clear();
-    mock.getSession.mockResolvedValue({ data: { session: { access_token: 'verified-session-token' } } });
+    mock.getSession.mockResolvedValue({ data: { session: { access_token: 'verified-session-token', user: { id: 'me' } } } });
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
     mock.rpc.mockResolvedValue({ data: detail, error: null });
@@ -234,6 +234,29 @@ describe('live sponsorship transport and pool contracts', () => {
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ action: 'command', payload: command });
     expect(mock.storeWrite).not.toHaveBeenCalled();
     expect(mock.storage.size).toBe(0);
+  });
+
+  it('never submits an old account train deposit with a newly signed-in account token', async () => {
+    mock.getSession.mockResolvedValue({ data: { session: { access_token: 'other-token', user: { id: 'other' } } } });
+    const command = { action: 'train_pool_deposit' as const, trainId: 'train-id', amount: 500, requestId };
+    const api = new LiveRummalApi();
+    await expect(api.walletCommand(command)).rejects.toThrow('account_changed');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(JSON.parse(mock.storage.get(pendingKey)!)).toEqual(command);
+    expect(mock.storage.has('hittumst:pending-finance:other')).toBe(false);
+    mock.getSession.mockResolvedValue({ data: { session: { access_token: 'original-account-token', user: { id: 'me' } } } });
+    fetchMock.mockResolvedValue(response({ id: requestId }));
+    await api.walletCommand({ ...command, requestId: retryId });
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body).payload.requestId).toBe(requestId);
+    expect(mock.storage.size).toBe(0);
+  });
+
+  it('reads the train pool while a different wallet mutation awaits acknowledgement', async () => {
+    mock.storage.set(pendingKey, JSON.stringify({ action: 'purchase', amount: 1000, requestId }));
+    fetchMock.mockResolvedValue(response({ balance: 500 }));
+    await new LiveRummalApi().walletCommand({ action: 'train_pool_info', trainId: 'train-id', requestId: retryId });
+    expect(mock.storeWrite).not.toHaveBeenCalled();
+    expect(JSON.parse(mock.storage.get(pendingKey)!).action).toBe('purchase');
   });
 
   it.each([

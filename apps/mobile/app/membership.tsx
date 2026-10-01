@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { Linking, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { TIERS, TIER_IDS, type TierId } from '@rummal/shared';
+import { TIERS, TIER_IDS, DISCOVERY_PROFILE_LIMITS, type TierId } from '@rummal/shared';
 import { Text } from '@/components/Typography';
 import { Button, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
@@ -103,6 +103,7 @@ export default function MembershipScreen() {
           const current = entitlement?.tier === tier;
           return <View key={tier} style={{ padding: 18, gap: 10, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 20, backgroundColor: theme.colors.surface }}>
             <Text accessibilityRole="header" style={{ color: theme.colors.text, fontSize: 22, fontWeight: '800' }}>{p.name}{current ? (is ? ' · Núverandi' : ' · Current') : ''}</Text>
+            <Text style={muted}>{DISCOVERY_PROFILE_LIMITS[tier]} {is ? 'prófílar · eitt nýtt úrval á dag' : 'profiles · one new selection per day'}</Text>
             <Text style={{ color: theme.colors.text }}>
               {tier === 'plebbi' ? (is ? 'Ókeypis' : 'Free') : product ? product.price + (is ? ' / mánuð' : ' / month')
                 : api.isDemo ? p.priceIsk.toLocaleString('is-IS') + (is ? ' kr / mánuð (sýni)' : ' ISK / month (demo)')

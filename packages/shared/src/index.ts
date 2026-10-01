@@ -14,3 +14,4 @@ export * from './providers';
 export * from './discovery';
 
 export * from './community';
+export * from './trains';

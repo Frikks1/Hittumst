@@ -36,6 +36,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="discover" options={{ title: t('tabs.discover'), tabBarIcon: icon('grid-outline') }} />
       <Tabs.Screen name="hittingar" options={{ href: hittingarFeature.enabled ? undefined : null, title: t('tabs.hittingar'), tabBarIcon: icon('map-outline') }} />
+      <Tabs.Screen name="ferdalest" options={{ title: 'Ferðalest', tabBarIcon: icon('train-outline') }} />
       <Tabs.Screen name="chats" options={{ title: t('tabs.chats'), tabBarIcon: icon('chatbubbles-outline') }} />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('person-circle-outline') }} />
       <Tabs.Screen name="settings" options={{ title: t('tabs.settings'), tabBarIcon: icon('options-outline') }} />

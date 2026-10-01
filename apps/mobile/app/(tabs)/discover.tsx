@@ -1,8 +1,9 @@
+import type { DiscoveryAllowance } from '@rummal/shared';
 import { discoveryFilterCount } from '@/utils/discoveryPreferences';
 import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Brand, Button, ChoiceChip, EmptyState, IconButton, ProfileTile, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
@@ -12,8 +13,15 @@ import { defaultFilters, type DiscoveryFilters, type Intent, type PublicProfile 
 import { emptyFeed, PagedFeed } from '@/utils/pagedFeed';
 
 export default function DiscoverScreen() {
+  const { user, locationAllowed } = useApp();
+  return <DiscoverContent key={`${user?.id}:${locationAllowed}`} />;
+}
+
+function DiscoverContent() {
   const router = useRouter();
-  const { discoveryFilters, setDiscoveryFilters, locationAllowed, user, t, theme } = useApp();
+  const { discoveryFilters, setDiscoveryFilters, locationAllowed, user, t, theme, locale } = useApp();
+  const currentFilters = useRef(discoveryFilters);
+  currentFilters.current = discoveryFilters;
   const { appearance } = useAppearance();
   const { width, fontScale } = useWindowDimensions();
   const [listWidth, setListWidth] = useState(width);
@@ -24,6 +32,12 @@ export default function DiscoverScreen() {
   const tileWidth = Math.max(80, (listWidth - 32 - (columns - 1) * 10) / columns);
   const [own, setOwn] = useState<{ interests: string[]; tags: string[] }>({ interests: [], tags: [] });
   useFocusEffect(useCallback(() => { let active = true; void api.getOwnProfile().then(profile => { if (active) setOwn(profile); }).catch(() => { if (active) setOwn({ interests: [], tags: [] }); }); return () => { active = false; }; }, [user?.id]));
+  const [allowance, setAllowance] = useState<DiscoveryAllowance | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [allowanceError, setAllowanceError] = useState(false);
+  const mounted = useRef(true);
+  const rotationPending = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [snapshot, setSnapshot] = useState(emptyFeed<PublicProfile>);
   const feed = useMemo(() => new PagedFeed<PublicProfile, DiscoveryFilters>(
     (query, cursor) => api.discover(query, cursor), setSnapshot,
@@ -32,12 +46,41 @@ export default function DiscoverScreen() {
   const load = useCallback(() => {
     if (locationAllowed && user) {
       void feed.refresh(discoveryFilters);
-
     } else feed.clear();
   }, [discoveryFilters, feed, locationAllowed, user]);
   useEffect(() => { if (!locationAllowed || !user) feed.clear(); }, [feed, locationAllowed, user]);
   useFocusEffect(useCallback(() => { load(); return () => feed.pause(); }, [feed, load]));
 
+  useEffect(() => {
+    let active = true;
+    if (!locationAllowed || !user || snapshot.loading) return;
+    void api.discoveryAllowance().then(value => { if (active) { setAllowance(value); setAllowanceError(false); } }).catch(() => { if (active) setAllowanceError(true); });
+    return () => { active = false; };
+  }, [snapshot.loading, locationAllowed, user]);
+  useEffect(() => {
+    if (!allowance || allowance.canRefresh || !locationAllowed || !user) return;
+    let active = true;
+    const timer = setTimeout(() => {
+      void api.discoveryAllowance().then(value => { if (active) { setAllowance(value); setAllowanceError(false); } }).catch(() => { if (active) setAllowanceError(true); });
+    }, Math.max(1000, Date.parse(allowance.nextRefreshAt) - Date.now()));
+    return () => { active = false; clearTimeout(timer); };
+  }, [allowance, locationAllowed, user]);
+  const rotate = async () => {
+    if (rotationPending.current || !allowance?.canRefresh) return;
+    rotationPending.current = true;
+    setRotating(true); setAllowanceError(false);
+    try {
+      const updated = await api.discoveryAllowance(true);
+      if (!mounted.current) return;
+      setAllowance(updated);
+      await feed.refresh(currentFilters.current);
+      if (!mounted.current) return;
+      const current = await api.discoveryAllowance();
+      if (mounted.current) setAllowance(current);
+    }
+    catch { if (mounted.current) setAllowanceError(true); }
+    finally { if (mounted.current) { rotationPending.current = false; setRotating(false); } }
+  };
   const header = (
     <View style={styles.header}>
       <View style={styles.topbar}>
@@ -62,6 +105,12 @@ export default function DiscoverScreen() {
         ))}
         <ChoiceChip label={t('discovery.moreOptions')} selected={false} onPress={() => router.push('/filters')} />
       </ScrollView>
+      <View style={{ gap: 8 }}>
+        <Text style={{ color: theme.colors.textMuted }}>{locale === 'is' ? `Allt að ${allowance?.limit ?? 20} prófílar · eitt nýtt úrval á dag` : `Up to ${allowance?.limit ?? 20} profiles · one new selection per day`}</Text>
+        <Button variant="secondary" icon="refresh-outline" disabled={!locationAllowed || !allowance?.canRefresh || snapshot.loading} loading={rotating} label={!allowance || allowance.canRefresh ? (locale === 'is' ? 'Sækja nýtt fólk' : 'Show new people') : (locale === 'is' ? 'Nýtt úrval á morgun' : 'New selection tomorrow')} onPress={() => void rotate()} />
+        <Button variant="ghost" label={locale === 'is' ? 'Sjá fleiri prófíla með áskrift' : 'See more profiles with a subscription'} onPress={() => router.push('/membership')} />
+        {allowanceError && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{locale === 'is' ? 'Ekki tókst að endurnýja. Reyndu aftur síðar.' : 'Could not refresh. Try again later.'}</Text>}
+      </View>
       <View style={styles.resultBar}>
         <Text accessibilityLiveRegion="polite" style={[styles.resultText, { color: theme.colors.textMuted }]}>
           {snapshot.loading && !snapshot.items.length ? t('common.loading') : t(snapshot.items.length === 1 ? 'discovery.oneResult' : 'discovery.results', { count: snapshot.items.length })}

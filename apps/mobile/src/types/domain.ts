@@ -162,7 +162,8 @@ export type ChatMessage = {
   senderId: string | null;
   body?: string;
   imageUrl?: string;
-  kind: 'text' | 'image' | 'album_share' | 'album_reply' | 'album_reaction';
+  videoUrl?: string;
+  kind: 'text' | 'image' | 'video' | 'album_share' | 'album_reply' | 'album_reaction';
   albumShareId?: string;
   albumItemId?: string;
   createdAt: string;

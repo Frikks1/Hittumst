@@ -13,6 +13,9 @@ const contributionFields = {
 };
 export const financeCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('purchase'), amount: isk, requestId: z.string().uuid() }),
+  z.object({ action: z.literal('train_pool_info'), trainId: z.string().min(1).max(100), requestId: z.string().uuid() }),
+  z.object({ action: z.literal('train_pool_deposit'), trainId: z.string().min(1).max(100), amount: isk, requestId: z.string().uuid() }),
+  z.object({ action: z.literal('train_pool_settings'), trainId: z.string().min(1).max(100), enabled: z.boolean(), amountPerEvent: z.number().int().nonnegative().max(100_000_000), monthlyCap: z.number().int().nonnegative().max(100_000_000), expectedHostBps: z.number().int().min(0).max(10000), requestId: z.string().uuid() }),
   z.object({
     action: z.literal('gift'),
     amount: isk,
@@ -117,6 +120,8 @@ export type Contribution = {
   processingFee?: number;
   feeLotIds?: string[];
   refundReason?: 'reversed' | 'cancelled' | 'rejected' | 'no_attendees';
+  trainId?: string;
+  allocatedAt?: string;
 };
 export type ContributionQuote = {
   id: string;
@@ -186,6 +191,17 @@ export type SubscriptionPeriod = {
   granted: number;
   refunded: boolean;
 };
+export type TrainFinancePool = {
+  enabled: boolean;
+  amountPerEvent: number;
+  monthlyCap: number;
+  expectedHostBps: number;
+  configuredBy: string;
+  totalDeposited: number;
+  sponsored: boolean;
+};
+/** Supplied by the authenticated server from current group membership, never by client JSON. */
+export type TrainFinanceContext = { id: string; role: string | null; public: boolean };
 export type FinanceState = {
   environment: 'sandbox';
   sequence: number;
@@ -195,6 +211,7 @@ export type FinanceState = {
   journal: LedgerTransaction[];
   events: Record<string, FundedEvent>;
   contributions: Record<string, Contribution>;
+  trainPools?: Record<string, TrainFinancePool>;
   quotes: Record<string, WithdrawalQuote>;
   contributionQuotes?: Record<string, ContributionQuote>;
   payouts: Record<string, Payout>;
@@ -204,7 +221,7 @@ export type FinanceState = {
   requests: Record<string, { fingerprint: string; result: unknown }>;
   flags: { accountId: string; reason: string }[];
 };
-export type FinanceContext = { memberId: string; now: string; randomId: () => string };
+export type FinanceContext = { memberId: string; now: string; randomId: () => string; train?: TrainFinanceContext };
 export type ShopItem = { sku: string; title: string; price: number; available: boolean };
 // These are deliberately labelled fixtures, not promises of third-party stock or partnerships.
 export const SANDBOX_SHOP: ShopItem[] = [
@@ -214,6 +231,7 @@ export const walletAccount = (id: string) => `wallet:${id}`;
 export const sponsorshipAccount = (id: string) => `sponsorship:${id}`;
 const contributionFeeAccount = (id: string) => `sponsor-fee:${id}`;
 const poolAccount = (id: string) => `pool:${id}`;
+export const trainPoolAccount = (id: string) => `train:${id}`;
 function requireCondition(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -340,7 +358,7 @@ export function auditFinance(state: FinanceState) {
   for (const key of new Set([
     ...Object.keys(lots),
     ...Object.keys(balances).filter((k) =>
-      /^(wallet|sponsorship|pool|payout|order|sponsor-fee):/.test(k),
+      /^(wallet|sponsorship|pool|train|payout|order|sponsor-fee):/.test(k),
     ),
   ]))
     requireCondition((lots[key] ?? 0) === (balances[key] ?? 0), 'lot_balance_drift');
@@ -365,7 +383,31 @@ export function applyFinanceCommand(
   const owner = walletAccount(context.memberId);
   const id = cmd.requestId;
   let result: unknown = { id };
-  if (cmd.action === 'purchase') {
+  if ('trainId' in cmd) {
+    const train = context.train;
+    requireCondition(train?.id === cmd.trainId, 'train_unavailable');
+    requireCondition(train.role || (train.public && cmd.action === 'train_pool_deposit'), 'train_forbidden');
+    const pool = (state.trainPools ??= {})[cmd.trainId] ??= {
+      enabled: false, amountPerEvent: 0, monthlyCap: 0, expectedHostBps: 2500,
+      configuredBy: context.memberId, totalDeposited: 0, sponsored: false,
+    };
+    if (cmd.action === 'train_pool_settings') {
+      requireCondition(['owner', 'admin'].includes(train.role ?? ''), 'train_admin_required');
+      requireCondition(!cmd.enabled || (cmd.amountPerEvent > 0 && cmd.monthlyCap >= cmd.amountPerEvent + Math.ceil(cmd.amountPerEvent / 10)), 'invalid_train_budget');
+      Object.assign(pool, { enabled: cmd.enabled, amountPerEvent: cmd.amountPerEvent,
+        monthlyCap: cmd.monthlyCap, expectedHostBps: cmd.expectedHostBps, configuredBy: context.memberId });
+    } else if (cmd.action === 'train_pool_deposit') {
+      requireCondition((state.balances[owner] ?? 0) >= cmd.amount, 'insufficient_funds');
+      moveLots(state, owner, trainPoolAccount(cmd.trainId), cmd.amount);
+      post(state, id, 'train_pool_deposit', context.now, [
+        { account: owner, amount: -cmd.amount }, { account: trainPoolAccount(cmd.trainId), amount: cmd.amount },
+      ]);
+      pool.totalDeposited += cmd.amount;
+      pool.sponsored ||= train.role === null;
+      result = { id, trainId: cmd.trainId, amount: cmd.amount };
+    }
+    if (cmd.action !== 'train_pool_deposit') result = trainPoolSnapshot(state, cmd.trainId, context.now);
+  } else if (cmd.action === 'purchase') {
     // Called only behind the explicit sandbox boundary. Live purchases require verified payment settlement.
     post(state, id, 'sandbox_purchase', context.now, [
       { account: 'external:purchase', amount: -cmd.amount },
@@ -515,7 +557,7 @@ export function applyFinanceCommand(
   } else if (cmd.action === 'reverse') {
     const contribution = state.contributions[cmd.contributionId];
     requireCondition(
-      contribution && contribution.memberId === context.memberId && !contribution.reversed,
+      contribution && !contribution.trainId && contribution.memberId === context.memberId && !contribution.reversed,
       'contribution_unavailable',
     );
     const event = state.events[contribution.eventId];
@@ -649,6 +691,66 @@ export function applyFinanceCommand(
   auditFinance(state);
   return { state, result };
 }
+/** Cash deposits belong to the train; refunds return to the train, never its administrator. */
+export function trainPoolSnapshot(state: FinanceState, trainId: string, now: string) {
+  const pool = state.trainPools?.[trainId];
+  const allocations = Object.values(state.contributions).filter(c => c.trainId === trainId);
+  const month = now.slice(0, 7); // Iceland uses UTC throughout the year.
+  return {
+    enabled: pool?.enabled ?? false,
+    amountPerEvent: pool?.amountPerEvent ?? 0,
+    monthlyCap: pool?.monthlyCap ?? 0,
+    expectedHostBps: pool?.expectedHostBps ?? 2500,
+    balance: state.balances[trainPoolAccount(trainId)] ?? 0,
+    totalDeposited: pool?.totalDeposited ?? 0,
+    monthlySpent: allocations.filter(c => c.allocatedAt?.slice(0, 7) === month).reduce((sum,c) => sum + c.amount + (c.serviceFee ?? 0), 0),
+    serviceFeeBps: 1000,
+    sandbox: true,
+    available: true,
+    sponsored: pool?.sponsored ?? false,
+    allocations: allocations.map(c => ({ meetupId: c.eventId, amount: c.amount, fee: c.serviceFee ?? 0, refunded: c.reversed })),
+  };
+}
+
+/** Server-only worker operation. Each event is funded once; DB commit rechecks plans and real RSVPs. */
+export function fundTrainEvents(original: FinanceState, trainId: string, events: FundedEvent[], now: string): FinanceState {
+  const state = structuredClone(original);
+  const pool = state.trainPools?.[trainId];
+  if (!pool?.enabled || pool.amountPerEvent <= 0) return original;
+  const funder = state.members[pool.configuredBy];
+  if (!funder || funder.suspended) return original;
+  let spent = trainPoolSnapshot(state, trainId, now).monthlySpent;
+  const amount = pool.amountPerEvent;
+  const fee = Math.ceil(amount / 10);
+  let changed = false;
+  for (const context of [...events].sort((a,b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id))) {
+    const id = `train:${trainId}:${context.id}`;
+    if (state.contributions[id] || context.cancelled || Date.parse(context.startsAt) <= Date.parse(now)) continue;
+    const prior = state.events[context.id];
+    if (prior?.settled || (prior?.hostBps ?? 2500) !== pool.expectedHostBps) continue;
+    if ((state.balances[trainPoolAccount(trainId)] ?? 0) < amount + fee || spent + amount + fee > pool.monthlyCap) continue;
+    const event: FundedEvent = { ...context, hostBps: prior?.hostBps ?? 2500,
+      checkedIn: prior?.checkedIn ?? {}, code: prior?.code ?? null, review: prior?.review ?? 'pending', settled: false };
+    state.events[event.id] = event;
+    state.members[event.hostId] ??= { tier: 'plebbi', paidUntil: null, premiumMonths: 0, payoutIdentity: null, suspended: false };
+    const principal = moveLots(state, trainPoolAccount(trainId), poolAccount(event.id), amount);
+    const serviceFee = moveLots(state, trainPoolAccount(trainId), contributionFeeAccount(id), fee);
+    post(state, id, 'train_sponsorship', now, [
+      { account: trainPoolAccount(trainId), amount: -amount-fee },
+      { account: poolAccount(event.id), amount }, { account: contributionFeeAccount(id), amount: fee },
+    ]);
+    state.contributions[id] = { id, eventId: event.id, memberId: pool.configuredBy, trainId,
+      allocatedAt: now, amount, lotIds: principal.ids, feeLotIds: serviceFee.ids,
+      reversed: false, fundingSource: 'cash', cashAmount: amount, creditAmount: 0,
+      serviceFee: fee, processingFee: 0 };
+    spent += amount + fee;
+    changed = true;
+  }
+  if (!changed) return original;
+  auditFinance(state);
+  return state;
+}
+
 function isSettlementRefund(state: FinanceState, contribution: Contribution): boolean {
   return (
     contribution.reversed &&
@@ -666,6 +768,7 @@ function refundContribution(
   id: string,
   reason: NonNullable<Contribution['refundReason']>,
 ) {
+  const refundAccount = contribution.trainId ? trainPoolAccount(contribution.trainId) : walletAccount(contribution.memberId);
   let creditAmount = 0;
   let cashAmount = 0;
   for (const lotId of contribution.lotIds) {
@@ -678,7 +781,7 @@ function refundContribution(
       lot.holder = sponsorshipAccount(contribution.memberId);
       creditAmount += lot.amount;
     } else {
-      lot.holder = walletAccount(contribution.memberId);
+      lot.holder = refundAccount;
       cashAmount += lot.amount;
     }
   }
@@ -690,13 +793,13 @@ function refundContribution(
       lot && lot.holder === contributionFeeAccount(contribution.id),
       'contribution_already_spent',
     );
-    lot.holder = walletAccount(contribution.memberId);
+    lot.holder = refundAccount;
   }
   post(state, id, 'contribution_refund', now, [
     { account: poolAccount(contribution.eventId), amount: -contribution.amount },
     { account: contributionFeeAccount(contribution.id), amount: -fee },
     { account: sponsorshipAccount(contribution.memberId), amount: creditAmount },
-    { account: walletAccount(contribution.memberId), amount: cashAmount + fee },
+    { account: refundAccount, amount: cashAmount + fee },
   ]);
   contribution.reversed = true;
   contribution.refundReason = reason;
@@ -1075,7 +1178,7 @@ export function financeSnapshot(state: FinanceState, memberId: string) {
       .reduce((sum, l) => sum + l.amount, 0),
     payouts: Object.values(state.payouts).filter((p) => p.memberId === memberId),
     orders: Object.values(state.orders).filter((o) => o.memberId === memberId),
-    contributions: Object.values(state.contributions).filter((c) => c.memberId === memberId),
+    contributions: Object.values(state.contributions).filter((c) => !c.trainId && c.memberId === memberId),
     transactions: state.journal
       .filter((tx) =>
         tx.entries.some(
@@ -1100,7 +1203,7 @@ export function financeSnapshot(state: FinanceState, memberId: string) {
 }
 export type FinanceSnapshot = ReturnType<typeof financeSnapshot>;
 
-export function pendingFinanceWork(state: FinanceState) {
+export function pendingFinanceWork(state: FinanceState, now = new Date().toISOString()) {
   const available = (id: string) => state.members[id] && !state.members[id]!.suspended;
   return {
     payouts: Object.values(state.payouts)
@@ -1111,6 +1214,11 @@ export function pendingFinanceWork(state: FinanceState) {
       .slice(0, 20),
     events: Object.values(state.events)
       .filter((e) => !e.settled)
+      .sort((a,b) => {
+        const priority = (event: FundedEvent) => event.cancelled ? 0 :
+          event.review !== 'pending' && Date.parse(now) >= Date.parse(event.endsAt) + 86400000 ? 1 : 2;
+        return priority(a) - priority(b) || a.endsAt.localeCompare(b.endsAt) || a.id.localeCompare(b.id);
+      })
       .slice(0, 20),
   };
 }

@@ -52,6 +52,7 @@ export interface RummalApi {
   appealMediaUpload(id: string): Promise<void>;
   getPremiumProfile(id: string): Promise<{effect: boolean; badge: boolean; months: number}>;
   setPremiumProfile(effect: boolean, badge: boolean): Promise<void>;
+  discoveryAllowance(refresh?: boolean): Promise<import('@rummal/shared').DiscoveryAllowance>;
   discover(filters: DiscoveryFilters, cursor?: string | null): Promise<Page<PublicProfile>>;
   getProfile(id: string): Promise<PublicProfile>;
   hasCompletedOnboarding(): Promise<boolean>;

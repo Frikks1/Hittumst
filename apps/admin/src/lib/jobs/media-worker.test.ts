@@ -74,3 +74,12 @@ it('publishes a reviewed meetup video and its poster atomically through finaliza
   expect(ops.finish).toHaveBeenCalledWith(expect.objectContaining({ thumbnail_path: 'event/upload-thumb.jpg' }));
   expect(vi.mocked(ops.finish).mock.invocationCallOrder[0]).toBeGreaterThan(vi.mocked(ops.upload).mock.invocationCallOrder[1]!);
 });
+
+it.each(['group', 'message_video'] as const)('normalizes and moderates %s video before publication', async target => {
+  const ops = operations();
+  await processMediaJob({ ...job, media_type: 'video', target_type: target, target_id: 'recipient' }, ops);
+  expect(ops.normalize).toHaveBeenCalledWith(expect.any(Uint8Array), 'video', { maxBytes: 50 * 1024 * 1024, maxDurationMs: 60000 });
+  expect(ops.moderate).toHaveBeenCalledWith(expect.any(Uint8Array), 'video');
+  expect(ops.upload).toHaveBeenCalledWith('message-images', 'owner/upload.mp4', expect.any(Uint8Array), 'video/mp4');
+  expect(ops.finish).toHaveBeenCalledWith(expect.objectContaining({ thumbnail_path: null }));
+});

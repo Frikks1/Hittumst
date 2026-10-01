@@ -1,3 +1,4 @@
+import { DISCOVERY_PROFILE_LIMITS, fundTrainEvents, trainPoolSnapshot, type FundedEvent } from '@rummal/shared';
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
 import { activityRank, matchesActivity } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
@@ -26,7 +27,7 @@ export class MockRummalApi implements RummalApi {
   readonly isDemo = true;
   readonly demoCommunityStore = new DemoCommunityStore();
   readonly communityDemo: DemoCommunityBridge = {
-    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
+    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => !row.trainId && row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
     feedbackEvent: async id => {
       if (!this.demoCommunityStore.receipts.get(id)?.has(this.own.id) && !this.demoCommunityStore.appeals.get(id)?.has(this.own.id)) return this.getMeetup(id);
       return this.meetupService.get(id);
@@ -62,6 +63,25 @@ export class MockRummalApi implements RummalApi {
   async walletCommand(command: FinanceCommand) {
     // Return a committed receipt before checking today's event state or membership.
     if (this.commerce.state.requests[this.own.id + ':' + command.requestId]) return this.commerce.command(command);
+    if ('trainId' in command) {
+      const { demoTrainFinanceContext } = await import('./trains');
+      const context = demoTrainFinanceContext(command.trainId);
+      const group = this.groups.find(item => item.id === command.trainId);
+      if (!context || !group) throw new Error('train_unavailable');
+      const events: FundedEvent[] = [];
+      for (const id of context.meetupIds) {
+        const meetup = await this.meetupService.get(id);
+        if (meetup.status !== 'published' || (meetup.host.id !== this.own.id && !['joined','approved'].includes(meetup.viewerState.participationStatus))) continue;
+        const old = this.commerce.state.events[id];
+        events.push({ id, hostId: meetup.host.id, startsAt: meetup.startsAt, endsAt: meetup.effectiveEnd,
+          cancelled: false, eligibleAttendees: ['joined','approved'].includes(meetup.viewerState.participationStatus) ? [this.own.id] : [],
+          hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null,
+          review: old?.review ?? 'pending', settled: old?.settled ?? false });
+      }
+      const result = this.commerce.command(command, context.train);
+      this.commerce.state = fundTrainEvents(this.commerce.state, command.trainId, events, new Date().toISOString());
+      return command.action === 'train_pool_deposit' ? result : trainPoolSnapshot(this.commerce.state, command.trainId, new Date().toISOString());
+    }
     if(command.action==='gift') {await this.getProfile(command.recipientId);this.commerce.state.members[command.recipientId]??={tier:'plebbi',paidUntil:null,premiumMonths:0,payoutIdentity:`sandbox:${command.recipientId}`,suspended:false};}
     const eventId = 'meetupId' in command ? command.meetupId : command.action === 'reverse' ? this.commerce.state.contributions[command.contributionId]?.eventId : undefined;
     if (eventId) {
@@ -139,8 +159,28 @@ export class MockRummalApi implements RummalApi {
     const days:Record<string,number>={'p-bjarni':0,'p-elias':0,'p-salka':3,'p-noa':0,'p-dagur':45,'p-embla':20};
     return {lastActive:Date.now()-(days[id]??45)*86400000,visible:id!=='p-embla',fof:id==='p-salka'};
   }
+  private discoveryBatch: string[] | null = null;
+  private discoveryExcluded: string[] = [];
+  private discoveryRefreshedOn: string | null = null;
+  private discoveryCapacity = 0;
+  async discoveryAllowance(refresh = false) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (refresh) {
+      if (this.discoveryRefreshedOn === today || this.discoveryBatch === null) throw new Error('daily_discovery_refresh_unavailable');
+      this.discoveryRefreshedOn = today; this.discoveryExcluded = this.discoveryBatch; this.discoveryBatch = null;
+    }
+    const next = new Date(); next.setUTCHours(24, 0, 0, 0);
+    return { limit: DISCOVERY_PROFILE_LIMITS[this.tier], canRefresh: this.discoveryBatch !== null && this.discoveryRefreshedOn !== today, nextRefreshAt: next.toISOString() };
+  }
   async discover(filters: DiscoveryFilters) {
     await delay();
+    const cap = DISCOVERY_PROFILE_LIMITS[this.tier];
+    const candidates = this.profiles.filter(p => !this.blocked.has(p.id)).sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
+    if (this.discoveryBatch === null) {
+      this.discoveryBatch = candidates.filter(p => !this.discoveryExcluded.includes(p.id)).slice(0, cap).map(p => p.id); this.discoveryCapacity = cap;
+    } else if (cap > this.discoveryCapacity) {
+      this.discoveryBatch = [...this.discoveryBatch, ...candidates.filter(p => !this.discoveryBatch!.includes(p.id) && !this.discoveryExcluded.includes(p.id)).slice(0, cap - this.discoveryBatch.length).map(p => p.id)]; this.discoveryCapacity = cap;
+    }
     const items = this.profiles.filter((profile) =>
       !this.blocked.has(profile.id)
       && profile.age >= filters.ageMin && profile.age <= filters.ageMax
@@ -154,7 +194,7 @@ export class MockRummalApi implements RummalApi {
       && (filters.tags.length === 0 || filters.tags.some((tag) => profile.tags.includes(tag)))
     );
     items.sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
-    return { items, nextCursor: null };
+    return { items: items.filter(p => this.discoveryBatch!.slice(0, cap).includes(p.id)), nextCursor: null };
   }
 
   async getProfile(id: string) {

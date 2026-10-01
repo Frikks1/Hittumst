@@ -10,6 +10,7 @@ import {
   tierIdSchema,
   type FundedEvent,
   type FinanceState,
+  type TrainFinanceContext,
 } from '@rummal/shared';
 import {
   commerceDatabase,
@@ -33,6 +34,10 @@ const inputSchema = z.object({
 });
 const rejectedCommands = new Set([
   'account_unavailable',
+  'train_unavailable',
+  'train_forbidden',
+  'train_admin_required',
+  'invalid_train_budget',
   'recipient_unavailable',
   'event_unavailable',
   'pool_closed',
@@ -96,7 +101,7 @@ async function handlePost(request: Request) {
     const now = new Date().toISOString();
     const command = input.action === 'command' ? financeCommandSchema.parse(input.payload) : null;
     const sessionId =
-      command && ('meetupId' in command || command.action === 'reverse')
+      command && ('meetupId' in command || 'trainId' in command || command.action === 'reverse')
         ? verifiedFinanceSession(auth.slice(7), id)
         : null;
     let prior: FinanceState | undefined;
@@ -105,7 +110,7 @@ async function handlePost(request: Request) {
       // event eligibility does not: an acknowledged payment must remain recoverable after either changes.
       replay = async (state) => {
         // Pool summaries and attendance codes are visibility-scoped reads, not financial receipts.
-        if (command.action === 'pool_info' || command.action === 'checkin_code') return null;
+        if (command.action === 'pool_info' || command.action === 'checkin_code' || command.action === 'train_pool_info') return null;
         const current = state ?? (await loadFinanceState(db)).state;
         if (!current.requests[id + ':' + command.requestId]) return null;
         const receipt = applyFinanceCommand(current, command, {
@@ -130,6 +135,15 @@ async function handlePost(request: Request) {
         profile_id: command.recipientId,
       });
       if (recipient.error || !recipient.data) throw new Error('recipient_unavailable');
+    }
+    let trainContext: TrainFinanceContext | undefined;
+    if (command && 'trainId' in command) {
+      const train = await db.rpc('finance_train_context', {
+        member_id: id, session_id: sessionId, train_id: command.trainId, command_action: command.action,
+      });
+      if (train.error) throwFinanceSaveError(train.error);
+      if (!train.data) throw new Error('train_unavailable');
+      trainContext = train.data;
     }
     let meetupId = command && 'meetupId' in command ? command.meetupId : null;
     if (command?.action === 'reverse') {
@@ -169,7 +183,16 @@ async function handlePost(request: Request) {
       eventContext = event.data;
     }
     const commit =
-      command?.action === 'publish_sponsored' && eventContext
+      command && 'trainId' in command
+        ? async (revision: number, state: FinanceState) => {
+            const saved = await db.rpc('finance_train_save', {
+              member_id: id, session_id: sessionId, train_id: command.trainId,
+              command_action: command.action, revision, state,
+            });
+            if (saved.error) throwFinanceSaveError(saved.error);
+            return saved.data === true;
+          }
+        : command?.action === 'publish_sponsored' && eventContext
         ? await sponsoredPublicationCommit(db, memberDb, {
             memberId: id,
             sessionId: sessionId!,
@@ -264,7 +287,7 @@ async function handlePost(request: Request) {
               settled: old?.settled ?? false,
             };
           }
-          return applyFinanceCommand(state, command!, { memberId: id, now, randomId: randomUUID });
+          return { ...applyFinanceCommand(state, command!, { memberId: id, now, randomId: randomUUID, train: trainContext }), ...(command?.action === 'train_pool_info' ? { persist: false } : {}) };
         }
         return { state, result: financeSnapshot(state, id) };
       },
