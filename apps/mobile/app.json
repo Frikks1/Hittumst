@@ -11,11 +11,11 @@
       "bundleIdentifier": "is.rummal.app",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Hittumst notar staðsetningu þína á meðan appið er opið til að staðfesta að þú sért á Íslandi og raða nálægum prófílum. Nákvæm staðsetning er ekki birt.",
-        "NSPhotoLibraryUsageDescription": "Veldu myndir fyrir prófílinn þinn eða samtöl.",
-        "NSCameraUsageDescription": "Taktu mynd fyrir prófílinn þinn eða samtöl.",
+        "NSLocationWhenInUseUsageDescription": "Hittumst notar staðsetningu þína til að staðfesta að þú sért á Íslandi og raða nálægum prófílum. Í ferðalest getur þú sjálf/ur valið að deila nákvæmri staðsetningu tímabundið með völdum meðlimum.",
+        "NSPhotoLibraryUsageDescription": "Veldu myndir, myndskeið og GIF fyrir prófílinn þinn, samtöl, hópa eða ferðalestir.",
+        "NSCameraUsageDescription": "Taktu myndir og myndskeið til að deila með völdum vinum, hópum eða ferðalestum.",
         "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "Hittumst notar hljóðnemann þegar þú tekur þátt í talspjalli hóps."
+        "NSMicrophoneUsageDescription": "Hittumst notar hljóðnemann í talspjalli hóps og þegar þú tekur upp myndskeið."
       }
     },
     "android": {
@@ -50,14 +50,15 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Hittumst notar staðsetningu þína á meðan appið er opið til að staðfesta að þú sért á Íslandi."
+          "locationWhenInUsePermission": "Hittumst notar staðsetningu þína til að staðfesta að þú sért á Íslandi. Þú getur einnig valið að deila henni tímabundið með völdum meðlimum ferðalestar."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Veldu myndir fyrir prófílinn þinn eða samtöl.",
-          "cameraPermission": "Taktu mynd fyrir prófílinn þinn eða samtöl."
+          "photosPermission": "Veldu myndir, myndskeið og GIF fyrir prófílinn þinn, samtöl, hópa eða ferðalestir.",
+          "cameraPermission": "Taktu myndir og myndskeið til að deila með völdum vinum, hópum eða ferðalestum.",
+          "microphonePermission": "Hittumst notar hljóðnemann í talspjalli hóps og þegar þú tekur upp myndskeið."
         }
       ],
       "expo-video",
@@ -80,7 +81,7 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "microphonePermission": "Hittumst notar hljóðnemann þegar þú tekur þátt í talspjalli hóps.",
+          "microphonePermission": "Hittumst notar hljóðnemann í talspjalli hóps og þegar þú tekur upp myndskeið.",
           "cameraPermission": false
         }
       ],

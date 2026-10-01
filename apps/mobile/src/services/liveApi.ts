@@ -134,9 +134,10 @@ async function mapMessage(row: MessageRow): Promise<ChatMessage> {
 
 export class LiveRummalApi implements RummalApi {
   readonly isDemo = false;
-  private async commerceRequest(action: string, payload?: unknown): Promise<unknown> {
+  private async commerceRequest(action: string, payload?: unknown, expectedAccountId?: string): Promise<unknown> {
     const { data } = await supabase!.auth.getSession();
     if (!data.session || !runtimeEnv.websiteUrl) throw new Error('commerce_unavailable');
+    if (expectedAccountId && data.session.user.id !== expectedAccountId) throw new Error('account_changed');
     const response = await fetch(`${runtimeEnv.websiteUrl}/api/commerce`, { method: 'POST',
       headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, payload }) });
@@ -157,9 +158,9 @@ export class LiveRummalApi implements RummalApi {
   async getPendingFinanceCommand() { return pendingFinancialCommand(AsyncStorage,await requireUserId()); }
   async walletCommand(command: FinanceCommand) {
     command=financeCommandSchema.parse(command);
-    if (['pool_info', 'checkin_code', 'quote', 'contribution_quote'].includes(command.action)) return this.commerceRequest('command', command);
     const accountId=await requireUserId();
-    return sendFinancialCommand(AsyncStorage,accountId,command,pending=>this.commerceRequest('command',pending));
+    if (['pool_info', 'train_pool_info', 'checkin_code', 'quote', 'contribution_quote'].includes(command.action)) return this.commerceRequest('command', command, accountId);
+    return sendFinancialCommand(AsyncStorage,accountId,command,pending=>this.commerceRequest('command',pending,accountId));
   }
   async listMediaUploads(albumId: string) { const response = await supabase!.rpc('list_media_uploads', { album_id: albumId }); if (response.error) throw response.error; return response.data as { id: string; status: string; createdAt: string; reason: string | null }[]; }
   async appealMediaUpload(id: string) { const response = await supabase!.rpc('appeal_media_upload', { upload_id: id }); if (response.error) throw response.error; }

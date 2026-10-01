@@ -7,6 +7,8 @@ import {
   finishPayout,
   settleEvent,
   pendingFinanceWork,
+  fundTrainEvents,
+  type FundedEvent,
 } from '@rummal/shared';
 import { commerceDatabase, financeTransaction, requireSandbox } from '@/lib/commerce';
 import { syncVerifiedSponsorshipCredits } from '@/lib/billing/sponsorship-credit';
@@ -31,9 +33,32 @@ export async function GET(request: Request) {
     const provider = new SandboxProvider();
     const now = new Date().toISOString();
     await syncVerifiedSponsorshipCredits(db, now);
+    const trainIds = await financeTransaction(db, state => ({
+      state, result: Object.entries(state.trainPools ?? {}).filter(([,pool]) => pool.enabled).map(([id]) => id), persist: false,
+    }));
+    for (const trainId of trainIds) {
+      const current = await db.rpc('finance_train_auto_context', { train_id: trainId });
+      if (current.error) throw new Error('train_context_unavailable');
+      const events = (current.data ?? []) as FundedEvent[];
+      if (!events.length) continue;
+      try {
+        await financeTransaction(db, state => {
+          const next = fundTrainEvents(state, trainId, events, now);
+          return { state: next, result: null, persist: next !== state };
+        }, async (revision, state) => {
+          const saved = await db.rpc('finance_train_auto_save', { train_id: trainId, revision, state, event_context: events });
+          if (saved.error) throw new Error(saved.error.code === 'P0001' && saved.error.message === 'train_context_changed'
+            ? 'train_context_changed' : 'train_finance_unavailable');
+          return saved.data === true;
+        });
+      } catch (error) {
+        // A changing RSVP/group or busy ledger retries next tick without starving payouts/settlement.
+        if (!(error instanceof Error) || !['train_context_changed', 'finance_busy_retry_same_request'].includes(error.message)) throw error;
+      }
+    }
     const work = await financeTransaction(db, (state) => ({
       state,
-      result: pendingFinanceWork(state),
+      result: pendingFinanceWork(state, now),
     }));
     for (const payout of work.payouts) {
       // Persisted operation ID is also the provider key. A timeout leaves the reservation intact.

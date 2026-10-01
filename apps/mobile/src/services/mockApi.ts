@@ -1,4 +1,4 @@
-import { DISCOVERY_PROFILE_LIMITS } from '@rummal/shared';
+import { DISCOVERY_PROFILE_LIMITS, fundTrainEvents, trainPoolSnapshot, type FundedEvent } from '@rummal/shared';
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
 import { activityRank, matchesActivity } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
@@ -27,7 +27,7 @@ export class MockRummalApi implements RummalApi {
   readonly isDemo = true;
   readonly demoCommunityStore = new DemoCommunityStore();
   readonly communityDemo: DemoCommunityBridge = {
-    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
+    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => !row.trainId && row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
     feedbackEvent: async id => {
       if (!this.demoCommunityStore.receipts.get(id)?.has(this.own.id) && !this.demoCommunityStore.appeals.get(id)?.has(this.own.id)) return this.getMeetup(id);
       return this.meetupService.get(id);
@@ -63,6 +63,25 @@ export class MockRummalApi implements RummalApi {
   async walletCommand(command: FinanceCommand) {
     // Return a committed receipt before checking today's event state or membership.
     if (this.commerce.state.requests[this.own.id + ':' + command.requestId]) return this.commerce.command(command);
+    if ('trainId' in command) {
+      const { demoTrainFinanceContext } = await import('./trains');
+      const context = demoTrainFinanceContext(command.trainId);
+      const group = this.groups.find(item => item.id === command.trainId);
+      if (!context || !group) throw new Error('train_unavailable');
+      const events: FundedEvent[] = [];
+      for (const id of context.meetupIds) {
+        const meetup = await this.meetupService.get(id);
+        if (meetup.status !== 'published' || (meetup.host.id !== this.own.id && !['joined','approved'].includes(meetup.viewerState.participationStatus))) continue;
+        const old = this.commerce.state.events[id];
+        events.push({ id, hostId: meetup.host.id, startsAt: meetup.startsAt, endsAt: meetup.effectiveEnd,
+          cancelled: false, eligibleAttendees: ['joined','approved'].includes(meetup.viewerState.participationStatus) ? [this.own.id] : [],
+          hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null,
+          review: old?.review ?? 'pending', settled: old?.settled ?? false });
+      }
+      const result = this.commerce.command(command, context.train);
+      this.commerce.state = fundTrainEvents(this.commerce.state, command.trainId, events, new Date().toISOString());
+      return command.action === 'train_pool_deposit' ? result : trainPoolSnapshot(this.commerce.state, command.trainId, new Date().toISOString());
+    }
     if(command.action==='gift') {await this.getProfile(command.recipientId);this.commerce.state.members[command.recipientId]??={tier:'plebbi',paidUntil:null,premiumMonths:0,payoutIdentity:`sandbox:${command.recipientId}`,suspended:false};}
     const eventId = 'meetupId' in command ? command.meetupId : command.action === 'reverse' ? this.commerce.state.contributions[command.contributionId]?.eventId : undefined;
     if (eventId) {

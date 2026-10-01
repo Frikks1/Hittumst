@@ -185,3 +185,57 @@ it('does not settle while recorded attendance cannot be checked', async () => {
   expect((await GET(request())).status).toBe(503);
   expect(stored.events[eventId]!.settled).toBe(false);
 });
+
+
+describe('automatic train sponsorship worker', () => {
+  const trainId = '10000000-0000-4000-8000-000000000001';
+  const future = { id: 'train-event', hostId: 'host', startsAt: '2026-09-24T12:00:00.000Z', endsAt: '2026-09-24T13:00:00.000Z', cancelled: false, eligibleAttendees: ['attendee'] };
+  function prepare() {
+    const now = '2026-09-23T12:00:00.000Z';
+    for (const command of [
+      { action: 'purchase' as const, amount: 1100, requestId: randomUUID() },
+      { action: 'train_pool_deposit' as const, trainId, amount: 1100, requestId: randomUUID() },
+      { action: 'train_pool_settings' as const, trainId, enabled: true, amountPerEvent: 1000, monthlyCap: 1100, expectedHostBps: 2500, requestId: randomUUID() },
+    ]) stored = applyFinanceCommand(stored,command,{ memberId: 'sponsor', now, randomId: randomUUID, train: { id: trainId, role: 'owner', public: false } }).state;
+    const original = mocks.rpc.getMockImplementation()!;
+    mocks.rpc.mockImplementation(async (name,args) => {
+      if (name === 'finance_train_auto_context') return { data: [future], error: null };
+      if (name === 'finance_train_auto_save') {
+        if (args.revision !== revision) return { data: false, error: null };
+        stored = structuredClone(args.state);
+        revision++;
+        return { data: true, error: null };
+      }
+      // Existing settled-event fixture remains an independent payout.
+      if (name === 'finance_event_context' && args?.meetup_id === 'train-event') return { data: future, error: null };
+      return original(name,args);
+    });
+  }
+  it('commits into the event pool once and retries without a duplicate debit', async () => {
+    prepare();
+    expect((await GET(request())).status).toBe(200);
+    expect(stored.balances['train:' + trainId]).toBe(0);
+    expect(stored.balances['pool:train-event']).toBe(1000);
+    expect(stored.contributions['train:' + trainId + ':train-event']).toMatchObject({ amount: 1000, serviceFee: 100, trainId });
+    expect((await GET(request())).status).toBe(200);
+    expect(stored.journal.filter(tx => tx.kind === 'train_sponsorship')).toHaveLength(1);
+  });
+  it('defers an RSVP race while still settling unrelated events', async () => {
+    prepare();
+    const original = mocks.rpc.getMockImplementation()!;
+    mocks.rpc.mockImplementation(async (name,args) => name === 'finance_train_auto_save'
+      ? { data: null, error: { code: 'P0001', message: 'train_context_changed' } } : original(name,args));
+    expect((await GET(request())).status).toBe(200);
+    expect(stored.balances['train:' + trainId]).toBe(1100);
+    expect(stored.events[eventId]!.settled).toBe(true);
+    expect(stored.contributions['train:' + trainId + ':train-event']).toBeUndefined();
+  });
+  it('does not hide an audit or database failure as an expected RSVP race', async () => {
+    prepare();
+    const original = mocks.rpc.getMockImplementation()!;
+    mocks.rpc.mockImplementation(async (name,args) => name === 'finance_train_auto_save'
+      ? { data: null, error: { code: 'P0001', message: 'balance_drift' } } : original(name,args));
+    expect((await GET(request())).status).toBe(503);
+    expect(stored.balances['train:' + trainId]).toBe(1100);
+  });
+});

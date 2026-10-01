@@ -9,11 +9,19 @@ import { Text } from './Typography';
 import SharedMedia from './SharedMedia';
 
 export default function GroupMedia({ groupId, admin }: { groupId: string; admin: boolean }) {
+  const { user } = useApp();
+  return <GroupMediaContent key={`${user?.id}:${groupId}`} groupId={groupId} admin={admin} />;
+}
+
+function GroupMediaContent({ groupId, admin }: { groupId: string; admin: boolean }) {
   const { locale, theme } = useApp(); const is = locale === 'is'; const router = useRouter();
   const [items, setItems] = useState<Media[]>([]); const [error, setError] = useState(false);
   useFocusEffect(useCallback(() => {
-    let active = true; setItems([]);
-    const load = () => void listGroupMedia(groupId).then(rows => { if (active) { setItems(rows); setError(false); } }).catch(() => { if (active) { setItems([]); setError(true); } });
+    let active = true; let request = 0; setItems([]); setError(false);
+    const load = () => {
+      const revision = ++request;
+      void listGroupMedia(groupId).then(rows => { if (active && revision === request) { setItems(rows); setError(false); } }).catch(() => { if (active && revision === request) { setItems([]); setError(true); } });
+    };
     load(); const timer = setInterval(load, 30000);
     return () => { active = false; clearInterval(timer); };
   }, [groupId]));

@@ -59,7 +59,7 @@ create function private.train_summary(p_id uuid) returns jsonb language sql stab
  from private.trains t join public.groups g on g.id=t.group_id
  left join public.group_members m on m.group_id=g.id and m.profile_id=(select auth.uid()) and m.status in ('active','invited')
  where g.id=p_id and g.status<>'removed' and (m.profile_id is not null or t.visibility='public')
- and not private.meetup_block_exists((select auth.uid()),g.owner_id);
+ and (m.status='active' or not private.meetup_block_exists((select auth.uid()),g.owner_id));
 $$;
 
 create function private.train_command_impl(p_action text,p_id uuid,p_input jsonb) returns jsonb
@@ -181,16 +181,33 @@ revoke all on function private.train_summary(uuid),private.train_command_impl(te
 grant execute on function private.train_command_impl(text,uuid,jsonb),public.train_command(text,uuid,jsonb) to authenticated;
 
 create function private.revoke_train_shares() returns trigger language plpgsql security definer set search_path='' as $$
+declare v_group uuid; v_profile uuid;
 begin
- if new.status<>'active' then
-   delete from private.train_locations where group_id=new.group_id and profile_id=new.profile_id;
-   update private.train_locations set recipients=array_remove(recipients,new.profile_id) where group_id=new.group_id and new.profile_id=any(recipients);
-   delete from private.train_going where group_id=new.group_id and profile_id=new.profile_id;
+ if tg_op='DELETE' then v_group:=old.group_id; v_profile:=old.profile_id;
+ elsif new.status<>'active' then v_group:=new.group_id; v_profile:=new.profile_id;
+ else return new;
  end if;
+ delete from private.train_locations where group_id=v_group and profile_id=v_profile;
+ update private.train_locations set recipients=array_remove(recipients,v_profile) where group_id=v_group and v_profile=any(recipients);
+ delete from private.train_going where group_id=v_group and profile_id=v_profile;
+ if tg_op='DELETE' then return old; end if;
  return new;
 end; $$;
-create trigger revoke_train_shares after update of status on public.group_members for each row execute function private.revoke_train_shares();
+create trigger revoke_train_shares after update of status or delete on public.group_members for each row execute function private.revoke_train_shares();
 revoke all on function private.revoke_train_shares() from public,anon,authenticated;
+
+-- A block withdraws earlier precise-location consent in both directions.
+-- Removing that block later must not silently restore the earlier recipients.
+create function private.revoke_blocked_train_shares() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ update private.train_locations set recipients=array_remove(recipients,new.blocked_id)
+ where profile_id=new.blocker_id and new.blocked_id=any(recipients);
+ update private.train_locations set recipients=array_remove(recipients,new.blocker_id)
+ where profile_id=new.blocked_id and new.blocker_id=any(recipients);
+ return new;
+end; $$;
+create trigger revoke_blocked_train_shares after insert on public.blocks for each row execute function private.revoke_blocked_train_shares();
+revoke all on function private.revoke_blocked_train_shares() from public,anon,authenticated;
 
 -- Internal candidate query is never directly callable by clients.
 create or replace function private.discover_candidates_impl(filters jsonb, cursor jsonb)

@@ -9,6 +9,7 @@ import {
   type FinanceCommand,
   type FinanceState,
   type TierId,
+  type TrainFinanceContext,
 } from '@rummal/shared';
 
 /** Local-only fixture. It never sends a purchase, bank detail, or token to a provider. */
@@ -52,13 +53,14 @@ export class CommerceDemo {
   snapshot() {
     return financeSnapshot(this.state, this.memberId);
   }
-  command(command: FinanceCommand) {
+  command(command: FinanceCommand, train?: TrainFinanceContext) {
     const applied = applyFinanceCommand(this.state, command, {
       memberId: this.memberId,
       now: new Date().toISOString(),
       randomId: Crypto.randomUUID,
+      train,
     });
-    this.state = applied.state;
+    if (command.action !== 'train_pool_info') this.state = applied.state;
     if (command.action === 'withdraw')
       this.state = finishPayout(
         this.state,

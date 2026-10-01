@@ -60,12 +60,19 @@ select throws_ok($$update public.meetups set starts_at=date_trunc('month',now())
   '23514','meetup_attendee_monthly_join_limit_reached','reschedule checks every participant destination allowance');
 select is((select month_start from private.meetup_join_reservations where meetup_id=pg_temp.event(1) and profile_id=auth.uid()),
   (date_trunc('month',now())+interval '1 month')::date,'failed reschedule leaves original reservation intact');
--- Make an event start within the same month without touching the durable slot.
+-- Move an unstarted event into the past. Just after midnight on the first day,
+-- one hour ago belongs to the previous month; its durable slot must follow the
+-- scheduled Iceland month rather than the clock's current month.
 update public.meetups set starts_at=now()-interval '1 hour',ends_at=now()+interval '1 hour' where id=pg_temp.event(18);
+select is((select month_start from private.meetup_join_reservations where meetup_id=pg_temp.event(18) and profile_id=auth.uid()),
+  (select date_trunc('month',starts_at at time zone 'Atlantic/Reykjavik')::date from public.meetups where id=pg_temp.event(18)),
+  'reschedule moves the durable reservation to the scheduled month');
 select lives_ok($$select public.leave_meetup(pg_temp.event(18))$$,'leaving after start succeeds');
 select ok((select released_at is null from private.meetup_join_reservations where meetup_id=pg_temp.event(18) and profile_id=auth.uid()),'leaving after start retains consumed slot');
 select throws_ok($$update public.meetups set starts_at=date_trunc('month',now())+interval '3 months' where id=pg_temp.event(18)$$,
   '23514','started_meetup_month_immutable','started occurrence cannot move its consumed allowance');
-select is(private.meetup_joins_used(auth.uid(),date_trunc('month',now())::date),1,'consumed no-show remains in scheduled month');
+select is(private.meetup_joins_used(auth.uid(),
+  (select date_trunc('month',starts_at at time zone 'Atlantic/Reykjavik')::date from public.meetups where id=pg_temp.event(18))),
+  1,'consumed no-show remains in scheduled month');
 select * from finish();
 rollback;

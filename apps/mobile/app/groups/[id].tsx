@@ -66,7 +66,7 @@ export default function GroupScreen() {
       },
       settled: () => setLoading(false),
     });
-  }, [id]);
+  }, [id, user?.id]);
   useFocusEffect(useCallback(() => {
     focused.current = true; generation.current++; pageDepth.current = 1;
     setMessages([]); setMembers([]); setGroup(null); setLoading(true);
@@ -86,7 +86,10 @@ export default function GroupScreen() {
       refreshCoordinator.current.invalidate();
       if (action === 'leave' || action === 'archive') router.replace('/groups' as never);
       else await load();
-    } catch { if (revision === generation.current) setError(true); }
+    } catch (failure) { if (revision === generation.current) {
+      if (failure instanceof Error && failure.message.includes('train_pool_has_funds')) setNotice(is ? 'Ekki er hægt að loka lestinni á meðan sjóðurinn á inneign eða óuppgerða styrki.' : 'This train cannot be archived while its pool has a balance or unsettled sponsorships.');
+      else setError(true);
+    } }
     finally { if (revision === generation.current) setBusy(false); }
   };
   const confirm = (label: string, action: GroupAction, input?: Record<string, string>) => confirmAction({
@@ -122,8 +125,8 @@ export default function GroupScreen() {
     {loading && <Text style={{ color: theme.colors.textMuted }}>{t('common.loading')}</Text>}
     {group && <>
       <Button variant="secondary" icon="star-outline" label={t('social.star')} disabled={busy} onPress={() => { void api.toggleStarredItem('group', id, group.name).then(starred => setNotice(starred ? (is ? 'Vistað í stjörnumerkt.' : 'Saved to starred.') : (is ? 'Fjarlægt úr stjörnumerktu.' : 'Removed from starred.'))).catch(() => setError(true)); }} />
-      <TrainPanel groupId={id} members={members} />
-      <GroupMedia groupId={id} admin={!!admin} />
+      <TrainPanel key={`train:${id}:${user?.id}`} groupId={id} members={members} />
+      <GroupMedia key={`media:${id}:${user?.id}`} groupId={id} admin={!!admin} />
       <GroupVoice key={`${id}:${user?.id}`} groupId={id} enabled={group.status === 'active'} />
       {notice ? <Text accessibilityRole="alert" style={{ color: theme.colors.textMuted }}>{notice}</Text> : null}
       {cursor && <Button variant="secondary" label={is ? 'Eldri skilaboð' : 'Older messages'} onPress={() => { if (!refreshCoordinator.current.isRunning()) { pageDepth.current++; void load(); } }} />}
@@ -149,5 +152,3 @@ export default function GroupScreen() {
   </View></Screen>;
 }
 const styles = StyleSheet.create({ page: { padding: 18, gap: 14 }, messages: { gap: 8 }, message: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, padding: 12, gap: 4 }, sender: { fontWeight: '900' }, composer: { gap: 8 }, input: { minHeight: 48, maxHeight: 160, borderWidth: 1, borderRadius: 14, padding: 12 } });
-
-

@@ -117,6 +117,7 @@ beforeEach(() => {
   mocks.serviceRpc.mockImplementation(async (name: string, args: Record<string, unknown> = {}) => {
     if (name === 'finance_load')
       return { data: { mode: 'sandbox', revision, state: structuredClone(durable) }, error: null };
+    if (name === 'finance_train_context') return { data: contextDenied ? null : { id: meetupId, role: 'owner', public: false }, error: contextDenied ? { code: '42501', message: 'train_forbidden' } : null };
     if (name === 'finance_event_context' || name === 'finance_publish_context') {
       if (contextDenied) return { data: null, error: { code: 'P0001', message: 'not_host' } };
       const event = durable.events[meetupId]!;
@@ -132,7 +133,7 @@ beforeEach(() => {
         error: null,
       };
     }
-    if (name === 'finance_event_save' || name === 'finance_publish_meetup') {
+    if (name === 'finance_event_save' || name === 'finance_publish_meetup' || name === 'finance_train_save') {
       if (commitError) return { data: null, error: commitError };
       if (loseFirstCas) {
         loseFirstCas = false;
@@ -427,5 +428,58 @@ describe('sponsorship HTTP authorization and atomic publication', () => {
     commitError = null;
     expect((await POST(request(input))).status).toBe(200);
     expect(Object.values(durable.contributions)).toHaveLength(1);
+  });
+});
+
+
+describe('train pool HTTP ledger boundary', () => {
+  const deposit = () => ({ action: 'train_pool_deposit', trainId: meetupId, amount: 500, requestId: uuid() });
+  it('uses the current member session and train membership at the atomic commit', async () => {
+    tier = 'plebbi';
+    const response = await POST(request(deposit()));
+    expect(response.status).toBe(200);
+    expect(durable.balances['wallet:' + memberId]).toBe(1700);
+    expect(durable.balances['train:' + meetupId]).toBe(500);
+    expect(mocks.serviceRpc).toHaveBeenCalledWith('finance_train_save', expect.objectContaining({
+      member_id: memberId, session_id: sessionId, train_id: meetupId, command_action: 'train_pool_deposit',
+    }));
+    expect(mocks.serviceRpc.mock.calls.some(([name]) => name === 'finance_save')).toBe(false);
+  });
+  it('keeps pool information read-only without storing stale receipts', async () => {
+    const prior = structuredClone(durable);
+    const response = await POST(request({ action: 'train_pool_info', trainId: meetupId, requestId: uuid() }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ balance: 0, available: true, serviceFeeBps: 1000 });
+    expect(durable).toEqual(prior);
+    expect(mocks.serviceRpc.mock.calls.some(([name]) => name.endsWith('_save'))).toBe(false);
+  });
+  it('returns a committed deposit receipt after membership is revoked without spending twice', async () => {
+    const cmd = deposit();
+    const first = await POST(request(cmd));
+    expect(first.status).toBe(200);
+    const receipt = await first.json();
+    contextDenied = true;
+    mocks.serviceRpc.mockClear();
+    const retry = await POST(request(cmd));
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual(receipt);
+    expect(durable.balances['train:' + meetupId]).toBe(500);
+    expect(mocks.serviceRpc.mock.calls.some(([name]) => name === 'finance_train_context')).toBe(false);
+  });
+  it('rechecks a membership change at commit and never saves the rejected debit', async () => {
+    const before = structuredClone(durable);
+    commitError = { code: '42501', message: 'train_forbidden' };
+    const response = await POST(request(deposit()));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ code: 'train_forbidden' });
+    expect(durable).toEqual(before);
+  });
+  it('recomputes a deposit after a concurrent ledger revision', async () => {
+    loseFirstCas = true;
+    const response = await POST(request(deposit()));
+    expect(response.status).toBe(200);
+    expect(durable.balances['train:' + meetupId]).toBe(500);
+    expect(durable.journal.filter(tx => tx.kind === 'train_pool_deposit')).toHaveLength(1);
+    expect(mocks.serviceRpc.mock.calls.filter(([name]) => name === 'finance_train_save')).toHaveLength(2);
   });
 });

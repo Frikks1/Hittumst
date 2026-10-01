@@ -29,4 +29,17 @@ describe('daily discovery selection', () => {
     await api.setSandboxTier('plebbi');
     expect((await api.discoveryAllowance()).limit).toBe(20);
   });
+  it('re-enables one refresh at the next Iceland calendar day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T23:59:00.000Z'));
+    const api = new MockRummalApi();
+    await api.discover(defaultFilters);
+    await api.discoveryAllowance(true);
+    await api.discover(defaultFilters);
+    expect(await api.discoveryAllowance()).toEqual({ limit: 20, canRefresh: false, nextRefreshAt: '2026-10-02T00:00:00.000Z' });
+    vi.setSystemTime(new Date('2026-10-02T00:00:00.000Z'));
+    expect((await api.discoveryAllowance()).canRefresh).toBe(true);
+    await api.discoveryAllowance(true);
+    await expect(api.discoveryAllowance(true)).rejects.toThrow('daily_discovery_refresh_unavailable');
+  });
 });
