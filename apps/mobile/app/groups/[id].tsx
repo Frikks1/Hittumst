@@ -10,6 +10,8 @@ import type { FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummar
 import { confirmAction } from '@/utils/confirmAction';
 import { createRefreshCoordinator } from '@/utils/refreshCoordinator';
 import GroupVoice from '@/components/GroupVoice';
+import TrainPanel from '@/components/TrainPanel';
+import GroupMedia from '@/components/GroupMedia';
 type GroupSnapshot = { group: GroupSummary; members: GroupMember[]; friends: FriendSummary[]; messages: GroupMessage[]; cursor: string | null };
 
 export default function GroupScreen() {
@@ -120,6 +122,8 @@ export default function GroupScreen() {
     {loading && <Text style={{ color: theme.colors.textMuted }}>{t('common.loading')}</Text>}
     {group && <>
       <Button variant="secondary" icon="star-outline" label={t('social.star')} disabled={busy} onPress={() => { void api.toggleStarredItem('group', id, group.name).then(starred => setNotice(starred ? (is ? 'Vistað í stjörnumerkt.' : 'Saved to starred.') : (is ? 'Fjarlægt úr stjörnumerktu.' : 'Removed from starred.'))).catch(() => setError(true)); }} />
+      <TrainPanel groupId={id} members={members} />
+      <GroupMedia groupId={id} admin={!!admin} />
       <GroupVoice key={`${id}:${user?.id}`} groupId={id} enabled={group.status === 'active'} />
       {notice ? <Text accessibilityRole="alert" style={{ color: theme.colors.textMuted }}>{notice}</Text> : null}
       {cursor && <Button variant="secondary" label={is ? 'Eldri skilaboð' : 'Older messages'} onPress={() => { if (!refreshCoordinator.current.isRunning()) { pageDepth.current++; void load(); } }} />}

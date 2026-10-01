@@ -1,3 +1,5 @@
+import { discoveryAllowanceSchema } from '@rummal/shared';
+import { communityRpc } from './communityLive';
 import { normalizeGender, diagnosisIdSchema } from '@rummal/shared';
 import type { MeetupSponsorship } from '@rummal/shared';
 import { queueMediaUpload } from './mediaUpload';
@@ -121,7 +123,8 @@ async function mapMessage(row: MessageRow): Promise<ChatMessage> {
     id: row.id, conversationId: row.conversation_id, senderId: row.sender_id,
     body: row.deleted_at || row.media_status === 'pending' || row.media_status === 'rejected' ? undefined : row.body ?? undefined,
     mediaStatus: row.media_status === 'pending' || row.media_status === 'approved' || row.media_status === 'rejected' ? row.media_status : undefined,
-    imageUrl: row.deleted_at ? undefined : imageUrl,
+    imageUrl: row.deleted_at || row.image_path?.endsWith('.mp4') ? undefined : imageUrl,
+    videoUrl: !row.deleted_at && row.image_path?.endsWith('.mp4') ? imageUrl : undefined,
     kind: (row.message_kind ?? (row.image_path ? 'image' : 'text')) as ChatMessage['kind'],
     albumShareId: row.album_share_id ?? undefined,
     albumItemId: row.album_item_id ?? undefined,
@@ -163,6 +166,8 @@ export class LiveRummalApi implements RummalApi {
   async getPremiumProfile(id: string) { const response = await supabase!.rpc('get_premium_profile', { profile_id: id }); if (response.error) throw response.error; return response.data as {effect:boolean;badge:boolean;months:number}; }
   async setPremiumProfile(effect:boolean,badge:boolean) { const response = await supabase!.rpc('set_premium_profile', {effect,badge}); if(response.error)throw response.error; }
   private readonly meetupService = new LiveMeetupService();
+
+  async discoveryAllowance(refresh = false) { return discoveryAllowanceSchema.parse(await communityRpc('discovery_allowance', { refresh })); }
 
   async discover(filters: DiscoveryFilters, cursor?: string | null) {
     const parsedCursor = cursor ? JSON.parse(cursor) as Json : null;

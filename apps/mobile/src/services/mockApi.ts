@@ -1,3 +1,4 @@
+import { DISCOVERY_PROFILE_LIMITS } from '@rummal/shared';
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
 import { activityRank, matchesActivity } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
@@ -139,8 +140,28 @@ export class MockRummalApi implements RummalApi {
     const days:Record<string,number>={'p-bjarni':0,'p-elias':0,'p-salka':3,'p-noa':0,'p-dagur':45,'p-embla':20};
     return {lastActive:Date.now()-(days[id]??45)*86400000,visible:id!=='p-embla',fof:id==='p-salka'};
   }
+  private discoveryBatch: string[] | null = null;
+  private discoveryExcluded: string[] = [];
+  private discoveryRefreshedOn: string | null = null;
+  private discoveryCapacity = 0;
+  async discoveryAllowance(refresh = false) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (refresh) {
+      if (this.discoveryRefreshedOn === today || this.discoveryBatch === null) throw new Error('daily_discovery_refresh_unavailable');
+      this.discoveryRefreshedOn = today; this.discoveryExcluded = this.discoveryBatch; this.discoveryBatch = null;
+    }
+    const next = new Date(); next.setUTCHours(24, 0, 0, 0);
+    return { limit: DISCOVERY_PROFILE_LIMITS[this.tier], canRefresh: this.discoveryBatch !== null && this.discoveryRefreshedOn !== today, nextRefreshAt: next.toISOString() };
+  }
   async discover(filters: DiscoveryFilters) {
     await delay();
+    const cap = DISCOVERY_PROFILE_LIMITS[this.tier];
+    const candidates = this.profiles.filter(p => !this.blocked.has(p.id)).sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
+    if (this.discoveryBatch === null) {
+      this.discoveryBatch = candidates.filter(p => !this.discoveryExcluded.includes(p.id)).slice(0, cap).map(p => p.id); this.discoveryCapacity = cap;
+    } else if (cap > this.discoveryCapacity) {
+      this.discoveryBatch = [...this.discoveryBatch, ...candidates.filter(p => !this.discoveryBatch!.includes(p.id) && !this.discoveryExcluded.includes(p.id)).slice(0, cap - this.discoveryBatch.length).map(p => p.id)]; this.discoveryCapacity = cap;
+    }
     const items = this.profiles.filter((profile) =>
       !this.blocked.has(profile.id)
       && profile.age >= filters.ageMin && profile.age <= filters.ageMax
@@ -154,7 +175,7 @@ export class MockRummalApi implements RummalApi {
       && (filters.tags.length === 0 || filters.tags.some((tag) => profile.tags.includes(tag)))
     );
     items.sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
-    return { items, nextCursor: null };
+    return { items: items.filter(p => this.discoveryBatch!.slice(0, cap).includes(p.id)), nextCursor: null };
   }
 
   async getProfile(id: string) {

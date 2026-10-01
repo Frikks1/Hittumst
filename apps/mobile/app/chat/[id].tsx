@@ -1,3 +1,4 @@
+import SharedMedia from '@/components/SharedMedia';
 import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
@@ -187,6 +188,7 @@ export default function ChatScreen() {
           </View></View>;
           return <View style={[styles.row,mine&&styles.mine]}><View style={styles.message}>
             <View style={[styles.bubble,{backgroundColor:mine?bubbles.sent:bubbles.received}]}>
+              {item.videoUrl && <SharedMedia uri={item.videoUrl} kind="video" />}
               {item.imageUrl&&<Image source={item.imageUrl} recyclingKey={item.id} cachePolicy="memory" accessibilityLabel={t('chat.image')} style={styles.messageImage} />}
               {item.mediaStatus === 'pending' && <Text accessibilityLiveRegion="polite" style={{ color: mine ? bubbles.sentText : theme.colors.text }}>{locale === 'is' ? 'Mynd í öryggisyfirferð…' : 'Image awaiting safety review…'}</Text>}
               {item.mediaStatus === 'rejected' && <Text accessibilityRole="alert" style={{ color: mine ? bubbles.sentText : theme.colors.text }}>{locale === 'is' ? 'Myndin var ekki birt.' : 'This image was not published.'}</Text>}
@@ -202,6 +204,7 @@ export default function ChatScreen() {
       <View style={[styles.composer,{backgroundColor:theme.colors.surface,borderTopColor:theme.colors.border,paddingBottom:Math.max(insets.bottom,10)}]}>
         {profileId&&<Pressable accessibilityRole="button" accessibilityLabel={t('chat.shareAlbum')} style={styles.composerIcon} onPress={()=>router.push(`/albums/share?profileId=${profileId}&name=${encodeURIComponent(name??'')}`)}><Ionicons name="lock-closed-outline" size={21} color={theme.colors.accent} /></Pressable>}
         <Pressable accessibilityRole="button" disabled={sending} accessibilityState={{disabled:sending}} accessibilityLabel={t('chat.image')} style={styles.composerIcon} onPress={()=>void sendImage()}><Ionicons name="image-outline" size={22} color={theme.colors.accent} /></Pressable>
+        {profileId && <Pressable accessibilityRole="button" accessibilityLabel={locale === 'is' ? 'Mynda og senda' : 'Capture and send'} style={styles.composerIcon} onPress={() => router.push(`/camera-send?profileId=${profileId}` as never)}><Ionicons name="camera-outline" size={22} color={theme.colors.accent} /></Pressable>}
         <TextInput accessibilityLabel={t('chat.placeholder')} value={draft} onChangeText={setDraft} multiline placeholder={t('chat.placeholder')} placeholderTextColor={theme.colors.textMuted} style={[styles.input,{color:theme.colors.text,backgroundColor:theme.colors.surfaceMuted}]} />
         <Pressable accessibilityRole="button" accessibilityLabel={t('common.send')} accessibilityState={{disabled:sending||!validMessageBody(draft),busy:sending}} disabled={sending||!validMessageBody(draft)} onPress={()=>void send()} style={[styles.send,{backgroundColor:theme.colors.accent,opacity:sending||!validMessageBody(draft)?0.45:1}]}>
           {sending?<ActivityIndicator color={theme.colors.textOnAccent} />:<Ionicons name="arrow-up" size={22} color={theme.colors.textOnAccent} />}

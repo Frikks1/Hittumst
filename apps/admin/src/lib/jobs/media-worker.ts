@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { normalizeMedia } from './media';
 
-export type MediaJob = { id: string; owner_id: string; album_id: string | null; target_type?: 'album' | 'profile_photo' | 'profile_video' | 'message' | 'meetup'; target_id?: string; object_path: string; media_type: 'image' | 'video'; review_approved?: boolean };
+export type MediaJob = { id: string; owner_id: string; album_id: string | null; target_type?: 'album' | 'profile_photo' | 'profile_video' | 'message' | 'meetup' | 'group' | 'message_video'; target_id?: string; object_path: string; media_type: 'image' | 'video'; review_approved?: boolean };
 export type MediaOperations = {
   download(path: string): Promise<Uint8Array>;
   normalize: typeof normalizeMedia;
@@ -62,10 +62,10 @@ export async function processMediaCleanup(jobs: CleanupJob[], operations: {
 
 export function mediaLimits(target: NonNullable<MediaJob['target_type']>) {
   return { maxBytes: (target === 'album' ? 30 : ['profile_photo','message'].includes(target) ? 10 : 50) * 1024 * 1024,
-    maxDurationMs: target === 'album' ? 15000 : target === 'profile_video' ? 10000 : null };
+    maxDurationMs: target === 'album' ? 15000 : target === 'profile_video' ? 10000 : ['group', 'message_video'].includes(target) ? 60000 : null };
 }
 export function mediaBucket(target: NonNullable<MediaJob['target_type']>) {
-  return { album:'album-media', profile_photo:'profile-photos', profile_video:'profile-videos', message:'message-images', meetup:'meetup-media' }[target];
+  return { album:'album-media', profile_photo:'profile-photos', profile_video:'profile-videos', message:'message-images', meetup:'meetup-media', group:'message-images', message_video:'message-images' }[target];
 }
 export function mediaDestination(job: MediaJob) {
   const target = job.target_type ?? 'album';

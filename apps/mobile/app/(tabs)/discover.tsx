@@ -1,3 +1,4 @@
+import type { DiscoveryAllowance } from '@rummal/shared';
 import { discoveryFilterCount } from '@/utils/discoveryPreferences';
 import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +14,7 @@ import { emptyFeed, PagedFeed } from '@/utils/pagedFeed';
 
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { discoveryFilters, setDiscoveryFilters, locationAllowed, user, t, theme } = useApp();
+  const { discoveryFilters, setDiscoveryFilters, locationAllowed, user, t, theme, locale } = useApp();
   const { appearance } = useAppearance();
   const { width, fontScale } = useWindowDimensions();
   const [listWidth, setListWidth] = useState(width);
@@ -24,6 +25,9 @@ export default function DiscoverScreen() {
   const tileWidth = Math.max(80, (listWidth - 32 - (columns - 1) * 10) / columns);
   const [own, setOwn] = useState<{ interests: string[]; tags: string[] }>({ interests: [], tags: [] });
   useFocusEffect(useCallback(() => { let active = true; void api.getOwnProfile().then(profile => { if (active) setOwn(profile); }).catch(() => { if (active) setOwn({ interests: [], tags: [] }); }); return () => { active = false; }; }, [user?.id]));
+  const [allowance, setAllowance] = useState<DiscoveryAllowance | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [allowanceError, setAllowanceError] = useState(false);
   const [snapshot, setSnapshot] = useState(emptyFeed<PublicProfile>);
   const feed = useMemo(() => new PagedFeed<PublicProfile, DiscoveryFilters>(
     (query, cursor) => api.discover(query, cursor), setSnapshot,
@@ -38,6 +42,19 @@ export default function DiscoverScreen() {
   useEffect(() => { if (!locationAllowed || !user) feed.clear(); }, [feed, locationAllowed, user]);
   useFocusEffect(useCallback(() => { load(); return () => feed.pause(); }, [feed, load]));
 
+  useEffect(() => {
+    let active = true;
+    if (!locationAllowed || !user || snapshot.loading) return;
+    void api.discoveryAllowance().then(value => { if (active) setAllowance(value); }).catch(() => { if (active) setAllowanceError(true); });
+    return () => { active = false; };
+  }, [snapshot.loading, locationAllowed, user]);
+  const rotate = async () => {
+    if (rotating || !allowance?.canRefresh) return;
+    setRotating(true); setAllowanceError(false);
+    try { setAllowance(await api.discoveryAllowance(true)); await feed.refresh(discoveryFilters); setAllowance(await api.discoveryAllowance()); }
+    catch { setAllowanceError(true); }
+    finally { setRotating(false); }
+  };
   const header = (
     <View style={styles.header}>
       <View style={styles.topbar}>
@@ -62,6 +79,12 @@ export default function DiscoverScreen() {
         ))}
         <ChoiceChip label={t('discovery.moreOptions')} selected={false} onPress={() => router.push('/filters')} />
       </ScrollView>
+      <View style={{ gap: 8 }}>
+        <Text style={{ color: theme.colors.textMuted }}>{locale === 'is' ? `Allt að ${allowance?.limit ?? 20} prófílar · eitt nýtt úrval á dag` : `Up to ${allowance?.limit ?? 20} profiles · one new selection per day`}</Text>
+        <Button variant="secondary" icon="refresh-outline" disabled={!locationAllowed || !allowance?.canRefresh || snapshot.loading} loading={rotating} label={allowance?.canRefresh ? (locale === 'is' ? 'Sækja nýtt fólk' : 'Show new people') : (locale === 'is' ? 'Nýtt úrval á morgun' : 'New selection tomorrow')} onPress={() => void rotate()} />
+        <Button variant="ghost" label={locale === 'is' ? 'Sjá fleiri prófíla með áskrift' : 'See more profiles with a subscription'} onPress={() => router.push('/membership')} />
+        {allowanceError && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{locale === 'is' ? 'Ekki tókst að endurnýja. Reyndu aftur síðar.' : 'Could not refresh. Try again later.'}</Text>}
+      </View>
       <View style={styles.resultBar}>
         <Text accessibilityLiveRegion="polite" style={[styles.resultText, { color: theme.colors.textMuted }]}>
           {snapshot.loading && !snapshot.items.length ? t('common.loading') : t(snapshot.items.length === 1 ? 'discovery.oneResult' : 'discovery.results', { count: snapshot.items.length })}
