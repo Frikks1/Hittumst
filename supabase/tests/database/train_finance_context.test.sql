@@ -10,6 +10,9 @@ end $$;
 update private.private_locations set verified_at=now();
 update private.commerce_configuration set mode='sandbox';
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true where id=1;
+-- A fresh database starts with {}. jsonb_set creates the final key only, so
+-- initialize the ledger collections before inserting nested test fixtures.
+update private.finance_state set state='{"balances":{},"contributions":{},"events":{},"members":{},"flags":[]}'::jsonb||state;
 select ok(not has_function_privilege('authenticated','public.finance_train_context(uuid,uuid,uuid,text)','execute'),'members cannot impersonate another train depositor');
 select ok(not has_function_privilege('authenticated','public.finance_train_save(uuid,uuid,uuid,text,bigint,jsonb)','execute'),'members cannot submit invented train ledger state');
 select ok(not has_function_privilege('authenticated','public.finance_train_auto_save(uuid,bigint,jsonb,jsonb)','execute'),'members cannot run automatic sponsorship commits');
@@ -44,7 +47,7 @@ select is(public.finance_train_context('10000000-0000-0000-0000-000000000001',md
   'owner','service resolves current owner authority from the database');
 select is(current_setting('request.jwt.claims')::jsonb,'{"role":"service_role"}'::jsonb,
   'member authorization restores the original service claims');
-select throws_ok($$select public.finance_train_context('10000000-0000-0000-0000-000000000002',md5('pgtap-session:10000000-0000-0000-000000000002')::uuid,current_setting('test.train')::uuid,'train_pool_settings')$$,
+select throws_ok($$select public.finance_train_context('10000000-0000-0000-0000-000000000002',md5('pgtap-session:10000000-0000-0000-0000-000000000002')::uuid,current_setting('test.train')::uuid,'train_pool_settings')$$,
   '42501','train_admin_required','ordinary member cannot configure pool spending');
 select throws_ok($$select public.finance_train_context('10000000-0000-0000-0000-000000000003',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid,current_setting('test.train')::uuid,'train_pool_deposit')$$,
   '42501','train_forbidden','outsider cannot fund a private train');
