@@ -2,7 +2,9 @@ name: hittumst-base44
 
 # Base44 development environment for the Hittumst workspace.
 #
-#   app (port 3000) — the social/dating product: apps/mobile, the Expo React Native
+#   edge (port 3000) — preview entry point: an nginx same-origin proxy in front of
+#                     the `app` service's Expo dev server (see docker/base44-edge.conf).
+#   app              — the social/dating product: apps/mobile, the Expo React Native
 #                     client, served as a web app so it is viewable in the preview.
 #                     Uses the app's seeded offline demo data; no credentials needed.
 #   web (port 3001) — apps/admin, the Next.js public bilingual website ("/") and the
@@ -29,7 +31,32 @@ services:
     volumes:
       - ./:/app
 
-  # The social app (Expo / React Native) on the preview port.
+  # Preview entry point: proxies the Expo dev server so the browser sees a
+  # same-origin dev server (see docker/base44-edge.conf).
+  edge:
+    image: nginx:alpine
+    restart: on-failure
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/base44-edge.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://127.0.0.1:3000/
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 4
+
+  # The social app (Expo / React Native); reached through the `edge` proxy.
   app:
     <<: *app-image
     working_dir: /app
@@ -48,8 +75,6 @@ services:
     depends_on:
       deps:
         condition: service_completed_successfully
-    ports:
-      - "3000:3000"
     volumes:
       - ./:/app
     env_file:

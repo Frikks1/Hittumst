@@ -5,6 +5,16 @@
 `docker-compose.base44.yml` runs the product itself — `apps/mobile`, the Expo React
 Native client, served as a web app on host port 3000 (the preview entry point).
 
+That port is served by the `edge` service (nginx, `docker/base44-edge.conf`), not by
+Expo directly. Expo CLI's dev-server CORS middleware rejects any request whose
+`Origin` header differs from the `Host` it receives; behind the preview proxy the
+browser's origin is the public host while the sandbox host is
+`<port>-<sandbox id>.$BASE44_SANDBOX_HOST_DOMAIN`, so Metro answered bundle, HMR
+(`/hot`) and `/logs` requests with `Unauthorized request from ...` (500). The proxy
+derives `Origin` from the incoming `Host` and forwards websocket upgrades, so every
+request looks same-origin to Expo. Keep `app` unpublished and route port 3000
+through `edge`.
+
 A second service runs `apps/admin` on port 3001: the Next.js public bilingual
 website ("/") plus the moderation console. Both reach the same workspace through a
 one-shot `deps` service that installs from the lockfile; they never install concurrently.
@@ -67,6 +77,10 @@ and the original hardening applies — keep it that way.
 ```bash
 curl -s http://localhost:3000/ | grep expo-reset        # mobile web app shell
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3001/          # 200 (website)
+# through the edge proxy, requests carrying the preview origin must be accepted
+# (200, not 500 "Unauthorized request from ..."):
+curl -s -o /dev/null -w '%{http_code}\n' -H "Origin: https://3000-$BASE44_PUBLIC_HOST_SUFFIX" \
+  http://localhost:3000/logs
 docker compose -f docker-compose.base44.yml logs -f app web
 ```
 
