@@ -42,7 +42,7 @@ function httpsOrigin(value, label) {
   }
 }
 
-export function stagingOperationsConfig(env) {
+export function stagingOperationsConfig(env, { readOnly = false } = {}) {
   if (
     env.HITTUMST_STAGING_OPERATIONS_ENABLED !== 'true' ||
     env.STAGING_SYNTHETIC_DATA_CONFIRMED !== 'true'
@@ -67,12 +67,11 @@ export function stagingOperationsConfig(env) {
     adminOrigin === httpsOrigin(env.PRODUCTION_ADMIN_ORIGIN, 'Production admin URL')
   )
     throw new Error('The production admin origin is denied.');
-  if (
-    (env.STAGING_CRON_SECRET ?? '').length < 32 ||
-    (env.STAGING_PUSH_WORKER_SECRET ?? '').length < 32
-  )
-    throw new Error('Separate worker credentials with at least 32 characters are required.');
-  if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(env.STAGING_SUPABASE_PUBLISHABLE_KEY ?? ''))
+  if ((env.STAGING_CRON_SECRET ?? '').length < 32)
+    throw new Error('A readiness credential with at least 32 characters is required.');
+  if (!readOnly && (env.STAGING_PUSH_WORKER_SECRET ?? '').length < 32)
+    throw new Error('A separate push worker credential with at least 32 characters is required.');
+  if (!readOnly && !/^sb_publishable_[A-Za-z0-9_-]+$/.test(env.STAGING_SUPABASE_PUBLISHABLE_KEY ?? ''))
     throw new Error('An isolated staging publishable key is required.');
   return {
     ref,
@@ -201,8 +200,9 @@ export async function runStagingOperations(
 }
 
 async function main() {
-  const config = stagingOperationsConfig(process.env);
-  const report = await runStagingOperations(config, { readOnly: process.argv.includes('--health-only') });
+  const readOnly = process.argv.includes('--health-only');
+  const config = stagingOperationsConfig(process.env, { readOnly });
+  const report = await runStagingOperations(config, { readOnly });
   await mkdir('artifacts/operations', { recursive: true });
   await writeFile('artifacts/operations/staging-jobs.json', JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify(report, null, 2));

@@ -8,8 +8,8 @@ import { EventMediaGallery, type PendingEventMedia } from '@/features/hittingar/
 import { Text } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Button, ChoiceChip, Field, Screen, textStyles } from '@/components/ui';
 import { SafetyNotice } from '@/features/hittingar/components';
 import {
@@ -126,6 +126,7 @@ export default function CreateHittingurScreen() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
+  const [searchFeedback, setSearchFeedback] = useState<'empty' | 'error' | null>(null);
   const [places, setPlaces] = useState<MeetupPlaceResult[]>([]);
   const [restored, setRestored] = useState(Boolean(editingId));
   const localDraftOwnerId = editingId ? null : user?.id ?? null;
@@ -261,7 +262,6 @@ export default function CreateHittingurScreen() {
     return () => clearTimeout(timer);
   }, [basicsComplete, form, persist, restored, step]);
 
-  const stepErrors = useMemo(() => validateCreateStep(stage, form), [form, stage]);
   const next = async () => {
     const nextErrors = validateCreateStep(stage, form);
     setErrors(nextErrors);
@@ -273,8 +273,14 @@ export default function CreateHittingurScreen() {
   const searchPlaces = async () => {
     if (search.trim().length < 2) return;
     setSearching(true);
+    setSearchFeedback(null);
     try {
-      setPlaces(await meetupApi.searchMeetupPlaces(search.trim(), { locale, limit: 6 }));
+      const results = await meetupApi.searchMeetupPlaces(search.trim(), { locale, limit: 6 });
+      setPlaces(results);
+      if (results.length === 0) setSearchFeedback('empty');
+    } catch {
+      setPlaces([]);
+      setSearchFeedback('error');
     } finally {
       setSearching(false);
     }
@@ -284,6 +290,7 @@ export default function CreateHittingurScreen() {
     setForm((current) => formFromPlace(current, place));
     setSearch(place.name);
     setPlaces([]);
+    setSearchFeedback(null);
   };
 
   const selectPin = async (coordinate: GeoCoordinate) => {
@@ -350,8 +357,8 @@ export default function CreateHittingurScreen() {
           <Text style={[textStyles.eyebrow, { color: theme.colors.accent }]}>{t('hittingar.create.stepLabel', { step: step + 1 })}</Text>
           {saveStatus !== 'idle' && <Text accessibilityLiveRegion="polite" style={[styles.saveStatus, { color: saveStatus === 'error' ? theme.colors.danger : theme.colors.textMuted }]}>{t(`hittingar.create.saveStatus.${saveStatus}`)}</Text>}
         </View>
-        <Text style={[textStyles.title, { color: theme.colors.text }]}>{t(`hittingar.create.step${stage + 1}Title` as TranslationKey)}</Text>
-        <Text style={[textStyles.body, { color: theme.colors.textMuted }]}>{t(`hittingar.create.step${stage + 1}Body` as TranslationKey)}</Text>
+        <Text accessibilityRole="header" style={[styles.stageTitle, { color: theme.colors.text }]}>{t(`hittingar.create.step${stage + 1}Title` as TranslationKey)}</Text>
+        <Text style={[styles.stageBody, { color: theme.colors.textMuted }]}>{t(`hittingar.create.step${stage + 1}Body` as TranslationKey)}</Text>
 
         {stage === 0 && (
           <View style={styles.form}>
@@ -425,8 +432,11 @@ export default function CreateHittingurScreen() {
               <SafetyNotice title={t('hittingar.create.onlineProtectedTitle')}><Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{t('hittingar.create.onlineProtectedBody')}</Text></SafetyNotice>
             </>}
             {form.venueMode !== 'online' && <>
-            <Field label={t('hittingar.create.searchLabel')} value={search} onChangeText={setSearch} placeholder={t('hittingar.create.searchPlaceholder')} />
-            <Button label={t('hittingar.create.searchAction')} icon="search-outline" variant="secondary" loading={searching} disabled={search.trim().length < 2} onPress={() => void searchPlaces()} />
+            <View style={styles.searchRow}>
+              <View style={styles.flex}><Field label={t('hittingar.create.searchLabel')} value={search} onChangeText={(value) => { setSearch(value); setPlaces([]); setSearchFeedback(null); }} onSubmitEditing={() => void searchPlaces()} placeholder={t('hittingar.create.searchPlaceholder')} /></View>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('hittingar.create.searchAction')} accessibilityState={{ disabled: searching || search.trim().length < 2, busy: searching }} disabled={searching || search.trim().length < 2} onPress={() => void searchPlaces()} style={[styles.searchButton, { backgroundColor: theme.colors.accent, opacity: search.trim().length < 2 ? 0.45 : 1 }]}>{searching ? <ActivityIndicator color={theme.colors.textOnAccent} /> : <Ionicons name="search-outline" size={22} color={theme.colors.textOnAccent} />}</Pressable>
+            </View>
+            {searchFeedback && <Text accessibilityLiveRegion="polite" style={[styles.switchBody, { color: searchFeedback === 'error' ? theme.colors.danger : theme.colors.textMuted }]}>{searchFeedback === 'error' ? (locale === 'is' ? 'Staðaleitin tókst ekki. Reyndu aftur.' : 'Place search failed. Please try again.') : (locale === 'is' ? 'Engir staðir fundust. Prófaðu annað heiti eða heimilisfang.' : 'No places found. Try another name or address.')}</Text>}
             {places.map((place) => (
               <Pressable key={place.id} accessibilityRole="button" onPress={() => selectPlace(place)} style={[styles.place, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
                 <Ionicons name="location-outline" size={21} color={theme.colors.accent} />
@@ -435,7 +445,7 @@ export default function CreateHittingurScreen() {
             ))}
             <HittingurLocationPicker value={form.latitude === null || form.longitude === null ? null : { latitude: form.latitude, longitude: form.longitude }} onChange={(value) => void selectPin(value)} />
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.generalAreaLabel')}</Text>
-            <View style={styles.wrap}>{HITTINGUR_GENERAL_AREAS.map((value) => <ChoiceChip key={value} label={t(generalAreaKey(value))} selected={form.generalAreaId === value} onPress={() => update('generalAreaId', value)} />)}</View>
+            <View style={styles.areaGrid}>{HITTINGUR_GENERAL_AREAS.map((value) => <View key={value} style={styles.areaCell}><ChoiceChip label={t(generalAreaKey(value))} selected={form.generalAreaId === value} onPress={() => update('generalAreaId', value)} /></View>)}</View>
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.visibilityLabel')}</Text>
             <View style={styles.wrap}>
               <ChoiceChip label={t('hittingar.location.protected')} selected={form.locationVisibility === 'protected'} onPress={() => setForm((current) => ({ ...current, locationVisibility: 'protected', publicLocationConfirmed: false }))} />
@@ -500,7 +510,7 @@ export default function CreateHittingurScreen() {
         {errors.length > 0 && <View style={[styles.errors, { backgroundColor: theme.colors.surface }]}>{errors.map((key) => <Text key={key} style={[styles.errorText, { color: theme.colors.danger }]}>• {t(key)}</Text>)}</View>}
         <View style={styles.actions}>
           {step > 0 && <View style={styles.flex}><Button label={t('common.back')} variant="secondary" onPress={() => { setErrors([]); setStep((value) => value - 1); }} /></View>}
-          {step < 3 ? <View style={styles.flex}><Button label={t('common.continue')} disabled={stepErrors.length > 0} onPress={() => void next()} /></View> : (
+          {step < 3 ? <View style={styles.flex}><Button label={t('common.continue')} onPress={() => void next()} /></View> : (
             <>
               <View style={styles.flex}><Button label={t('hittingar.create.saveDraft')} variant="secondary" loading={saving} onPress={() => void save(false)} /></View>
               <View style={styles.flex}><Button label={sponsoring ? (locale === 'is' ? 'Birta og styrkja' : 'Publish and sponsor') : t(editingId ? 'hittingar.create.saveChanges' : 'hittingar.create.publish')} disabled={Boolean(pendingPublication) || (sponsoring && !sponsorship)} loading={saving} onPress={() => void save(true)} /></View>
@@ -513,7 +523,9 @@ export default function CreateHittingurScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 20, paddingBottom: 42, gap: 12 },
+  page: { padding: 16, paddingBottom: 24, gap: 10 },
+  stageTitle: { fontSize: 24, lineHeight: 30, fontWeight: '800' },
+  stageBody: { fontSize: 14, lineHeight: 20 },
   steps: { flexDirection: 'row', gap: 6 },
   step: { flex: 1, height: 5, borderRadius: 3 },
   saveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -521,6 +533,10 @@ const styles = StyleSheet.create({
   form: { gap: 15, marginTop: 8 },
   fieldLabel: { fontSize: 14, fontWeight: '800' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  areaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  areaCell: { width: '48%', flexGrow: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  searchButton: { minWidth: 48, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   twoColumns: { flexDirection: 'row', gap: 10 },
   switchRow: { borderWidth: 1, borderRadius: 18, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12 },
   switchCopy: { flex: 1, gap: 3 },

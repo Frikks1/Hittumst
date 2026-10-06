@@ -2192,6 +2192,9 @@ export type Database = {
       get_my_entitlement: { Args: never; Returns: Json }
       get_premium_profile: { Args: { profile_id: string }; Returns: Json }
       get_public_profile: { Args: { profile_id: string }; Returns: Json }
+      list_profile_activity: { Args: { kind: string; cursor?: Json; page_size?: number }; Returns: Json }
+      record_profile_view: { Args: { profile_id: string }; Returns: undefined }
+      send_profile_tap: { Args: { profile_id: string }; Returns: undefined }
       get_recovery_media_manifest: {
         Args: { after_key?: string; batch_size?: number }
         Returns: Json

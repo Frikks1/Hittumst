@@ -2,13 +2,16 @@ import { HostCommunity } from '@/features/hittingar/CommunityPanels';
 import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { profileActivityCopy } from '@/i18n/profileActivity';
+import { ExpandableProfileSection } from '@/components/ProfileSetup';
 import { confirmAction } from '@/utils/confirmAction';
 
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { Button, ChoiceChip, Screen, TrustBanner, textStyles } from '@/components/ui';
+import { Button, ChoiceChip, EmptyState, Screen, TrustBanner, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import { useProfileTransition } from '@/providers/ProfileTransitionProvider';
@@ -55,29 +58,45 @@ function FeedbackBlock({ targetType, targetId, title }: { targetType: 'profile' 
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { discoveryFilters, setDiscoveryFilters, t, theme, locationAllowed } = useApp();
+  const { discoveryFilters, setDiscoveryFilters, t, theme, locationAllowed, user, locale } = useApp();
+  const copy = profileActivityCopy(locale);
+  const { height } = useWindowDimensions();
   const transition = useProfileTransition();
   const hero = useRef<View>(null);
-  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [storedProfile, setProfile] = useState<PublicProfile | null>(null);
+  const [loadedProfileKey, setLoadedProfileKey] = useState<string | null>(null);
+  const profileKey = user && id ? `${user.id}:${id}` : null;
+  const profile = locationAllowed && loadedProfileKey === profileKey ? storedProfile : null;
   const [publicStars, setPublicStars] = useState<StarredItem[]>([]);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [tapped, setTapped] = useState(false);
+  const [sendingTap, setSendingTap] = useState(false);
+  const [tapNotice, setTapNotice] = useState('');
+  const [communityOpen, setCommunityOpen] = useState(false);
+  const tapPending = useRef<number | null>(null);
   const pending = useRef<number | null>(null);
   const generation = useRef(0);
   const load = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user || !locationAllowed) { setLoading(false); return; }
     const revision = generation.current;
     setLoading(true); setFailed(false);
     const results = await Promise.allSettled([api.getProfile(id), api.listStarredItems(id)]);
     if (revision !== generation.current) return;
     const [profileResult, stars] = results;
     if (profileResult.status === 'fulfilled') setProfile(profileResult.value); else setProfile(null);
+    setLoadedProfileKey(`${user.id}:${id}`);
     setPublicStars(stars.status === 'fulfilled' ? stars.value : []);
     setFailed(results.some(result => result.status === 'rejected')); setLoading(false);
-  }, [id]);
-  useEffect(() => { generation.current++; setBusy(false); setProfile(null); setNotice(''); void load(); return () => { generation.current++; }; }, [load]);
+  }, [id, locationAllowed, user?.id]);
+  useEffect(() => { generation.current++; setBusy(false); setProfile(null); setNotice(''); setTapped(false); setSendingTap(false); setTapNotice(''); setCommunityOpen(false); void load(); return () => { generation.current++; }; }, [load]);
+  useFocusEffect(useCallback(() => {
+    if (profile?.id === id && user && id !== user.id && locationAllowed) {
+      void api.recordProfileView(id).catch(() => undefined);
+    }
+  }, [id, profile?.id, user?.id, locationAllowed]));
   const action = async <T,>(task: () => Promise<T>, onSuccess?: (value: T) => void) => {
     const revision = generation.current;
     if (pending.current === revision) return;
@@ -86,39 +105,65 @@ export default function PublicProfileScreen() {
     catch { if (revision === generation.current) setFailed(true); }
     finally { if (pending.current === revision) pending.current = null; if (revision === generation.current) setBusy(false); }
   };
-  if (!profile) return <Screen back><View style={{ padding: 22, gap: 16 }}>{loading ? <Text style={{ color: theme.colors.textMuted }}>{t('common.loading')}</Text> : <HostCommunity key={id} hostId={id} />}</View></Screen>;
+  if (!locationAllowed) return <Screen back title={t('profile.view')}><EmptyState icon="location-outline" title={t('location.staleTitle')} body={t('location.lockedHint')} action={<Button label={t('location.verifyAgain')} onPress={() => router.push('/location-gate')} />} /></Screen>;
+  if (!profile) return <Screen back title={t('profile.view')}><View style={{ padding: 16, gap: 16 }}>{loading ? <View style={styles.loading}><ActivityIndicator accessibilityLabel={t('common.loading')} color={theme.colors.accent} /></View> : <><EmptyState icon="person-circle-outline" title={copy.profileUnavailable} body={copy.profileUnavailableBody} action={<Button variant="secondary" label={t('common.retry')} onPress={() => void load()} />} /><HostCommunity key={id} hostId={id} /></>}</View></Screen>;
+  const cover = profile.photos.find(photo => photo.id === profile.coverPhotoId && photo.status === 'approved') ?? profile.photos.find(photo => photo.status === 'approved');
   const message = () => {
     if (!locationAllowed) { router.push('/location-gate'); return; }
     return action(() => api.startConversation(profile.id), conversation => router.push(('/chat/' + conversation + '?name=' + encodeURIComponent(profile.displayName) + '&profileId=' + profile.id) as never));
+  };
+  const tap = async () => {
+    if (!locationAllowed) { router.push('/location-gate'); return; }
+    const revision = generation.current;
+    if (tapPending.current === revision || tapped) return;
+    tapPending.current = revision; setSendingTap(true); setTapNotice('');
+    try {
+      await api.sendProfileTap(profile.id);
+      if (revision === generation.current) { setTapped(true); }
+    } catch (error) {
+      if (revision === generation.current) {
+        const message = error && typeof error === 'object' && 'message' in error ? String(error.message) : '';
+        if (/tap_cooldown/i.test(message)) setTapped(true);
+        setTapNotice(/tap_rate_limited/i.test(message) ? copy.tapRateLimited : /tap_cooldown/i.test(message) ? copy.tapCooldown : copy.tapFailed);
+      }
+    } finally {
+      if (tapPending.current === revision) tapPending.current = null;
+      if (revision === generation.current) setSendingTap(false);
+    }
   };
   const block = () => confirmAction({ title: t('block.confirmTitle', { name: profile.displayName }), message: t('block.confirmBody'), cancelLabel: t('common.cancel'), confirmLabel: t('block.action'), destructive: true,
     onConfirm: () => action(() => api.block(profile.id), () => router.replace('/(tabs)/discover')),
   });
 
   return (
-    <Screen back>
+    <Screen back title={t('profile.view')} footer={profile.id !== user?.id ? (
+      <View style={{ gap: 8 }}>
+      {!!tapNotice && <Text accessibilityRole="alert" style={{ color: theme.colors.text, fontSize: 13 }}>{tapNotice}</Text>}
+      <View style={styles.contactActions}>
+        <View style={styles.flex}><Button icon="chatbubble-outline" disabled={busy} label={t('profile.message')} onPress={() => void message()} /></View>
+        <View style={styles.tapAction}><Button variant="secondary" icon={tapped ? 'checkmark' : 'flame-outline'} hint={copy.tapHint} loading={sendingTap} disabled={busy || tapped} label={tapped ? copy.tapped : copy.tap} onPress={() => void tap()} /></View>
+      </View>
+      </View>
+    ) : undefined}>
       <View style={styles.page}>
-        <View ref={hero} onLayout={() => hero.current?.measureInWindow((x, y, width, height) => transition.finish(profile.id, { x, y, width, height }))} style={styles.hero}>
-          {profile.photos[0]?.url ? <Image source={profile.photos[0].url} style={styles.heroImage} /> : <View style={[styles.heroImage, styles.placeholder, { backgroundColor: theme.colors.surfaceMuted }]}><Ionicons name="person" size={70} color={theme.colors.textMuted} /></View>}
-          <View style={styles.heroOverlay}>
+        <View ref={hero} onLayout={() => hero.current?.measureInWindow((x, y, width, height) => transition.finish(profile.id, { x, y, width, height }))} style={[styles.hero, { height: Math.max(280, Math.min(480, height * 0.52)) }]}>
+          {cover?.url ? <Image source={cover.url} contentFit="cover" style={styles.heroImage} /> : <View style={[styles.heroImage, styles.placeholder, { backgroundColor: theme.colors.surfaceMuted }]}><Ionicons name="person" size={70} color={theme.colors.textMuted} /></View>}
+          <View style={styles.heroFavorite}><FavoriteButton key={profile.id} profileId={profile.id} name={profile.displayName} /></View>
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,.85)']} style={styles.heroOverlay}>
             <View style={styles.statusLine}>
               {profile.isOnline && <View style={styles.onlineDot} />}
               <Text style={styles.statusText}>{profile.isOnline ? t('common.online') : profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
             </View>
             <Text style={styles.heroName}>{profile.displayName}, {profile.age}</Text>
-            <FavoriteButton key={profile.id} profileId={profile.id} name={profile.displayName} />
             {profile.diagnosisIds?.map(id=><Text key={id} style={styles.heroMeta}>{t(`diagnosis.${id}`)} · {t('diagnosis.approved')}</Text>)}
             <Text style={styles.heroMeta}>{profile.pronouns} · {profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
-          </View>
+          </LinearGradient>
         </View>
         <View style={styles.body}>
           {failed && <View><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('privacy.actionFailed')}</Text><Button loading={loading} disabled={busy} variant="secondary" label={t('common.retry')} onPress={() => void load()} /></View>}
-          {!!notice && <Text accessibilityRole="alert" style={{ color: theme.colors.text }}>{notice}</Text>}
+          {!!notice && <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.text }}>{notice}</Text>}
           <PremiumProfile profileId={profile.id}/>
-          <HostCommunity key={profile.id} hostId={profile.id} showTitle={false} />
-          {profile.coverPhotoId && profile.photos.some(photo => photo.id === profile.coverPhotoId) && <Image source={profile.photos.find(photo => photo.id === profile.coverPhotoId)?.url} accessibilityLabel={t('profile.cover')} contentFit="cover" style={{ width: '100%', height: 170, borderRadius: 20 }} />}
           {!!profile.conversationPrompt && <View style={[styles.extraSection, { borderColor: theme.colors.accent }]}><Text style={[textStyles.eyebrow, { color: theme.colors.accent }]}>{t('profile.prompt')}</Text><Text style={[textStyles.heading, { color: theme.colors.text }]}>{profile.conversationPrompt}</Text><Button variant="secondary" label={t('profile.promptReply')} onPress={() => void message()} /></View>}
-          {profile.commentWallEnabled !== false && <FeedbackBlock targetType="profile" targetId={profile.id} title={t('feedback.title')} />}
           {publicStars.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('social.starred')}</Text><View style={styles.chips}>{publicStars.map((item) => <ChoiceChip key={item.id} label={item.label} selected onPress={() => undefined} />)}</View></View>}
           <View style={styles.chips}>{profile.identity.map((item) => <ChoiceChip key={item} label={t(`identity.${item}`)} selected onPress={() => undefined} />)}</View>
           <Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.about')}</Text>
@@ -127,16 +172,19 @@ export default function PublicProfileScreen() {
           <View style={styles.chips}>{profile.lookingFor.map((item) => <ChoiceChip key={item} label={t(`intent.${item}`)} selected onPress={() => undefined} />)}</View>
           {profile.tags.length > 0 && <><Text style={[textStyles.eyebrow, styles.section, { color: theme.colors.textMuted }]}>{t('profile.tags')}</Text><View style={styles.chips}>{profile.tags.map((tag) => <ChoiceChip key={tag} label={profileTagById.get(tag)?.label ?? tag} selected={discoveryFilters.tags.includes(tag)} onPress={() => { setDiscoveryFilters({ ...discoveryFilters, tags: [tag] }); router.replace('/(tabs)/discover'); }} />)}</View></>}
           {profile.interests.length > 0 && <><Text style={[textStyles.eyebrow, styles.section, { color: theme.colors.textMuted }]}>{t('profile.interests')}</Text><View style={styles.chips}>{profile.interests.map((interest) => <ChoiceChip key={interest} label={interest} selected onPress={() => undefined} />)}</View></>}
+          {profile.commentWallEnabled !== false && <FeedbackBlock targetType="profile" targetId={profile.id} title={t('feedback.title')} />}
           {profile.socials.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.socials')}</Text>{profile.socials.map((social) => <Pressable key={social.platform} accessibilityRole="link" onPress={() => void Linking.openURL(socialUrl(social))} style={styles.externalLink}><Ionicons name="open-outline" size={18} color={theme.colors.accent} /><Text style={[styles.externalLinkText, { color: theme.colors.accent }]}>{t(`profile.${social.platform}`)} · {social.handle}</Text></Pressable>)}</View>}
           {profile.videos.length > 0 && <View style={[styles.extraSection, { borderColor: theme.colors.border }]}><Text style={[textStyles.eyebrow, { color: theme.colors.textMuted }]}>{t('profile.videos')}</Text>{profile.videos.map((video) => <Pressable key={video} accessibilityRole="link" onPress={() => void Linking.openURL(video)} style={styles.externalLink}><Ionicons name="play-circle-outline" size={20} color={theme.colors.accent} /><Text style={[styles.externalLinkText, { color: theme.colors.accent }]} numberOfLines={1}>{t('profile.watchVideo')}</Text></Pressable>)}</View>}
           {profile.profileVideos.map((video) => <View key={video.id} style={[styles.mediaCard, { borderColor: theme.colors.border }]}><ProfileVideo uri={video.url} /><View style={styles.chips}>{video.tags.map((tag) => <ChoiceChip key={tag} label={tag} selected onPress={() => undefined} />)}</View>{profile.commentWallEnabled !== false && <FeedbackBlock targetType="video" targetId={video.id} title={t('feedback.videoTitle')} />}</View>)}
           {profile.commentWallEnabled !== false && profile.photos.map((photo) => <FeedbackBlock key={`feedback-${photo.id}`} targetType="photo" targetId={photo.id} title={t('feedback.photoTitle')} />)}
+          <ExpandableProfileSection title={copy.hostedMeetups} icon="calendar-outline" open={communityOpen} onPress={() => setCommunityOpen(value => !value)}>
+            <HostCommunity key={profile.id} hostId={profile.id} showTitle={false} />
+          </ExpandableProfileSection>
           <TrustBanner icon="shield-checkmark-outline" title={t('chat.safety')} body={t('location.lockedHint')} />
           <View style={styles.safetyRow}>
             <View style={styles.flex}><Button variant="secondary" icon="person-add-outline" label={t('social.addFriend')} disabled={busy} onPress={() => void action(() => api.setFriendship(profile.id, 'request'), () => setNotice(t('common.done')))} /></View>
             <View style={styles.flex}></View>
           </View>
-          <Button icon="chatbubble-outline" disabled={busy} label={t('profile.message')} onPress={() => void message()} />
           <Button variant="secondary" icon="lock-closed-outline" label={t('chat.shareAlbum')} onPress={() => router.push(`/albums/share?profileId=${profile.id}&name=${encodeURIComponent(profile.displayName)}`)} />
           <View style={styles.safetyRow}>
             <View style={styles.flex}><Button variant="secondary" icon="flag-outline" label={t('profile.report')} onPress={() => router.push(`/report/${profile.id}?name=${encodeURIComponent(profile.displayName)}`)} /></View>
@@ -151,10 +199,11 @@ export default function PublicProfileScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 },
   loading: { minHeight: 500, alignItems: 'center', justifyContent: 'center' },
-  hero: { height: 470, margin: 12, borderRadius: 32, overflow: 'hidden', backgroundColor: '#CBD5D1' },
+  hero: { height: 430, margin: 12, borderRadius: 20, overflow: 'hidden', backgroundColor: '#CBD5D1' },
   heroImage: { ...StyleSheet.absoluteFill },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
-  heroOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 24, paddingTop: 96, backgroundColor: 'rgba(0,0,0,.52)' },
+  heroOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 20, paddingTop: 80 },
+  heroFavorite: { position: 'absolute', top: 14, right: 14, width: 108 },
   statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
   onlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#70E5A5' },
   statusText: { color: 'rgba(255,255,255,.82)', fontSize: 12, fontWeight: '800' },
@@ -165,6 +214,8 @@ const styles = StyleSheet.create({
   section: { marginTop: 10 },
   safetyRow: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
+  contactActions: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
+  tapAction: { flex: 1, maxWidth: 180 },
   extraSection: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 16, gap: 10 },
   externalLink: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
   externalLinkText: { fontSize: 15, fontWeight: '800', flexShrink: 1 },

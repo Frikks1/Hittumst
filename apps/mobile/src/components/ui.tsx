@@ -2,7 +2,7 @@ import { Text, TextInput } from '@/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { type Href, useRouter } from 'expo-router';
+import { type Href, useRouter, useSegments } from 'expo-router';
 import { useRef, type ReactNode } from 'react';
 import { useAppearance } from '@/providers/AppearanceProvider';
 import { useProfileTransition } from '@/providers/ProfileTransitionProvider';
@@ -20,6 +20,7 @@ export function Screen({
   back,
   onBack,
   right,
+  footer,
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -27,14 +28,17 @@ export function Screen({
   back?: boolean;
   onBack?: () => void;
   right?: ReactNode;
+  footer?: ReactNode;
 }) {
   const { theme, t } = useApp();
   const router = useRouter();
+  const segments = useSegments();
+  const inTabs = segments[0] === '(tabs)';
   const content = (
     <View style={[styles.content, { backgroundColor: theme.colors.canvas }]}>{children}</View>
   );
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]} edges={inTabs ? ['top', 'left', 'right'] : ['top', 'bottom', 'left', 'right']}>
       <DemoBanner />
       {(title || back || right) && (
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
@@ -58,6 +62,7 @@ export function Screen({
       ) : (
         content
       )}
+      {footer && <View style={[styles.screenFooter, { backgroundColor: theme.colors.canvas, borderTopColor: theme.colors.border }]}>{footer}</View>}
     </SafeAreaView>
   );
 }
@@ -82,6 +87,7 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
+  hint,
 }: {
   label: string;
   onPress: () => void;
@@ -89,6 +95,7 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   disabled?: boolean;
   loading?: boolean;
+  hint?: string;
 }) {
   const { theme } = useApp();
   const { reducedMotion } = useAppearance();
@@ -110,6 +117,7 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={hint}
       accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
       disabled={disabled || loading}
       onPress={onPress}
@@ -224,19 +232,21 @@ export function ChoiceChip({
   return (
     <Pressable
       accessibilityRole="checkbox"
+      accessibilityLabel={label}
       accessibilityState={{ checked: selected }}
       aria-checked={selected}
       onPress={onPress}
-      style={[
+      style={({ pressed }) => [
         styles.chip,
         {
           borderColor: selected ? theme.colors.accent : theme.colors.border,
           backgroundColor: selected ? theme.colors.accentSoft : theme.colors.surface,
         },
+        pressed && { opacity: 0.75 },
       ]}
     >
-      {selected && <Ionicons name="checkmark-circle" size={16} color={theme.colors.accent} />}
-      <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{label}</Text>
+      {selected && <Ionicons accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" name="checkmark-circle" size={16} color={theme.colors.accent} />}
+      <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13, flexShrink: 1 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -305,7 +315,7 @@ export function ProfileTile({ profile, onPress, compact = false, ownInterests = 
       onPress={open}
       style={({ pressed }) => [
         styles.tile,
-        { aspectRatio: appearance.discoveryLayout === 'large' ? 1.1 : compact ? 0.72 : appearance.density === 'compact' ? 0.82 : 0.67 },
+        { aspectRatio: appearance.discoveryLayout === 'large' ? 1.1 : appearance.discoveryLayout === 'dense' || compact ? 1 : 0.82 },
         { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
         pressed && (reducedMotion ? { opacity: 0.9 } : styles.tilePressed),
       ]}
@@ -313,16 +323,16 @@ export function ProfileTile({ profile, onPress, compact = false, ownInterests = 
       {source ? (
         <Image source={source} recyclingKey={profile.id} cachePolicy="memory" style={styles.tileImage} contentFit="cover" />
       ) : (
-        <LinearGradient colors={[theme.colors.accentSoft, theme.colors.surfaceMuted]} style={styles.tileImage}>
-          <Ionicons name="person" size={46} color={theme.colors.textMuted} />
+        <LinearGradient colors={[theme.colors.surfaceMuted, theme.colors.surfaceRaised]} style={styles.tileImage}>
+          <Ionicons name="person" size={compact ? 60 : 90} color={theme.colors.textMuted} style={{ opacity: 0.35 }} />
         </LinearGradient>
       )}
-      <LinearGradient colors={['transparent', 'rgba(3,10,8,.95)']} locations={[0.45, 1]} style={[styles.tileOverlay, { padding: compact ? 8 : appearance.density === 'compact' ? 9 : 13 }]}>
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,.9)']} locations={[0.4, 1]} style={[styles.tileOverlay, { padding: compact ? 8 : appearance.density === 'compact' ? 9 : 12 }]}>
         <View style={styles.nameLine}>
           <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileName, compact && styles.tileNameCompact]}>{profile.displayName}</Text>
           <Text numberOfLines={1} style={[styles.tileAge, compact && styles.tileNameCompact]}>{profile.age}</Text>
         </View>
-        {!compact && detail ? <Text numberOfLines={1} ellipsizeMode="tail" style={styles.tileIntent}>{detail}</Text> : null}
+        {!compact && detail ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileIntent, { color: '#F4F4F5' }]}>{detail}</Text> : null}
         <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileMeta, compact && styles.tileMetaCompact]}>{profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
       </LinearGradient>
       {profile.isOnline && <View style={styles.onlineDot} />}
@@ -411,7 +421,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { flex: 1 },
   scroll: { flexGrow: 1 },
-  header: { minHeight: 64, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth },
+  screenFooter: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  header: { minHeight: 58, paddingVertical: 5, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth },
   headerSide: { minWidth: 48 },
   headerRight: { alignItems: 'flex-end' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: -0.3 },
@@ -420,27 +431,27 @@ const styles = StyleSheet.create({
   bubble: { width: 25, height: 19, borderRadius: 7 },
   bubbleDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, right: 8, bottom: 9 },
   brandText: { fontSize: 27, fontWeight: '900', letterSpacing: -1.2 },
-  button: { minHeight: 54, paddingHorizontal: 20, borderRadius: 18, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
-  buttonLabel: { fontSize: 16, fontWeight: '800' },
+  button: { minHeight: 48, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  buttonLabel: { fontSize: 15, lineHeight: 20, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.45 },
-  iconButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, borderWidth: StyleSheet.hairlineWidth },
+  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
   field: { gap: 8 },
   label: { fontSize: 14, fontWeight: '800' },
   input: { minHeight: 52, borderWidth: 1, borderRadius: 15, paddingHorizontal: 16, fontSize: 16 },
   multiline: { minHeight: 112, paddingTop: 14, textAlignVertical: 'top' },
-  chip: { minHeight: 48, borderWidth: 1, paddingHorizontal: 13, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chip: { minHeight: 44, borderWidth: 1, paddingVertical: 9, paddingHorizontal: 13, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   setting: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 13, borderBottomWidth: StyleSheet.hairlineWidth },
   settingIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   settingCopy: { flex: 1, gap: 3 },
   settingTitle: { fontSize: 16, fontWeight: '700' },
   caption: { fontSize: 13, lineHeight: 18 },
-  tile: { flex: 1, aspectRatio: 0.76, borderRadius: 22, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  tile: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden' },
   tilePressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   tileImage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   tileOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', padding: 13 },
   nameLine: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  onlineDot: { position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: '#163226', backgroundColor: '#7EF0AD' },
+  onlineDot: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: '#17251D', backgroundColor: '#38E890' },
   tileName: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   tileAge: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '500', flexShrink: 0 },
   tileNameCompact: { fontSize: 13, lineHeight: 17 },

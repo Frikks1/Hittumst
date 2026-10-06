@@ -1,4 +1,4 @@
-import { normalizeGender, diagnosisIdSchema } from '@rummal/shared';
+import { normalizeGender, diagnosisIdSchema, profileOrientationTagsSchema, requiredSexualOrientationSelectionSchema } from '@rummal/shared';
 import type { MeetupSponsorship } from '@rummal/shared';
 import { queueMediaUpload } from './mediaUpload';
 import { parseNotificationTarget } from './notificationTarget';
@@ -12,7 +12,7 @@ import type {
   ConversationSummary, DiscoveryFilters, DistanceBand, GeoCoordinate, Identity, IcelandRegion, Intent,
   LocationVerification, MeetupDraftInput, MeetupFilters, MeetupPlaceSearchOptions, MeetupReinstateStatus,
   MeetupReportInput, MeetupUpdateInput, OwnProfile, ProfileSocial, ProfileTag, ProfileTagCategory,
-  PublicProfile, Page, PushPlatform, ReportCategory, SocialPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType,
+  PublicProfile, Page, ProfileActivity, ProfileActivityKind, PushPlatform, ReportCategory, SocialPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType,
   FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession, ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType
 } from '@/types/domain';
 import type { Database, Json } from '@/types/database';
@@ -188,16 +188,15 @@ export class LiveRummalApi implements RummalApi {
     return { items, nextCursor: data.length === 40 && last?.result_cursor ? JSON.stringify(last.result_cursor) : null };
   }
 
-  async getProfile(id: string): Promise<PublicProfile> {
-    const { data, error } = await supabase!.rpc('get_public_profile', { profile_id: id });
-    if (error || !data || typeof data !== 'object' || Array.isArray(data)) throw error ?? new Error('Profile not found');
+  private async mapPublicProfile(data: Json, photoUrls?: Map<string, string>, signedVideoUrls?: Map<string, string>): Promise<PublicProfile> {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Profile not found');
     const row = data as Record<string, Json | undefined>;
     const photoEntries = Array.isArray(row.photo_paths) ? row.photo_paths : [];
     const photoPaths = photoEntries.flatMap((item) => typeof item === 'string' ? [item] : item && typeof item === 'object' && !Array.isArray(item) && typeof item.path === 'string' ? [item.path] : []);
     const videoEntries = Array.isArray(row.profile_videos) ? row.profile_videos.filter((item): item is Record<string, Json | undefined> => typeof item === 'object' && item !== null && !Array.isArray(item)) : [];
     const [urls, videoUrls] = await Promise.all([
-      signedUrls('profile-photos', photoPaths),
-      signedUrls('profile-videos', videoEntries.map((item) => String(item.path)), 5 * 60),
+      photoUrls ?? signedUrls('profile-photos', photoPaths),
+      signedVideoUrls ?? signedUrls('profile-videos', videoEntries.map((item) => String(item.path)), 5 * 60),
     ]);
     return {
       id: String(row.id), displayName: String(row.display_name), age: Number(row.age),
@@ -221,9 +220,50 @@ export class LiveRummalApi implements RummalApi {
       photos: photoEntries.map((entry, index) => {
         const path = typeof entry === 'string' ? entry : String((entry as Record<string, Json | undefined>).path);
         const rawTags = typeof entry === 'object' && entry !== null && !Array.isArray(entry) ? (entry as Record<string, Json | undefined>).tags : [];
-        return { id: typeof entry === 'object' && entry !== null && !Array.isArray(entry) && entry.id ? String(entry.id) : `${id}-${index}`, url: urls.get(path) ?? '', status: 'approved' as const, tags: Array.isArray(rawTags) ? rawTags.filter((tag): tag is string => typeof tag === 'string') : [] };
+        return { id: typeof entry === 'object' && entry !== null && !Array.isArray(entry) && entry.id ? String(entry.id) : `${String(row.id)}-${index}`, url: urls.get(path) ?? '', status: 'approved' as const, tags: Array.isArray(rawTags) ? rawTags.filter((tag): tag is string => typeof tag === 'string') : [] };
       })
     };
+  }
+
+  async getProfile(id: string): Promise<PublicProfile> {
+    const { data, error } = await supabase!.rpc('get_public_profile', { profile_id: id });
+    if (error) throw error;
+    return this.mapPublicProfile(data);
+  }
+
+  async listProfileActivity(kind: ProfileActivityKind, cursor?: string | null): Promise<Page<ProfileActivity>> {
+    const { data, error } = await supabase!.rpc('list_profile_activity', {
+      kind, cursor: decodeMessageCursor(cursor), page_size: 40,
+    });
+    if (error) throw error;
+    const page = data as unknown as { items: Array<{ id: string; profile: Json; occurredAt: string; count: number }>; nextCursor: Json | null };
+    if (!page || !Array.isArray(page.items)) throw new Error('activity_unavailable');
+    const paths = (field: 'photo_paths' | 'profile_videos') => page.items.flatMap(item => {
+      const profile = item.profile as Record<string, Json | undefined>;
+      const entries = profile[field];
+      return Array.isArray(entries) ? entries.flatMap(entry => typeof entry === 'string' ? [entry] : entry && typeof entry === 'object' && !Array.isArray(entry) && typeof entry.path === 'string' ? [entry.path] : []) : [];
+    });
+    const [photoUrls, videoUrls] = await Promise.all([
+      signedUrls('profile-photos', [...new Set(paths('photo_paths'))]),
+      signedUrls('profile-videos', [...new Set(paths('profile_videos'))]),
+    ]);
+    return {
+      items: await Promise.all(page.items.map(async item => ({
+        id: item.id, occurredAt: item.occurredAt, count: item.count,
+        profile: await this.mapPublicProfile(item.profile, photoUrls, videoUrls),
+      }))),
+      nextCursor: page.nextCursor ? JSON.stringify(page.nextCursor) : null,
+    };
+  }
+
+  async recordProfileView(profileId: string): Promise<void> {
+    const { error } = await supabase!.rpc('record_profile_view', { profile_id: profileId });
+    if (error) throw error;
+  }
+
+  async sendProfileTap(profileId: string): Promise<void> {
+    const { error } = await supabase!.rpc('send_profile_tap', { profile_id: profileId });
+    if (error) throw error;
   }
 
   async hasCompletedOnboarding() {
@@ -276,6 +316,7 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async updateProfile(profile: Partial<OwnProfile>) {
+    if (profile.identity !== undefined) profileOrientationTagsSchema.parse(profile.identity);
     const id = await requireUserId();
     const update: Database['public']['Tables']['profiles']['Update'] = {};
     if (profile.displayName !== undefined) update.display_name = profile.displayName;
@@ -443,6 +484,7 @@ export class LiveRummalApi implements RummalApi {
   }
 
   async completeOnboarding(payload: OnboardingPayload) {
+    requiredSexualOrientationSelectionSchema.parse(payload.identity);
     const { error } = await supabase!.rpc('complete_onboarding_profile', {
       input: { ...payload, region: toDatabaseRegion(payload.region), videos: payload.videos ?? [], socials: payload.socials ?? [], interests: payload.interests ?? [] },
     });

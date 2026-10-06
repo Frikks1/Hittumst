@@ -1,5 +1,5 @@
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
-import { activityRank, matchesActivity } from '@rummal/shared';
+import { activityRank, matchesActivity, profileOrientationTagsSchema, requiredSexualOrientationSelectionSchema } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
 import { getPoolSummary, settleEvent, TIERS, type MeetupSponsorship, activeTier, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId } from '@rummal/shared';
 import { CommerceDemo } from './commerceDemo';
@@ -11,7 +11,7 @@ import type {
   DiscoveryFilters, GeoCoordinate, LocationVerification, MeetupDraftInput, MeetupFilters,
   MeetupPlaceSearchOptions, MeetupReinstateStatus, MeetupReportInput, MeetupUpdateInput, OwnProfile, PublicProfile,
   PushPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
-  ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType,
+  ProfileActivity, ProfileActivityKind, ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType,
   MeetupRoomMessage, MeetupRoomSummary, MeetupRsvpVisibility,
 } from '@/types/domain';
 import { expoPushTokenSchema, pushTokenRegistrationSchema } from '@/types/domain';
@@ -19,6 +19,7 @@ import { DemoMeetupService } from './meetupDemo';
 import type { OnboardingPayload, RummalApi } from './types';
 import { pageByTime } from '@/utils/messagePagination';
 import { matchesIdentityGroups } from '@/utils/discoveryPreferences';
+import { calculateAge } from '@/utils/age';
 
 const delay = (ms = 160) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -104,6 +105,12 @@ export class MockRummalApi implements RummalApi {
   private conversations = structuredClone(mockConversations);
   private messages = structuredClone(mockMessages);
   private blocked = new Set<string>();
+  private profileTapSends: number[] = [];
+  private profileActivity: Array<ProfileActivity & { actorId: string; recipientId: string; kind: ProfileActivityKind }> = this.profiles.slice(0, 5).flatMap((profile, index) => {
+    const occurredAt = new Date(Date.now() - (index + 1) * 45 * 60_000).toISOString();
+    const view = { id: `demo-view-${profile.id}`, profile, actorId: profile.id, recipientId: this.own.id, kind: 'views' as const, occurredAt, count: index === 0 ? 3 : 1 };
+    return index < 3 ? [view, { ...view, id: `demo-tap-${profile.id}`, kind: 'taps' as const, count: 1 }] : [view];
+  });
   private pushTokens = new Map<string, { platform: PushPlatform; locale: 'is' | 'en' }>();
   private listeners = new Map<string, Set<(message: ChatMessage) => void>>();
   private albumSessions = new Map<string, { shareId: string; expiresAt: string; requestId: string }>();
@@ -164,9 +171,47 @@ export class MockRummalApi implements RummalApi {
     return structuredClone(profile);
   }
 
+  async listProfileActivity(kind: ProfileActivityKind, cursor?: string | null) {
+    await delay();
+    if (!this.own.locationSharing) throw new Error('profile_access_required');
+    const visible = this.profileActivity.filter(item => item.recipientId === this.own.id && item.kind === kind &&
+      !this.blocked.has(item.actorId) && this.discoveryFixture(item.actorId).visible);
+    return structuredClone(pageByTime(visible, item => item.occurredAt, 40, cursor));
+  }
+
+  private async recordActivity(profileId: string, kind: ProfileActivityKind) {
+    if (!this.own.locationSharing) throw new Error('profile_access_required');
+    if (profileId === this.own.id || this.blocked.has(profileId) || !this.discoveryFixture(profileId).visible) throw new Error('profile_unavailable');
+    const profile = await this.getProfile(profileId);
+    if (this.own.isHidden) {
+      if (kind === 'views') return;
+      throw new Error('profile_unavailable');
+    }
+    const now = Date.now();
+    const previous = this.profileActivity.find(item => item.actorId === this.own.id && item.recipientId === profileId && item.kind === kind);
+    if (previous && now - Date.parse(previous.occurredAt) < (kind === 'views' ? 30 * 60_000 : 24 * 60 * 60_000)) {
+      if (kind === 'views') return;
+      throw new Error('tap_cooldown');
+    }
+    if (kind === 'taps') {
+      this.profileTapSends = this.profileTapSends.filter(sentAt => now - sentAt < 24 * 60 * 60_000);
+      if (this.profileTapSends.filter(sentAt => now - sentAt < 60 * 60_000).length >= 30 ||
+          this.profileTapSends.length >= 100) throw new Error('tap_rate_limited');
+      this.profileTapSends.push(now);
+    }
+    if (previous) { previous.occurredAt = new Date(now).toISOString(); previous.count += 1; }
+    else this.profileActivity.push({ id: Crypto.randomUUID(), profile, actorId: this.own.id, recipientId: profileId, kind, occurredAt: new Date(now).toISOString(), count: 1 });
+  }
+
+  async recordProfileView(profileId: string): Promise<void> { await this.recordActivity(profileId, 'views'); }
+  async sendProfileTap(profileId: string): Promise<void> { await this.recordActivity(profileId, 'taps'); }
+
   async hasCompletedOnboarding() { return true; }
   async getOwnProfile() { await delay(80); return structuredClone(this.own); }
-  async updateProfile(profile: Partial<OwnProfile>) { this.own = { ...this.own, ...profile }; await delay(); return structuredClone(this.own); }
+  async updateProfile(profile: Partial<OwnProfile>) {
+    if (profile.identity !== undefined) profileOrientationTagsSchema.parse(profile.identity);
+    this.own = { ...this.own, ...profile }; await delay(); return structuredClone(this.own);
+  }
   async listProfileTags() { await delay(40); return structuredClone(profileTags); }
   async uploadProfilePhoto(uri: string) {
     this.own.photos.push({ id: Crypto.randomUUID(), url: uri, status: 'pending' });
@@ -280,8 +325,11 @@ export class MockRummalApi implements RummalApi {
   }
   async completeOnboarding(payload: OnboardingPayload) {
     if (!payload.sensitiveDataConsent || !payload.privacyAccepted || !payload.termsAccepted || !payload.guidelinesAccepted) throw new Error('explicit_consent_required');
+    requiredSexualOrientationSelectionSchema.parse(payload.identity);
+    const age = calculateAge(payload.dateOfBirth);
+    if (age === null || age < 18) throw new Error('adult_profile_required');
     this.own = {
-      ...this.own, displayName: payload.displayName, dateOfBirth: payload.dateOfBirth, pronouns: payload.pronouns,
+      ...this.own, displayName: payload.displayName, dateOfBirth: payload.dateOfBirth, age, pronouns: payload.pronouns,
       identity: payload.identity, lookingFor: payload.lookingFor, bio: payload.bio, region: payload.region,
       videos: [...(payload.videos ?? [])], socials: structuredClone(payload.socials ?? []), interests: [...(payload.interests ?? [])],
     };
@@ -469,6 +517,7 @@ export class MockRummalApi implements RummalApi {
   async deleteConversation(conversationId: string) { this.conversations = this.conversations.filter((item) => item.id !== conversationId); await delay(); }
   async block(profileId: string) {
     this.blocked.add(profileId);
+    this.profileActivity = this.profileActivity.filter(item => item.actorId !== profileId && item.recipientId !== profileId);
     this.albumShares = this.albumShares.map((share) => [share.ownerId, share.recipientId].includes(profileId) && ['pending', 'accepted', 'consumed'].includes(share.status) ? { ...share, status: 'revoked' } : share);
     await delay();
   }
@@ -605,7 +654,7 @@ export class MockRummalApi implements RummalApi {
   async reverseGeocodeMeetupPlace(coordinate: GeoCoordinate, options?: MeetupPlaceSearchOptions) {
     await delay(80); return this.meetupService.reverseGeocode(coordinate, options);
   }
-  async requestExport() { await delay(300); return JSON.stringify({ demo: true, profile: this.own, conversations: this.conversations, messages: this.messages, albums: this.albums.filter(album => album.ownerId === this.own.id) }, null, 2); }
+  async requestExport() { await delay(300); return JSON.stringify({ demo: true, profile: this.own, conversations: this.conversations, messages: this.messages, albums: this.albums.filter(album => album.ownerId === this.own.id), profileActivity: this.profileActivity.filter(item => item.actorId === this.own.id || !this.blocked.has(item.actorId) && this.discoveryFixture(item.actorId).visible).map(({ profile: _profile, ...item }) => item), profileTapSends: this.profileTapSends.map(sentAt => new Date(sentAt).toISOString()) }, null, 2); }
   async withdrawSensitiveConsent() { this.own.isHidden = true; await delay(); }
-  async deleteAccount() { await delay(300); }
+  async deleteAccount() { this.profileActivity = []; this.profileTapSends = []; await delay(300); }
 }

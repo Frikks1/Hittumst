@@ -73,8 +73,8 @@ coordinate error, and pass/fail. The set must cover:
   have been observed for at least one full drill cycle.
 - [ ] Recurring occurrences, online/hybrid access, attendance, reminder retries, cancellation and occurrence-room closure pass end-to-end tests.
 - [ ] At least 200 synthetic occurrences are included in the 100-user, 30-minute capacity test; no authorization failure is permitted.
-- [ ] Permanent group, voice, person-rating and explicit-event API calls remain denied after Hittingar is enabled.
+- [ ] Person-rating and explicit-event API calls remain denied after Hittingar is enabled. Permanent groups and group voice pass their separate authorization and connected-device checks before their own capability gates are enabled.
 
-## Deferred features
+## Independent capabilities and excluded features
 
-Permanent groups, voice and person ratings are outside this launch. Their permissions and application controls remain disabled independently of the Hittingar gate. Any future release needs its own review, retention decisions and verification; these deferred features are not prerequisites for launching meetups.
+Permanent groups and group voice are required for the agreed full launch, as recorded in [feature verification](feature-verification.md). Enabling Hittingar alone must not enable those capabilities: use their separate review, retention decisions, provider configuration and verification gates. Person/attractiveness ratings and explicit sexual events remain excluded by owner decision. Follow [the complete launch checklist](left-to-do-before-launch.md) for the full app rather than treating meetup enablement as launch approval.

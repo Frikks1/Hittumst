@@ -80,7 +80,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const savedDiscovery = useSavedFilters(user?.id);
   const [locale, setLocaleState] = useState<Locale>('is');
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
   const [locationVerifiedAt, setLocationVerifiedAt] = useState<string | null>(null);
   const [clock, setClock] = useState(Date.now());
   const [meetupFilters, setMeetupFilters] = useState<MeetupFilters>(defaultMeetupFilters);

@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { useApp } from '@/providers/AppProvider';
 import type { GeoCoordinate } from '@/types/domain';
 import { hittingarFeature } from './config';
-import { MapAttribution } from './components';
+import { LocationMapUnavailable, MapAttribution } from './components';
 import { ICELAND_BOUNDS } from './model';
 
 export type HittingurLocationPickerProps = {
@@ -69,7 +69,7 @@ export default function HittingurLocationPicker({ value, onChange }: HittingurLo
   }, [value]);
 
   if (!hittingarFeature.mapStyleUrl) {
-    return <View style={[styles.fallback, { backgroundColor: theme.colors.surfaceMuted }]}><Text style={{ color: theme.colors.textMuted }}>{t('hittingar.create.pinMapUnavailable')}</Text></View>;
+    return <LocationMapUnavailable />;
   }
   return (
     <View style={styles.root} accessibilityLabel={t('hittingar.create.pinMapLabel')}>
@@ -83,7 +83,6 @@ export default function HittingurLocationPicker({ value, onChange }: HittingurLo
 const webStyles = { map: { position: 'absolute', inset: 0 } } as const;
 const styles = StyleSheet.create({
   root: { height: 240, borderRadius: 18, overflow: 'hidden', position: 'relative' },
-  fallback: { height: 160, borderRadius: 18, padding: 20, alignItems: 'center', justifyContent: 'center' },
   hint: { position: 'absolute', left: 8, right: 8, bottom: 8, borderRadius: 10, padding: 8 },
   attribution: { position: 'absolute', left: 8, top: 8 },
   hintText: { fontSize: 11, lineHeight: 15, textAlign: 'center', fontWeight: '700' },

@@ -32,6 +32,42 @@ describe('live text delivery',()=>{
   });
 });
 
+describe('profile interest API contract', () => {
+  it('records explicit views and taps using the guarded RPCs', async () => {
+    mock.rpc.mockResolvedValue({ data: null, error: null });
+    const api = new LiveRummalApi();
+    await api.recordProfileView('other');
+    await api.sendProfileTap('other');
+    expect(mock.rpc.mock.calls).toEqual([
+      ['record_profile_view', { profile_id: 'other' }],
+      ['send_profile_tap', { profile_id: 'other' }],
+    ]);
+  });
+  it('propagates cooldown and authorization errors for the tap action', async () => {
+    mock.rpc.mockResolvedValue({ data: null, error: new Error('tap_cooldown') });
+    await expect(new LiveRummalApi().sendProfileTap('other')).rejects.toThrow('tap_cooldown');
+  });
+  it('maps inbox profiles with one signed media request per bucket and stable cursors', async () => {
+    const cursor = { at: '2026-09-30T12:00:00Z', id: 'activity-id' };
+    const profile = { id: 'other', display_name: 'Member', age: 28, photo_paths: [{ id: 'photo', path: 'other/photo.jpg', tags: [] }] };
+    mock.storageFrom.mockReturnValue({ createSignedUrls: mock.signedUrls });
+    mock.signedUrls.mockResolvedValue({ data: [{ path: 'other/photo.jpg', signedUrl: 'https://private.test/photo' }], error: null });
+    mock.rpc.mockResolvedValue({ data: { items: [{ id: 'activity-id', profile, occurredAt: cursor.at, count: 3 }], nextCursor: cursor }, error: null });
+    const api = new LiveRummalApi();
+    const page = await api.listProfileActivity('views', JSON.stringify(cursor));
+    expect(mock.rpc).toHaveBeenCalledWith('list_profile_activity', { kind: 'views', cursor, page_size: 40 });
+    expect(page.nextCursor).toBe(JSON.stringify(cursor));
+    expect(page.items[0]).toMatchObject({ id: 'activity-id', count: 3, profile: { id: 'other', photos: [{ id: 'photo', url: 'https://private.test/photo' }] } });
+    expect(mock.signedUrls).toHaveBeenCalledTimes(1);
+    expect(mock.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('does not request a page or sign media for a malformed cursor', async () => {
+    await expect(new LiveRummalApi().listProfileActivity('taps', '{"at":"invalid","id":"id"}')).rejects.toThrow('invalid_cursor');
+    expect(mock.rpc).not.toHaveBeenCalled();
+    expect(mock.signedUrls).not.toHaveBeenCalled();
+  });
+});
+
 
 describe('atomic live onboarding API contract', () => {
   const payload = { dateOfBirth: '1990-01-01', displayName: 'Member', identity: ['queer' as const], lookingFor: ['friends' as const], bio: '', region: 'capital' as const, sensitiveDataConsent: true, privacyAccepted: true, termsAccepted: true, guidelinesAccepted: true, locale: 'en' as const, videos: ['https://example.test/video'], socials: [], interests: ['Hiking'] };
@@ -53,6 +89,26 @@ describe('atomic live onboarding API contract', () => {
     await expect(api.completeOnboarding(payload)).rejects.toThrow('offline');
     await expect(api.completeOnboarding(payload)).resolves.toBeUndefined();
     expect(mock.rpc.mock.calls[1]).toEqual(mock.rpc.mock.calls[0]);
+  });
+  it.each(['not_applicable', 'prefer_not_to_say'] as const)('commits the sole privacy answer %s', async identity => {
+    mock.rpc.mockResolvedValue({ data: null, error: null });
+    await new LiveRummalApi().completeOnboarding({ ...payload, identity: [identity] });
+    expect(mock.rpc).toHaveBeenCalledWith('complete_onboarding_profile', { input: { ...payload, identity: [identity], region: 'hofudborgarsvaedid' } });
+  });
+  it('rejects mixed privacy answers before either registration or profile update contacts the backend', async () => {
+    const api = new LiveRummalApi();
+    await expect(api.completeOnboarding({ ...payload, identity: ['gay', 'prefer_not_to_say'] })).rejects.toThrow('orientation_privacy_choice_exclusive');
+    await expect(api.updateProfile({ identity: ['not_applicable', 'prefer_not_to_say'] })).rejects.toThrow('orientation_privacy_choice_exclusive');
+    expect(mock.rpc).not.toHaveBeenCalled(); expect(mock.from).not.toHaveBeenCalled(); expect(mock.getUser).not.toHaveBeenCalled();
+  });
+  it('stores a privacy answer during profile editing and still preserves older explicit tags', async () => {
+    const query = { update: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ error: null }) };
+    mock.from.mockReturnValue(query);
+    const api = new LiveRummalApi(); vi.spyOn(api, 'getOwnProfile').mockResolvedValue({} as Awaited<ReturnType<LiveRummalApi['getOwnProfile']>>);
+    await api.updateProfile({ identity: ['prefer_not_to_say'] });
+    expect(query.update).toHaveBeenLastCalledWith({ identity_tags: ['prefer_not_to_say'] });
+    await api.updateProfile({ identity: ['trans_man'] as unknown as Parameters<LiveRummalApi['updateProfile']>[0]['identity'] });
+    expect(query.update).toHaveBeenLastCalledWith({ identity_tags: ['trans_man'] });
   });
 });
 

@@ -37,6 +37,7 @@ function Navigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile/[id]" options={{ animation: 'none' }} />
         <Stack.Screen name="chat/[id]" />
+        <Stack.Screen name="interest" />
         <Stack.Screen name="report/[profileId]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="filters" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="appearance" />

@@ -1,5 +1,5 @@
-import { defaultDiscoveryExtensions, type DiscoveryExtensions, type ProfileGender, type DiagnosisId } from '@rummal/shared';
-export type Identity = 'gay' | 'bi' | 'queer' | 'trans' | 'nonbinary' | 'lesbian';
+import { defaultDiscoveryExtensions, type DiscoveryExtensions, type ProfileGender, type DiagnosisId, type SexualOrientation } from '@rummal/shared';
+export type Identity = SexualOrientation;
 export type Intent = 'chat' | 'dates' | 'friends' | 'relationship';
 export type IcelandRegion = 'capital' | 'south' | 'west' | 'westfjords' | 'north' | 'east';
 export type DistanceBand = 'under1' | '1to3' | '3to10' | '10to25' | '25plus' | '10to30' | '30plus';
@@ -105,6 +105,14 @@ export type PublicProfile = {
   photos: Array<{ id: string; url: string; status: PhotoStatus; tags?: string[] }>;
   commentWallEnabled?: boolean;
   anonymousRatingsEnabled?: boolean;
+};
+
+export type ProfileActivityKind = 'views' | 'taps';
+export type ProfileActivity = {
+  id: string;
+  profile: PublicProfile;
+  occurredAt: string;
+  count: number;
 };
 
 export type GroupSummary = import('@rummal/shared').GroupSummary & { membershipStatus?: 'active' | 'invited'; status?: 'active' | 'locked' };

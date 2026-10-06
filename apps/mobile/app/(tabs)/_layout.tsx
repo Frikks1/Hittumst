@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hittingarFeature } from '@/features/hittingar/config';
 import { useApp } from '@/providers/AppProvider';
 import { useAppearance } from '@/providers/AppearanceProvider';
@@ -15,6 +16,10 @@ const icon = (name: keyof typeof Ionicons.glyphMap) =>
 export default function TabLayout() {
   const { t, theme } = useApp();
   const { reducedMotion, appearance } = useAppearance();
+  const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const bottomPadding = Math.max(insets.bottom, 8);
+  const barContentHeight = Math.ceil(58 + 20 * (appearance.textScale * Math.max(1, fontScale) - 1));
   return (
     <Tabs
       screenOptions={{
@@ -23,15 +28,16 @@ export default function TabLayout() {
         transitionSpec: { animation: 'timing', config: { duration: 150 } },
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          height: 78,
-          paddingTop: 7,
-          paddingBottom: 11,
+          height: barContentHeight + bottomPadding,
+          paddingTop: 6,
+          paddingBottom: bottomPadding,
         },
         tabBarItemStyle: { borderRadius: 18 },
-        tabBarLabelStyle: { fontSize: 12 * appearance.textScale, fontWeight: '900', letterSpacing: -0.1 },
+        tabBarLabelStyle: { fontSize: 11 * appearance.textScale, fontWeight: '700', letterSpacing: -0.1 },
       } as never}
     >
       <Tabs.Screen name="discover" options={{ title: t('tabs.discover'), tabBarIcon: icon('grid-outline') }} />

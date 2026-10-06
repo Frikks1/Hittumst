@@ -1,4 +1,14 @@
-import type { ProfileSocial, SocialPlatform } from '@/types/domain';
+import type { Identity, ProfileSocial, SocialPlatform } from '@/types/domain';
+
+export const profileIdentityChoices: Identity[] = ['gay', 'bi', 'queer', 'trans', 'nonbinary', 'lesbian', 'not_applicable', 'prefer_not_to_say'];
+
+const undisclosedIdentities: Identity[] = ['not_applicable', 'prefer_not_to_say'];
+
+export function toggleProfileIdentity(value: Identity, values: Identity[]): Identity[] {
+  if (values.includes(value)) return values.filter(item => item !== value);
+  if (undisclosedIdentities.includes(value)) return [value];
+  return [...values.filter(item => !undisclosedIdentities.includes(item)), value];
+}
 
 export const socialPlatforms: Array<{ platform: SocialPlatform; labelKey: 'profile.instagram' | 'profile.tiktok' | 'profile.x' | 'profile.discord' | 'profile.steam' | 'profile.youtube' | 'profile.website' }> = [
   { platform: 'instagram', labelKey: 'profile.instagram' },

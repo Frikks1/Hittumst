@@ -19,6 +19,13 @@ if (
       : value;
   };
   const original = fs.promises.realpath.bind(fs.promises);
+  // Node's module resolver also canonicalizes paths, independently of fs.realpath.
+  // Keep autolinking and native CMake inputs on the same short drive alias.
+  const Module = require('node:module');
+  const resolveFilename = Module._resolveFilename;
+  Module._resolveFilename = function (...args) {
+    return map(resolveFilename.apply(this, args));
+  };
   fs.promises.realpath = async (...args) => map(await original(...args));
   const sync = fs.realpathSync;
   const wrapped = (...args) => map(sync(...args));

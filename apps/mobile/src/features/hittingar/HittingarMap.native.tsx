@@ -131,8 +131,8 @@ export default function HittingarMap({ items, onSelect }: HittingarMapProps) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 430, overflow: 'hidden' },
-  controls: { position: 'absolute', right: 12, top: 90, alignItems: 'flex-end', gap: 8 },
+  root: { flex: 1, minHeight: 220, overflow: 'hidden' },
+  controls: { position: 'absolute', right: 12, top: 12, alignItems: 'flex-end', gap: 8 },
   control: { minWidth: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.17, shadowRadius: 10, elevation: 5 },
   reset: { paddingHorizontal: 11, flexDirection: 'row', gap: 6 },
   resetText: { fontSize: 11, fontWeight: '800' },

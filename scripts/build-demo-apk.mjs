@@ -82,7 +82,7 @@ Object.assign(env, {
   CI: '1',
   EXPO_NO_DOTENV: '1',
   EXPO_PUBLIC_APP_ENV: 'development',
-  EXPO_PUBLIC_DEV_BYPASS_AUTH: 'true',
+  EXPO_PUBLIC_DEV_BYPASS_AUTH: 'false',
   EXPO_PUBLIC_HITTINGAR_ENABLED: 'true',
   SENTRY_DISABLE_AUTO_UPLOAD: 'true',
 });
@@ -117,7 +117,7 @@ const initial = sourceHash();
 const report = {
   mode: 'demo',
   architecture: 'arm64-v8a',
-  versionCode: 2026092101,
+  versionCode: 2026093001,
   startedAt: new Date().toISOString(),
   sourceSha256: initial,
   signing: 'Android debug certificate, testing only',
@@ -190,7 +190,7 @@ try {
   else await run('gradle', './gradlew', args, path.join(mobile, 'android'));
   const apk = path.join(mobile, 'android/app/build/outputs/apk/release/app-release.apk');
   const bytes = fs.readFileSync(apk);
-  const destination = path.join(output, 'Hittumst-demo-arm64-2026-09-21.apk');
+  const destination = path.join(output, 'Hittumst-demo-arm64-2026-09-30.apk');
   Object.assign(report, {
     apk: path.relative(root, destination).replaceAll('\\', '/'),
     bytes: bytes.length,

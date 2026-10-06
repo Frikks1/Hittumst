@@ -4,7 +4,8 @@ import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { Button, ChoiceChip, EmptyState, Screen } from '@/components/ui';
+import { Button, ChoiceChip, EmptyState, IconButton, Screen } from '@/components/ui';
+import { profileActivityCopy } from '@/i18n/profileActivity';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';
 import type { AlbumShare, ConversationSummary } from '@/types/domain';
@@ -69,7 +70,10 @@ export default function ChatsScreen() {
       ListFooterComponent={section==='chats'&&cursor?<Button variant="secondary" loading={loadingMore} label={t('discovery.more')} onPress={()=>void loadMore()} />:null}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={<View style={styles.header}>
-        <Text accessibilityRole="header" style={[styles.title,{color:theme.colors.text}]}>{t('chats.title')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <Text accessibilityRole="header" style={[styles.title,{color:theme.colors.text,flex:1}]}>{t('chats.title')}</Text>
+          <IconButton icon="flame-outline" label={profileActivityCopy(locale).title} onPress={()=>router.push('/interest?tab=taps')} />
+        </View>
         <View style={styles.sections}><ChoiceChip label={t('chats.title')} selected={section==='chats'} onPress={()=>setSection('chats')} /><ChoiceChip label={t('albums.title')} selected={section==='albums'} onPress={()=>setSection('albums')} /></View>
         {section==='chats'?<View style={[styles.search,{backgroundColor:theme.colors.surface,borderColor:theme.colors.border}]}>
           <Ionicons name="search-outline" size={20} color={theme.colors.textMuted} />

@@ -135,3 +135,20 @@ test('manual diagnostics only observe readiness and never execute queues', async
  const result=await runStagingOperations(stagingOperationsConfig(env),{readOnly:true,fetchImpl:verifiedFetch(async url=>{calls.push(url);return Response.json({status:'ok'});})});
  assert.equal(result.passed,true);assert.deepEqual(calls,[env.STAGING_ADMIN_URL+'/api/operations/ready']);
 });
+
+test('read-only readiness needs no push credential or publishable key, while queue execution still does', async () => {
+  const minimal = { ...env, STAGING_PUSH_WORKER_SECRET: undefined, STAGING_SUPABASE_PUBLISHABLE_KEY: undefined };
+  assert.throws(() => stagingOperationsConfig(minimal));
+  assert.throws(() => stagingOperationsConfig({ ...minimal, STAGING_CRON_SECRET: undefined }, { readOnly: true }));
+  const calls = [];
+  const result = await runStagingOperations(stagingOperationsConfig(minimal, { readOnly: true }), {
+    readOnly: true,
+    fetchImpl: verifiedFetch(async (url, options) => {
+      calls.push(url);
+      assert.equal(options.headers['x-worker-secret'], undefined);
+      return Response.json({ status: 'ok' });
+    }),
+  });
+  assert.equal(result.passed, true);
+  assert.deepEqual(calls, [env.STAGING_ADMIN_URL + '/api/operations/ready']);
+});

@@ -1,0 +1,31 @@
+export function profileSetupCopy(locale: 'is' | 'en') {
+  return locale === 'is' ? {
+    basics: 'Byrjum á þér', basicsBody: 'Veldu nafn og hvernig þú lýsir þér. Þú getur breytt þessu síðar.',
+    intentions: 'Hvað viltu finna?', intentionsBody: 'Veldu eitt eða fleiri. Það hjálpar fólki að hefja rétta samtalið.',
+    optional: 'Bættu við meiru', optionalHint: 'Valfrjálst · þú getur klárað þetta síðar í prófílnum.',
+    photos: 'Myndirnar þínar', basicsSection: 'Um þig', details: 'Áhugamál og merki',
+    customization: 'Forsíða og samtalskveikja', privacy: 'Sýnileiki og friðhelgi',
+    preview: 'Forskoða', previewTitle: 'Prófíllinn þinn', previewHint: 'Forskoðun á núverandi breytingum.',
+    mediaTags: 'Veldu mynd til að breyta merkjum hennar.', addPhoto: 'Bæta við mynd',
+    instagramHint: 'Bættu við Instagram-notandanafni. Það birtist á prófílnum þínum.',
+    unsaved: 'Óvistaðar breytingar', optionalSummary: 'Kynning, áhugamál og samfélagsmiðlar',
+    stepLabel: (step: number, total: number) => `Skref ${step} af ${total}`,
+    basicsRequired: 'Sláðu inn nafn með að minnsta kosti tveimur stöfum og veldu sjálfsmynd.',
+    intentionRequired: 'Veldu að minnsta kosti eitt sem þú ert að leita að.',
+    intentDescriptions: { chat: 'Hefja samtal', dates: 'Hittast og sjá hvernig gengur', friends: 'Kynnast nýju fólki', relationship: 'Finna eitthvað til lengri tíma' },
+  } : {
+    basics: 'Start with you', basicsBody: 'Choose a name and how you describe yourself. You can change these later.',
+    intentions: 'What brings you here?', intentionsBody: 'Choose one or more. Help people start the right conversation.',
+    optional: 'Add a little more', optionalHint: 'Optional · you can finish these later in your profile.',
+    photos: 'Your photos', basicsSection: 'About you', details: 'Interests and tags',
+    customization: 'Cover and conversation starter', privacy: 'Visibility and privacy',
+    preview: 'Preview', previewTitle: 'Your profile', previewHint: 'Preview of your current edits.',
+    mediaTags: 'Select a photo to edit its tags.', addPhoto: 'Add a photo',
+    instagramHint: 'Add your Instagram username. It appears on your profile.',
+    unsaved: 'Unsaved changes', optionalSummary: 'Bio, interests and social profiles',
+    stepLabel: (step: number, total: number) => `Step ${step} of ${total}`,
+    basicsRequired: 'Enter a name with at least two characters and choose an identity.',
+    intentionRequired: 'Choose at least one thing you are looking for.',
+    intentDescriptions: { chat: 'Start a conversation', dates: 'Meet up and see where it goes', friends: 'Get to know new people', relationship: 'Find something lasting' },
+  };
+}

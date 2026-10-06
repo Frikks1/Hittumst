@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { formatMeetupReykjavikDate } from '@rummal/shared';
 import { Image } from 'expo-image';
 import { useEffect, useRef, type ReactNode } from 'react';
-import { Animated, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useAppearance } from '@/providers/AppearanceProvider';
 import { Button, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
@@ -63,7 +63,7 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
         pressed && styles.pressed,
       ]}
     >
-      <EventCover cover={item.cover} title={item.title} compact={!primary} />
+      {(primary || item.cover) && <EventCover cover={item.cover} title={item.title} compact={!primary} />}
       <View style={styles.cardTop}>
         <View style={styles.cardCopy}>
           <Text numberOfLines={2} style={[primary ? textStyles.heading : styles.cardTitle, { color: theme.colors.text }]}>{item.title}</Text>
@@ -78,7 +78,13 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
         )}
       </View>
       {item.diagnosisRestricted&&<Text style={{color:theme.colors.textMuted}}>{t('diagnosis.required')}</Text>}
-      <PoolSummary pool={item.pool} compact />
+      {primary ? <PoolSummary pool={item.pool} compact /> : item.pool && item.pool.total > 0 && (
+        <View style={[styles.rewardRow, { backgroundColor: theme.colors.accentSoft }]}>
+          <Ionicons name="gift-outline" size={16} color={theme.colors.accent} />
+          <Text style={[styles.rewardText, { color: theme.colors.text }]}>{item.pool.total.toLocaleString('is-IS')} kr · {locale === 'is' ? 'Styrktarsjóður' : 'Reward pool'}</Text>
+          <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
+        </View>
+      )}
       <View style={styles.metaRow}>
         <Ionicons name="location-outline" size={17} color={theme.colors.textMuted} />
         <Text numberOfLines={1} style={[styles.meta, { color: theme.colors.textMuted }]}>{area}</Text>
@@ -86,13 +92,13 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
       </View>
       <View style={styles.pills}>
         <StatusPill label={t(categoryKey(item.category))} />
-        {item.follows && <StatusPill icon="heart-outline" label={`${item.follows.event.count} ${locale === 'is' ? 'fylgjendur' : 'followers'}`} />}
+        {item.follows && item.follows.event.count > 0 && <StatusPill icon="heart-outline" label={`${item.follows.event.count} ${locale === 'is' ? 'fylgjendur' : 'followers'}`} />}
         <StatusPill icon={item.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={item.eventProfile ? t(`event.${item.eventProfile.joinMode}`) : t(`hittingar.access.${item.accessMode}`)} tone="accent" />
         {item.locationVisibility === 'protected' && <StatusPill icon="shield-checkmark-outline" label={t('hittingar.location.protected')} tone="warning" />}
         {item.isExplicit && <StatusPill label="18+" tone="danger" />}
         {participation && <StatusPill label={t(participation)} tone="success" />}
       </View>
-      {item.capacity !== null && <Text style={{ color: theme.colors.textMuted }}>{Math.max(0, item.capacity - item.participantCount - (item.reservedPlaces ?? 0))} {locale === 'is' ? 'laus pláss' : 'places available'}</Text>}
+      {item.capacity !== null && <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{Math.max(0, item.capacity - item.participantCount - (item.reservedPlaces ?? 0))} {locale === 'is' ? 'laus pláss' : 'places available'}</Text>}
       <View style={[styles.cardFooter, { borderTopColor: theme.colors.border }]}>
         <Text style={[styles.host, { color: theme.colors.textMuted }]}>{t('hittingar.hostedBy', { name: item.host.displayName })}</Text>
         <Text style={[styles.count, { color: theme.colors.text }]}>
@@ -102,7 +108,7 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
         </Text>
       </View>
     </Pressable>
-    {onSponsor && item.pool?.status === 'accepting' && item.status === 'published' && <Button variant="secondary" label={paidSponsor ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor meetup') : (locale === 'is' ? 'Gerast áskrifandi og styrkja' : 'Upgrade to sponsor')} onPress={onSponsor} />}
+    {onSponsor && item.pool?.status === 'accepting' && item.status === 'published' && <Pressable accessibilityRole="button" onPress={onSponsor} style={({ pressed }) => [styles.sponsorAction, pressed && styles.pressed]}><Ionicons name="gift-outline" size={17} color={theme.colors.accent} /><Text style={[styles.sponsorText, { color: theme.colors.accent }]}>{paidSponsor ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor meetup') : (locale === 'is' ? 'Gerast áskrifandi og styrkja' : 'Upgrade to sponsor')}</Text><Ionicons name="chevron-forward" size={15} color={theme.colors.accent} /></Pressable>}
     </View>
   );
 }
@@ -191,29 +197,41 @@ export function MapAttribution() {
 export function MapUnavailable({ items, onSelect, providerMissing = false }: { items: HittingurListModel[]; onSelect: (id: string) => void; providerMissing?: boolean }) {
   const { locale, t, theme } = useApp();
   return (
-    <View style={[styles.mapFallback, { backgroundColor: theme.colors.surfaceMuted }]}>
-      <Ionicons name="map-outline" size={36} color={theme.colors.accent} />
-      <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t(providerMissing ? 'hittingar.map.notConfiguredTitle' : 'hittingar.map.fallbackTitle')}</Text>
-      <Text style={[textStyles.body, styles.center, { color: theme.colors.textMuted }]}>{t(providerMissing ? 'hittingar.map.notConfiguredBody' : 'hittingar.map.fallbackBody')}</Text>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.mapFallback}>
+      <View style={[styles.fallbackNotice, { backgroundColor: theme.colors.surfaceRaised }]}>
+        <Ionicons name="map-outline" size={24} color={theme.colors.accent} />
+        <View style={styles.cardCopy}>
+          <Text style={[styles.fallbackTitle, { color: theme.colors.text }]}>{t('hittingar.map.fallbackTitle')}</Text>
+          <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{t(providerMissing ? 'hittingar.map.notConfiguredBody' : 'hittingar.map.fallbackBody')}</Text>
+        </View>
+      </View>
       <View style={styles.fallbackList}>
-        {items.slice(0, 5).map((item) => (
+        {items.map((item) => (
           <Pressable key={item.id} accessibilityRole="button" onPress={() => onSelect(item.id)} style={[styles.fallbackRow, { backgroundColor: theme.colors.surface }]}>
             <Ionicons name={item.location.marker.isApproximate ? 'radio-button-on' : 'location'} size={18} color={theme.colors.accent} />
             <View style={styles.cardCopy}>
               <Text numberOfLines={1} style={[styles.fallbackTitle, { color: theme.colors.text }]}>{item.title}</Text>
               <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{generalAreaLabel(item, locale)}</Text>
-              <PoolSummary pool={item.pool} compact />
+              <Text style={[styles.meta, { color: theme.colors.textMuted }]}>{formatHittingurDate(item.startsAt, locale)}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
           </Pressable>
         ))}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
+export function LocationMapUnavailable() {
+  const { t, theme } = useApp();
+  return <View style={[styles.fallbackNotice, { backgroundColor: theme.colors.surfaceRaised }]}>
+    <Ionicons name="map-outline" size={22} color={theme.colors.textMuted} />
+    <Text style={[styles.locationFallbackText, { color: theme.colors.textMuted }]}>{t('hittingar.create.pinMapUnavailable')}</Text>
+  </View>;
+}
+
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 22, padding: 16, gap: 12 },
+  card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 10 },
   cardPrimary: { shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 18, elevation: 5 },
   pressed: { opacity: 0.82 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
@@ -228,19 +246,25 @@ const styles = StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   pill: { minHeight: 28, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9 },
   pillText: { fontSize: 12, lineHeight: 17, fontWeight: '800', flexShrink: 1 },
-  cardFooter: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 11, flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  cardFooter: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 9, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 },
   host: { flex: 1, fontSize: 12 },
   count: { fontSize: 12, fontWeight: '800' },
   notice: { borderWidth: 1, borderLeftWidth: 4, borderRadius: 18, padding: 15, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   noticeCopy: { flex: 1, gap: 4 },
   noticeTitle: { fontSize: 15, fontWeight: '800' },
-  segment: { flexDirection: 'row', borderRadius: 16, padding: 3 },
-  segmentItem: { minHeight: 38, borderRadius: 13, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  segment: { flexDirection: 'row', borderRadius: 13, padding: 3 },
+  segmentItem: { flex: 1, minHeight: 44, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   segmentText: { fontSize: 13, fontWeight: '800' },
   attribution: { minHeight: 25, borderRadius: 8, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center' },
   attributionText: { fontSize: 10 },
   attributionLink: { fontSize: 10, fontWeight: '800', textDecorationLine: 'underline' },
-  mapFallback: { flex: 1, minHeight: 380, padding: 22, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  mapFallback: { padding: 12, gap: 10, paddingBottom: 24 },
+  fallbackNotice: { borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  locationFallbackText: { flex: 1, fontSize: 13, lineHeight: 19 },
+  rewardRow: { borderRadius: 10, padding: 9, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  rewardText: { flex: 1, fontSize: 13, fontWeight: '700' },
+  sponsorAction: { minHeight: 44, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  sponsorText: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   center: { textAlign: 'center' },
   fallbackList: { alignSelf: 'stretch', gap: 8, marginTop: 8 },
   fallbackRow: { minHeight: 58, borderRadius: 15, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },

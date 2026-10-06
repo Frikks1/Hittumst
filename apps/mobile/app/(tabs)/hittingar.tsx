@@ -69,6 +69,7 @@ export default function HittingarScreen() {
 
   const displayItems: HittingurListModel[] = items;
   const selected = displayItems.find((item) => item.id === selectedId) ?? null;
+  const activeFilterCount = [filters.radiusKm !== null, filters.genders.length > 0, filters.social !== 'all', filters.diagnosisIds.length > 0, filters.category !== null, filters.region !== null, filters.accessMode !== null, filters.intention !== null, filters.venueMode !== null].filter(Boolean).length;
 
   const setTiming = (value: Timing) => {
     setMeetupFilters({ ...filters, timing: value });
@@ -109,8 +110,7 @@ export default function HittingarScreen() {
     <Screen scroll={false}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text accessibilityRole="header" style={[textStyles.title, { color: theme.colors.text }]}>{t('hittingar.title')}</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{t('hittingar.subtitle')}</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: theme.colors.text }]}>{t('hittingar.title')}</Text>
         </View>
         <View style={styles.headerActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={t('hittingar.notifications.title')} onPress={() => router.push('/hittingar/notifications' as Href)} style={[styles.roundButton, { backgroundColor: theme.colors.surfaceRaised }]}>
@@ -124,24 +124,25 @@ export default function HittingarScreen() {
           </Pressable>
         </View>
       </View>
-      {entitlement && <Pressable accessibilityRole="button" onPress={() => router.push('/membership' as Href)} style={{ paddingHorizontal: 18, paddingBottom: 10 }}><Text style={{ color: theme.colors.textMuted }}>{locale === 'is' ? 'Þátttaka í þessum mánuði' : 'Joining this month'}: {entitlement.joinsUsed}/{limits.joins} · {locale === 'is' ? 'Stofnað' : 'Hosted'}: {entitlement.occurrencesUsed}/{limits.occurrences}</Text></Pressable>}
+      <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>{t('hittingar.subtitle')}</Text>
+      {entitlement && <Pressable accessibilityRole="button" onPress={() => router.push('/membership' as Href)} style={styles.allowance}><Text style={[styles.allowanceText, { color: theme.colors.textMuted }]}>{locale === 'is' ? 'Þátttaka í þessum mánuði' : 'Joining this month'}: {entitlement.joinsUsed}/{limits.joins} · {locale === 'is' ? 'Stofnað' : 'Hosted'}: {entitlement.occurrencesUsed}/{limits.occurrences}</Text><Ionicons name="chevron-forward" size={13} color={theme.colors.textMuted} /></Pressable>}
       {actionError && <View style={{ padding: 14, gap: 8 }}><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) ? (locale === 'is' ? 'Þú hefur náð þátttökumörkum fyrir mánuð þessa hittings.' : 'You have reached your joining allowance for this event’s month.') : t('hittingar.actionFailed')}</Text>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) && <Button label={locale === 'is' ? 'Skoða áskriftir' : 'View memberships'} onPress={() => router.push('/membership' as Href)} />}</View>}
       <View style={styles.toolbar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           <Pressable accessibilityRole="button" onPress={() => router.push('/hittingar/following' as Href)} style={[styles.chip, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.border }]}><Ionicons name="heart-outline" size={17} color={theme.colors.accent} /><Text style={[styles.chipText, { color: theme.colors.text }]}>{locale === 'is' ? 'Í eftirfylgni' : 'Following'}</Text></Pressable>
           {(['all', 'today', 'weekend', 'future'] as const).map((value) => (
-            <Pressable key={value} accessibilityRole="checkbox" accessibilityState={{ checked: timing === value }} onPress={() => setTiming(value)} style={[styles.chip, { backgroundColor: timing === value ? theme.colors.accent : theme.colors.surface, borderColor: theme.colors.border }]}>
+            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: timing === value }} onPress={() => setTiming(value)} style={[styles.chip, { backgroundColor: timing === value ? theme.colors.accent : theme.colors.surface, borderColor: theme.colors.border }]}>
               <Text style={[styles.chipText, { color: timing === value ? theme.colors.textOnAccent : theme.colors.text }]}>{t(value === 'all' ? 'hittingar.allDates' : `hittingar.filter.${value}`)}</Text>
             </Pressable>
           ))}
           <Pressable accessibilityRole="button" onPress={() => router.push(`/hittingar/filters?${new URLSearchParams({ timing, category: first(params.category) ?? '', accessMode: first(params.accessMode) ?? '', region: first(params.region) ?? '', intention: first(params.intention) ?? '', venueMode: first(params.venueMode) ?? '' })}` as Href)} style={[styles.chip, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <Ionicons name="options-outline" size={17} color={theme.colors.text} />
-            <Text style={[styles.chipText, { color: theme.colors.text }]}>{t('hittingar.filter.more')} · {[filters.radiusKm !== null, filters.genders.length > 0, filters.social !== 'all', filters.diagnosisIds.length > 0, filters.category !== null, filters.region !== null, filters.accessMode !== null, filters.intention !== null, filters.venueMode !== null].filter(Boolean).length}</Text>
+            <Text style={[styles.chipText, { color: theme.colors.text }]}>{t('hittingar.filter.more')}{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}</Text>
           </Pressable>
         </ScrollView>
         <ViewModeToggle value={view} onChange={setView} />
       </View>
-      {demo && (
+      {demo && view === 'map' && (
         <View style={[styles.demoDisclosure, { backgroundColor: theme.colors.accentSoft }]}>
           <Ionicons name="information-circle-outline" size={16} color={theme.colors.accent} />
           <Text style={[styles.demoCopy, { color: theme.colors.text }]}>{t('hittingar.demoDisclosure')}</Text>
@@ -158,6 +159,7 @@ export default function HittingarScreen() {
           <HittingarMap items={displayItems} onSelect={setSelectedId} />
         ) : (
           <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />} contentContainerStyle={styles.list}>
+            {demo && <View style={[styles.demoDisclosure, { backgroundColor: theme.colors.surfaceRaised }]}><Ionicons name="information-circle-outline" size={16} color={theme.colors.textMuted} /><Text style={[styles.demoCopy, { color: theme.colors.textMuted }]}>{t('hittingar.demoDisclosure')}</Text></View>}
             {displayItems.length === 0 && !loading ? (
               <View style={styles.centerState}>
                 <Text style={[textStyles.heading, { color: theme.colors.text }]}>{t('hittingar.emptyTitle')}</Text>
@@ -174,8 +176,10 @@ export default function HittingarScreen() {
             <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={() => setSelectedId(null)} style={styles.close}>
               <Ionicons name="close" size={20} color={theme.colors.text} />
             </Pressable>
-            <HittingurCard item={selected} primary paidSponsor={paidSponsor} onSponsor={() => sponsor(selected.id)} onPress={() => router.push(`/hittingar/${selected.id}` as Href)} />
-            <HittingurPrimaryButton item={selected} busy={loading || actionBusy} onAction={(kind) => void runAction(kind)} />
+            <ScrollView contentContainerStyle={styles.previewContent}>
+              <HittingurCard item={selected} paidSponsor={paidSponsor} onSponsor={() => sponsor(selected.id)} onPress={() => router.push(`/hittingar/${selected.id}` as Href)} />
+              <HittingurPrimaryButton item={selected} busy={loading || actionBusy} onAction={(kind) => void runAction(kind)} />
+            </ScrollView>
           </View>
         )}
       </View>
@@ -184,21 +188,25 @@ export default function HittingarScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  headerCopy: { flexGrow: 1, flexShrink: 1, minWidth: 220 },
-  subtitle: { fontSize: 13, marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: 8, marginLeft: 'auto' },
-  roundButton: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  toolbar: { paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
+  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  headerCopy: { flex: 1, minWidth: 0 },
+  title: { fontSize: 25, lineHeight: 32, fontWeight: '800' },
+  subtitle: { fontSize: 13, lineHeight: 18, paddingHorizontal: 16, paddingBottom: 5 },
+  headerActions: { flexDirection: 'row', gap: 5 },
+  roundButton: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  allowance: { minHeight: 44, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  allowanceText: { fontSize: 11, lineHeight: 16, flexShrink: 1 },
+  toolbar: { paddingHorizontal: 12, paddingBottom: 8, gap: 8 },
   chips: { gap: 7, paddingRight: 8 },
-  chip: { minHeight: 38, borderWidth: 1, borderRadius: 20, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  chip: { minHeight: 44, borderWidth: 1, borderRadius: 22, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   chipText: { fontSize: 12, fontWeight: '800' },
-  demoDisclosure: { minHeight: 36, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  demoDisclosure: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 7 },
   demoCopy: { flex: 1, fontSize: 11, lineHeight: 15 },
   content: { flex: 1, position: 'relative' },
-  list: { padding: 12, paddingBottom: 120, gap: 10 },
-  bottomCard: { position: 'absolute', left: 8, right: 8, bottom: 8, padding: 8, paddingTop: 28, borderRadius: 26, gap: 8, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 22, elevation: 10 },
-  close: { position: 'absolute', zIndex: 2, right: 12, top: 4, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  centerState: { flex: 1, minHeight: 360, padding: 28, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  list: { padding: 12, paddingBottom: 24, gap: 14 },
+  bottomCard: { position: 'absolute', left: 8, right: 8, bottom: 8, maxHeight: '90%', padding: 8, paddingTop: 40, borderRadius: 20, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 22, elevation: 10 },
+  previewContent: { gap: 8 },
+  close: { position: 'absolute', zIndex: 2, right: 12, top: 0, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  centerState: { flex: 1, minHeight: 240, padding: 24, alignItems: 'center', justifyContent: 'center', gap: 14 },
   centerCopy: { textAlign: 'center' },
 });

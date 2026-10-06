@@ -6,12 +6,12 @@ import type {
   MeetupPlaceSearchOptions, MeetupProfileHistoryPage, MeetupProfileUpcomingPage, MeetupReinstateStatus, MeetupReportInput, MeetupRequest, MeetupRosterEntry, MeetupRoomMessage,
   MeetupPublicRosterPage, MeetupRoomMessagePage, MeetupRoomSummary, MeetupRsvpVisibility, MeetupSummary, MeetupUpdateInput,
   ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
-  OwnProfile, Page, ProfileAudience, ProfileReactionEmoji, ProfileSocial, ProfileTag, PublicProfile, PushPlatform, ReportCategory,
+  OwnProfile, Page, ProfileActivity, ProfileActivityKind, ProfileAudience, ProfileReactionEmoji, ProfileSocial, ProfileTag, PublicProfile, PushPlatform, ReportCategory,
   StarredItem, StarredTargetType
 } from '@/types/domain';
 
 export type AuthUser = { id: string; email: string | null };
-export type AuthProvider = 'apple' | 'google';
+export type AuthProvider = 'apple' | 'google' | 'facebook';
 
 export type OnboardingPayload = {
   dateOfBirth: string;
@@ -54,6 +54,9 @@ export interface RummalApi {
   setPremiumProfile(effect: boolean, badge: boolean): Promise<void>;
   discover(filters: DiscoveryFilters, cursor?: string | null): Promise<Page<PublicProfile>>;
   getProfile(id: string): Promise<PublicProfile>;
+  listProfileActivity(kind: ProfileActivityKind, cursor?: string | null): Promise<Page<ProfileActivity>>;
+  recordProfileView(profileId: string): Promise<void>;
+  sendProfileTap(profileId: string): Promise<void>;
   hasCompletedOnboarding(): Promise<boolean>;
   getOwnProfile(): Promise<OwnProfile>;
   updateProfile(profile: Partial<OwnProfile>): Promise<OwnProfile>;

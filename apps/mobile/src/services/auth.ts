@@ -103,14 +103,24 @@ export class SupabaseAuthService implements AuthService {
     }
 
     const redirectTo = makeRedirectUri({ scheme: 'rummal', path: 'auth/callback' });
+    const revision = this.authRevision;
     const { data, error } = await supabase!.auth.signInWithOAuth({
       provider,
-      options: { redirectTo, skipBrowserRedirect: true }
+      options: { redirectTo, skipBrowserRedirect: true, ...(provider === 'facebook' ? { scopes: 'email' } : {}) }
     });
     if (error || !data.url) throw error ?? new Error('OAuth URL was not returned');
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type !== 'success') throw new Error('OAuth sign-in was cancelled');
-    return completeOAuthCallback(readOAuthCallbackCode(result.url, redirectTo));
+    if (revision !== this.authRevision) throw new Error('authentication_cancelled');
+    const user = await completeOAuthCallback(readOAuthCallbackCode(result.url, redirectTo));
+    if (revision !== this.authRevision) {
+      // A late PKCE response can recreate the local session after sign-out.
+      // Clear that attempt without signing out a different account opened later.
+      const { data: current } = await supabase!.auth.getSession();
+      if (current.session?.user.id === user.id) await supabase!.auth.signOut({ scope: 'local' });
+      throw new Error('authentication_cancelled');
+    }
+    return user;
   }
 
   async signOut() {

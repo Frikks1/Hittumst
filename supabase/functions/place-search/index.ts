@@ -120,7 +120,7 @@ function placeKind(feature: MapTilerFeature) {
   return "other";
 }
 
-Deno.serve(async (request) => {
+async function placeSearch(request: Request) {
   const options = handleOptions(request);
   if (options) return options;
   if (request.method !== "POST") {
@@ -149,7 +149,11 @@ Deno.serve(async (request) => {
 
   let body: SearchRequest;
   try {
-    body = await request.json() as SearchRequest;
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return jsonResponse({ error: "Invalid JSON body" }, 400);
+    }
+    body = parsed as SearchRequest;
   } catch {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
@@ -173,6 +177,15 @@ Deno.serve(async (request) => {
         : 6,
     ),
   );
+
+  // Validate deployment settings before spending a member's search quota.
+  const providerKey = requiredEnv("MAPTILER_SERVER_API_KEY");
+  const providerBase = new URL(
+    Deno.env.get("MAPTILER_GEOCODING_BASE_URL") ?? "https://api.maptiler.eu",
+  );
+  if (providerBase.protocol !== "https:" || providerBase.username || providerBase.password) {
+    return jsonResponse({ error: "Place search is temporarily unavailable" }, 503);
+  }
 
   // Count only well-formed searches, immediately before contacting the paid
   // provider. The authenticated RPC also re-checks the rollout flag and host
@@ -202,9 +215,9 @@ Deno.serve(async (request) => {
 
   const endpoint = new URL(
     `/geocoding/${encodeURIComponent(providerQuery)}.json`,
-    Deno.env.get("MAPTILER_GEOCODING_BASE_URL") ?? "https://api.maptiler.eu",
+    providerBase,
   );
-  endpoint.searchParams.set("key", requiredEnv("MAPTILER_SERVER_API_KEY"));
+  endpoint.searchParams.set("key", providerKey);
   endpoint.searchParams.set("country", "is");
   endpoint.searchParams.set("language", locale === "is" ? "is,en" : "en,is");
   endpoint.searchParams.set(
@@ -227,6 +240,7 @@ Deno.serve(async (request) => {
   let response: Response;
   try {
     response = await fetch(endpoint, {
+      redirect: "error",
       headers: {
         Accept: "application/json",
         "User-Agent": "Rummal-Hittingar/1.0",
@@ -246,8 +260,19 @@ Deno.serve(async (request) => {
     );
   }
 
-  const payload = await response.json() as { features?: MapTilerFeature[] };
-  const places = (payload.features ?? []).flatMap((feature) => {
+  let features: unknown[];
+  try {
+    const payload = await response.json() as { features?: unknown } | null;
+    if (!Array.isArray(payload?.features)) throw new Error("Invalid provider response");
+    features = payload.features;
+  } catch {
+    return jsonResponse({ error: "Place search is temporarily unavailable" }, 502);
+  }
+  const places = features.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const raw = candidate as MapTilerFeature;
+    const feature: MapTilerFeature = { ...raw, context: Array.isArray(raw.context)
+      ? raw.context.filter((item) => item && typeof item === "object") : [] };
     const center = numberPair(feature.center);
     if (!center || !isIcelandFeature(feature, center)) return [];
     const [longitude, latitude] = center;
@@ -281,4 +306,13 @@ Deno.serve(async (request) => {
   }).slice(0, reverseCoordinate ? 1 : limit);
 
   return jsonResponse({ places });
+}
+
+Deno.serve(async (request) => {
+  try {
+    return await placeSearch(request);
+  } catch {
+    // Configuration/Auth/RPC failures must not leak credentials or provider details.
+    return jsonResponse({ error: "Place search is temporarily unavailable" }, 503);
+  }
 });

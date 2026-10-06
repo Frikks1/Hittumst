@@ -83,6 +83,31 @@ describe('demo onboarding parity', () => {
     const api = new MockRummalApi(); await api.completeOnboarding(payload);
     expect(await api.getOwnProfile()).toMatchObject({ displayName: payload.displayName, videos: payload.videos, socials: payload.socials, interests: payload.interests });
   });
+  it.each(['not_applicable', 'prefer_not_to_say'] as const)('persists the sole privacy answer %s and permits changing it later', async identity => {
+    const api = new MockRummalApi(); await api.completeOnboarding({ ...payload, identity: [identity] });
+    expect((await api.getOwnProfile()).identity).toEqual([identity]);
+    expect((await api.updateProfile({ identity: ['bi', 'queer'] })).identity).toEqual(['bi', 'queer']);
+    expect((await api.updateProfile({ identity: [identity] })).identity).toEqual([identity]);
+  });
+  it('rejects mixed privacy answers without partially replacing the demo profile', async () => {
+    const api = new MockRummalApi(); const before = await api.getOwnProfile();
+    await expect(api.completeOnboarding({ ...payload, identity: ['gay', 'prefer_not_to_say'] })).rejects.toThrow('orientation_privacy_choice_exclusive');
+    await expect(api.updateProfile({ displayName: 'Should not save', identity: ['not_applicable', 'prefer_not_to_say'] })).rejects.toThrow('orientation_privacy_choice_exclusive');
+    expect(await api.getOwnProfile()).toEqual(before);
+  });
+  it('uses the entered birthday for a member turning exactly eighteen today', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T12:00:00Z'));
+    try {
+      const api = new MockRummalApi();
+      const registration = api.completeOnboarding({ ...payload, dateOfBirth: '2008-09-30' });
+      await vi.runAllTimersAsync(); await registration;
+      const profile = api.getOwnProfile();
+      await vi.runAllTimersAsync();
+      expect(await profile).toMatchObject({ dateOfBirth: '2008-09-30', age: 18 });
+      await expect(api.completeOnboarding({ ...payload, dateOfBirth: '2008-10-01' })).rejects.toThrow('adult_profile_required');
+    } finally { vi.useRealTimers(); }
+  });
   it('leaves the previous profile intact when explicit consent is declined', async () => {
     const api = new MockRummalApi(); const before = await api.getOwnProfile();
     await expect(api.completeOnboarding({ ...payload, privacyAccepted: false })).rejects.toThrow('explicit_consent_required');
