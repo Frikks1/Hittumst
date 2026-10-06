@@ -4,18 +4,28 @@
   "startCommand": "docker compose -f docker-compose.base44.yml up -d --build",
   "secrets": [
     {
+      "name": "EXPO_PUBLIC_SUPABASE_URL",
+      "description": "Optional. Supabase project URL for the mobile app (staging: symsotzagpwzmiyawkpm). Without it the app runs on its seeded offline demo data.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "description": "Optional. Publishable key (sb_publishable_...) for the mobile app. Must be supplied together with the URL.",
+      "requiredAtBoot": false
+    },
+    {
       "name": "NEXT_PUBLIC_SUPABASE_URL",
-      "description": "Optional. HTTPS URL of the Supabase project (staging: symsotzagpwzmiyawkpm). Without it the web app serves its built-in demo data.",
+      "description": "Optional. Supabase project URL for the admin website/console on port 3001. Without it that service uses its built-in demo data.",
       "requiredAtBoot": false
     },
     {
       "name": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-      "description": "Optional. Publishable key (sb_publishable_...) for the same Supabase project. Must be supplied together with the URL.",
+      "description": "Optional. Publishable key for the admin service; must be supplied together with its URL.",
       "requiredAtBoot": false
     },
     {
       "name": "SUPABASE_SECRET_KEY",
-      "description": "Optional server-only key used by the background workers. Not needed for the demo-mode preview.",
+      "description": "Optional server-only key used by the admin background workers. Not needed for the demo-mode preview.",
       "requiredAtBoot": false
     }
   ]

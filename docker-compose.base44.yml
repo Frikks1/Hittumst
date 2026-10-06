@@ -1,19 +1,83 @@
 name: hittumst-base44
 
 # Base44 development environment for the Hittumst workspace.
-# Runs the Next.js app (apps/admin): the public bilingual website at "/" and the
-# moderation console under "/dashboard" and friends. With no Supabase variables
-# present the app serves its built-in demo data, so it boots without credentials.
-# Local Supabase/Postgres is not needed for this surface.
+#
+#   app (port 3000) — the social/dating product: apps/mobile, the Expo React Native
+#                     client, served as a web app so it is viewable in the preview.
+#                     Uses the app's seeded offline demo data; no credentials needed.
+#   web (port 3001) — apps/admin, the Next.js public bilingual website ("/") and the
+#                     moderation console, also credential-free via its demo mode.
+#
+# The local Supabase CLI stack is not part of this environment: neither surface
+# requires it, and `supabase start` would need nested Docker.
+
+x-app-image: &app-image
+  image: hittumst-base44-dev:local
+  build:
+    context: .
+    dockerfile: docker/base44-dev.Dockerfile
 
 services:
-  web:
-    build:
-      context: .
-      dockerfile: docker/base44-dev.Dockerfile
+  # Installs the workspace dependencies from the lockfile and repairs the
+  # expo-router hoisting, then exits. Both app services wait for it so they never
+  # install against the shared node_modules concurrently.
+  deps:
+    <<: *app-image
     working_dir: /app
-    # The wrapper script installs from the lockfile on first start (and again
-    # when the lockfile changes), then runs the live-reload dev server.
+    command: ["sh", "/app/docker/base44-entrypoint.sh", "sh", "-c", "echo dependencies ready"]
+    restart: "no"
+    volumes:
+      - ./:/app
+
+  # The social app (Expo / React Native) on the preview port.
+  app:
+    <<: *app-image
+    working_dir: /app
+    command:
+      - sh
+      - /app/docker/base44-entrypoint.sh
+      - npm
+      - run
+      - web
+      - --workspace
+      - "@rummal/mobile"
+      - --
+      - --port
+      - "3000"
+    restart: on-failure
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+    env_file:
+      - path: /run/base44/app.env
+        required: false
+    environment:
+      EXPO_NO_TELEMETRY: "1"
+      EXPO_PUBLIC_APP_ENV: development
+      # Development-only previewing switch: seeded demo data, no sign-in and no
+      # Iceland location check (see apps/mobile/README.md). Ignored in staging/production.
+      EXPO_PUBLIC_DEV_BYPASS_AUTH: "true"
+      # Shows the Hittingar tab.
+      EXPO_PUBLIC_HITTINGAR_ENABLED: "true"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r=>r.text()).then(t=>process.exit(t.includes('expo-reset')?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      start_period: 300s
+      retries: 4
+
+  # Public website plus moderation console (Next.js).
+  web:
+    <<: *app-image
+    working_dir: /app
     command:
       - sh
       - /app/docker/base44-entrypoint.sh
@@ -24,25 +88,27 @@ services:
       - "@rummal/admin"
       - --
       - --port
-      - "3000"
+      - "3001"
       - --hostname
       - 0.0.0.0
     restart: on-failure
+    depends_on:
+      deps:
+        condition: service_completed_successfully
     ports:
-      - "3000:3000"
+      - "3001:3001"
     volumes:
       - ./:/app
     env_file:
-      # Platform-managed secrets (absent for the demo-mode setup); last so a
+      # Platform-managed secrets (absent in the demo-mode setup); last so a
       # dashboard value always wins over anything set here.
       - path: /run/base44/app.env
         required: false
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       HITTUMST_APP_ENV: development
-      # Public preview origin, used for auth redirects and link building.
-      NEXT_PUBLIC_APP_URL: https://3000-${BASE44_PUBLIC_HOST_SUFFIX}
-      # Read by apps/admin/next.config.ts to accept the preview origin for dev
+      NEXT_PUBLIC_APP_URL: https://3001-${BASE44_PUBLIC_HOST_SUFFIX}
+      # Read by apps/admin/next.config.ts to accept this app's origin for dev
       # assets, Server Actions and iframe framing.
       BASE44_PUBLIC_HOST_SUFFIX: ${BASE44_PUBLIC_HOST_SUFFIX}
     healthcheck:
@@ -50,7 +116,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 30s
       timeout: 10s
       start_period: 600s
