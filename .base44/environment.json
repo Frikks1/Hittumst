@@ -1,0 +1,22 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d --build",
+  "secrets": [
+    {
+      "name": "NEXT_PUBLIC_SUPABASE_URL",
+      "description": "Optional. HTTPS URL of the Supabase project (staging: symsotzagpwzmiyawkpm). Without it the web app serves its built-in demo data.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "description": "Optional. Publishable key (sb_publishable_...) for the same Supabase project. Must be supplied together with the URL.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "SUPABASE_SECRET_KEY",
+      "description": "Optional server-only key used by the background workers. Not needed for the demo-mode preview.",
+      "requiredAtBoot": false
+    }
+  ]
+}
