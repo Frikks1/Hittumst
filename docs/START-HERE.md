@@ -1,6 +1,6 @@
 # Launching Hittumst: your setup guide
 
-Updated 27 September 2026. Start with the [Google Play launch status](google-play-launch.md): the separate staging database is now installed, and Android store-test configuration is prepared. This guide covers the remaining owner setup; older September 7–8 audits are historical evidence. The authoritative feature inventory is [feature-verification.md](feature-verification.md). The release gates in [launch-readiness.json](launch-readiness.json) remain closed until real evidence passes.
+Updated 27 September 2026; Apple track added 6 October 2026. Start with the [Google Play launch status](google-play-launch.md): the separate staging database is now installed, and Android store-test configuration is prepared. The [Apple launch track](apple-launch-track.md) mirrors it for iOS, where configuration is prepared but no build, TestFlight round or submission has happened. This guide covers the remaining owner setup; older September 7–8 audits are historical evidence. The authoritative feature inventory is [feature-verification.md](feature-verification.md). The release gates in [launch-readiness.json](launch-readiness.json) remain closed until real evidence passes.
 
 **You do not need to learn programming. You do need to be the verified operator, make spending/policy decisions, test the app, and arrange ongoing support.** Opening accounts alone cannot finish money-provider acceptance, physical-device checks or store review.
 

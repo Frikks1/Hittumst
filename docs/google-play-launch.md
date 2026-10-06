@@ -1,6 +1,6 @@
 # Hittumst: Google Play launch
 
-Verified 27 September 2026. **The staging database is installed. The app is not yet submitted or publicly launched.** This record supplements [START-HERE.md](START-HERE.md); the release gates in [launch-readiness.json](launch-readiness.json) remain closed.
+Verified 27 September 2026. **The staging database is installed. The app is not yet submitted or publicly launched.** The iOS counterpart of this record is [apple-launch-track.md](apple-launch-track.md). This record supplements [START-HERE.md](START-HERE.md); the release gates in [launch-readiness.json](launch-readiness.json) remain closed.
 
 | Work | Current state | What remains |
 | --- | --- | --- |

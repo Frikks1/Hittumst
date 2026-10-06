@@ -19,7 +19,7 @@ Iceland, adults 18+, Icelandic/English, original branding and identifiers is.rum
 | Deployment/queues                | [Render deployment](render-deployment.md), Dockerfile/render.yaml, continuous worker                   | Actual hosted build/deployment, queue delivery/alerts and environment isolation                                                  |
 | Backups/recovery                 | Encrypted media backup/deletion journal tooling and restore quarantine                                 | External journal initialization, separate off-site bytes, key custody, actual full restore/rollback and financial reconciliation |
 | Administration                   | Report/media appeal/staff MFA/finance exception/audit code                                             | Named trained owner+backup, moderation/support/reconciliation drills                                                             |
-| Store handoff                    | [store guide](store-submission-guide.md), store-submission.json, branded graphics                      | Actual signed screenshots, review access, disclosures/age declarations and store approval                                        |
+| Store handoff                    | [store guide](store-submission-guide.md), store-submission.json, branded graphics, [Apple track](apple-launch-track.md) | Actual signed screenshots, review access, disclosures/age declarations and store approval                                        |
 | Android test app                 | [APK instructions](android-testing.md), artifacts/android/build-report.json                            | APK build and signature verified; phone installation/behavior still requires user testing                                |
 
 ## Required launch evidence

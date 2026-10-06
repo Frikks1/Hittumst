@@ -68,7 +68,7 @@ Complete the Play Health apps declaration even if the submitted release has no e
 1. Complete operator verification and reserve matching app identifiers. Supply the real monitored contacts, domain and public policy URLs.
 2. Complete age/content and child-safety declarations; restrict minors as required for a dating app. Adult-only does not replace truthful content-rating answers.
 3. Configure store monthly products/subscription group, renewal/cancellation disclosures, review agreements and RevenueCat mapping. All promised cash benefits must have approved funding/provider acceptance before sales.
-4. Produce signed iOS and Android store builds from the exact reviewed candidate. The included development-signed APK cannot be uploaded as the production App Bundle.
+4. Produce signed iOS and Android store builds from the exact reviewed candidate. The iOS build/submit profiles and privacy manifest are prepared; follow [apple-launch-track.md](apple-launch-track.md) for the App Store steps. The included development-signed APK cannot be uploaded as the production App Bundle.
 5. Run TestFlight and the Play closed test. New personal Play accounts normally need at least 12 testers continuously opted in for 14 days before requesting production access. [Google testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465?hl=en).
 6. Upload actual device screenshots, approved descriptions, privacy labels/Data Safety, policies, reviewer access and all relevant provider disclosures.
 7. Require all 14 launch gates and pilot evidence before approving public rollout. Submit, monitor review messages and respond honestly; review acceptance is outside engineering's control.

@@ -33,6 +33,11 @@
         "buildType": "app-bundle"
       }
     },
+    "app-store-testing": {
+      "extends": "staging",
+      "distribution": "store",
+      "autoIncrement": true
+    },
     "production": {
       "distribution": "store",
       "environment": "production",
@@ -54,6 +59,12 @@
         "track": "internal",
         "releaseStatus": "draft"
       }
+    },
+    "app-store-testing": {
+      "ios": {}
+    },
+    "production": {
+      "ios": {}
     }
   },
   "cli": {
