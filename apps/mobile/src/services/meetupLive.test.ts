@@ -13,9 +13,19 @@ vi.mock('./supabase', () => ({
   },
 }));
 
-import { LiveMeetupService } from './meetupLive';
+import { LiveMeetupService, parseMeetupSummaries } from './meetupLive';
+import { DemoMeetupService } from './meetupDemo';
 
 describe('LiveMeetupService wire adapters', () => {
+  it('maps host-direct fees without reinterpreting whole ISK units or foreign currencies', async () => {
+    const [event] = await new DemoMeetupService().discover();
+    const [paid] = await parseMeetupSummaries([{ ...event, feeIsk: 1500, admissionMode: 'paid', priceMinor: 1500, currency: 'ISK' }]);
+    expect(paid).toMatchObject({ feeIsk: 1500, priceMinor: 1500, currency: 'ISK' });
+    const [legacy] = await parseMeetupSummaries([{ ...event, feeIsk: undefined, admissionMode: 'paid', priceMinor: 450, currency: 'EUR' }]);
+    expect(legacy).toMatchObject({ priceMinor: 450, currency: 'EUR' });
+    expect(legacy?.feeIsk).toBeUndefined();
+  });
+
   beforeEach(() => {
     supabaseMocks.invoke.mockReset();
     supabaseMocks.rpc.mockReset();
@@ -103,6 +113,8 @@ describe('LiveMeetupService wire adapters', () => {
           status: 'removed',
           requestedAt: '2026-08-31T19:00:00.000Z',
           respondedAt: '2026-08-31T20:00:00.000Z',
+          isSponsor: true,
+          rsvpVisibility: 'private',
         },
       ],
       error: null,
@@ -113,9 +125,30 @@ describe('LiveMeetupService wire adapters', () => {
       'c38df8a4-f792-4aa7-aec7-093140d54a04',
     );
 
-    expect(roster[0]).toMatchObject({ status: 'removed', profile: { displayName: 'Bjarni' } });
+    expect(roster[0]).toMatchObject({ status: 'removed', profile: { displayName: 'Bjarni' }, isSponsor: true, rsvpVisibility: 'private' });
     expect(supabaseMocks.rpc).toHaveBeenCalledWith('list_meetup_participants', {
       meetup_id: 'c38df8a4-f792-4aa7-aec7-093140d54a04',
     });
+  });
+
+  it('preserves server sponsor order and masked identities without attendance fields', async () => {
+    const sponsors = [
+      { id: 'receipt-a', profile: null, amount: 500, contributingMonths: 3, cumulativeAmount: 1500, repeatSupport: true },
+      { id: 'receipt-b', profile: { id: 'p-ari', displayName: 'Ari' }, amount: 5000, contributingMonths: 1, cumulativeAmount: 5000, repeatSupport: false },
+    ];
+    supabaseMocks.rpc.mockResolvedValue({ data: sponsors, error: null });
+    expect(await new LiveMeetupService().listSponsors('event')).toEqual(sponsors);
+    expect(supabaseMocks.rpc).toHaveBeenCalledWith('list_meetup_sponsors', { meetup_id: 'event' });
+    supabaseMocks.rpc.mockResolvedValue({ data: [{ ...sponsors[0], status: 'joined' }], error: null });
+    await expect(new LiveMeetupService().listSponsors('event')).rejects.toThrow();
+  });
+
+  it('fails closed when the sponsor list loses event authorization', async () => {
+    supabaseMocks.rpc.mockResolvedValue({ data: null, error: new Error('meetup_not_visible') });
+    await expect(new LiveMeetupService().listSponsors('event')).rejects.toThrow('meetup_not_visible');
+  });
+  it.each([null, {}, { items: [] }])('rejects malformed sponsor projections (%j)', async value => {
+    supabaseMocks.rpc.mockResolvedValue({ data: value, error: null });
+    await expect(new LiveMeetupService().listSponsors('event')).rejects.toThrow('invalid_meetup_sponsors');
   });
 });

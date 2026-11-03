@@ -52,3 +52,27 @@ it.skipIf(!process.env.FFMPEG_PATH || !process.env.FFPROBE_PATH)(
   },
   120000,
 );
+
+it.skipIf(!process.env.FFMPEG_PATH || !process.env.FFPROBE_PATH)(
+  'preserves a real animated GIF and supplies every normalized frame for moderation',
+  async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'hittumst-gif-fixture-'));
+    try {
+      const source = path.join(directory, 'source.gif');
+      await execute(process.env.FFMPEG_PATH!, ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+        'testsrc=size=80x60:rate=4:duration=1', '-loop', '0', source]);
+      const result = await normalizeMedia(await readFile(source), 'image', { maxBytes: 10 * 1024 * 1024, maxDurationMs: null, allowAnimatedImages: true });
+      expect(result.contentType).toBe('image/gif');
+      expect(result.bytes.subarray(0, 6).toString()).toMatch(/^GIF8[79]a$/);
+      expect(result.moderationFrames).toHaveLength(4);
+      expect(result.moderationFrames![0]!.equals(result.moderationFrames![3]!)).toBe(false);
+      expect(result.thumbnail.length).toBeGreaterThan(100);
+      const normalized = path.join(directory, 'verified.gif');
+      await writeFile(normalized, result.bytes);
+      const probe = await execute(process.env.FFPROBE_PATH!, ['-v', 'error', '-count_frames', '-show_streams', '-show_format', '-of', 'json', normalized]);
+      expect(JSON.parse(probe.stdout).streams[0].nb_read_frames).toBe('4');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 120000,
+);

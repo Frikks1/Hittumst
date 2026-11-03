@@ -15,18 +15,28 @@ import { api } from '@/services';
 import type { AlbumShare, ChatMessage } from '@/types/domain';
 import { mergeMessages, validMessageBody } from '@/utils/chatDelivery';
 import { loadChatCatchup } from '@/utils/chatSync';
+import { useChatDraft } from '@/providers/useChatDraft';
+import { useChatInbox } from '@/providers/ChatInboxProvider';
+import { useChatProfileContext } from '@/providers/useSharedChatStarters';
+import { chatImprovementsCopy } from '@/i18n/chatImprovements';
+import { markFirstConversationStarted } from '@/features/onboarding/checklistStorage';
 
 export default function ChatScreen() {
-  const { id, name, profileId } = useLocalSearchParams<{ id: string; name?: string; profileId?: string }>();
+  const { id, name, profileId, replyToPrompt } = useLocalSearchParams<{ id: string; name?: string; profileId?: string; replyToPrompt?: string }>();
   const router = useRouter();
   const { t, theme, user, locationAllowed, locale } = useApp();
+  const copy = chatImprovementsCopy(locale);
+  const { markReadLocally } = useChatInbox();
+  const profileContext = useChatProfileContext(user?.id, profileId, locationAllowed);
+  const promptText = replyToPrompt === '1' ? profileContext.prompt.slice(0, 500) : '';
+  const { draft, setDraft, draftError } = useChatDraft(user?.id, id, promptText ? copy.promptStarter(promptText) : '');
+  const sharedInterests = profileContext.interests;
   const { appearance } = useAppearance();
   const bubbles = chatBubbleColors(theme, appearance);
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const confirmedMessages = useRef<ChatMessage[]>([]);
   confirmedMessages.current = messages.filter(message => message.status === 'sent');
-  const [draft, setDraft] = useState('');
   const [shares, setShares] = useState<AlbumShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -44,7 +54,7 @@ export default function ChatScreen() {
   useFocusEffect(useCallback(() => { focused.current = true; return () => { focused.current = false; }; }, []));
 
   useEffect(() => {
-    setMessages([]); setDraft(''); setShares([]); setError(null); busy.current = false; setSending(false);
+    setMessages([]); setShares([]); setError(null); busy.current = false; setSending(false);
     setNextCursor(null); setLoadingOlder(false); olderBusy.current = false;
   }, [id, user?.id, locationAllowed]);
 
@@ -55,7 +65,7 @@ export default function ChatScreen() {
     setLoading(true); setError(null);
     const markRead = (items: ChatMessage[]) => {
       const latest = items.filter(item => item.status === 'sent').at(-1);
-      if (latest && focused.current && AppState.currentState === 'active') void api.markConversationRead(id, latest.createdAt).catch(() => undefined);
+      if (latest && focused.current && AppState.currentState === 'active') void api.markConversationRead(id, latest.createdAt).then(() => { if (active && context === scope.current) markReadLocally(id); }).catch(() => undefined);
     };
     let refreshing = false;
     let refreshAgain = false;
@@ -91,7 +101,7 @@ export default function ChatScreen() {
     const appState = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
     const timer = setInterval(() => { if (focused.current && AppState.currentState === 'active') void refresh(); }, 8000);
     return () => { active = false; unsubscribe(); appState.remove(); clearInterval(timer); };
-  }, [id, locationAllowed, user, reload]);
+  }, [id, locationAllowed, user, reload, markReadLocally]);
 
   const loadOlder = async () => {
     if (!id || !nextCursor || olderBusy.current || loading) return;
@@ -118,7 +128,7 @@ export default function ChatScreen() {
     if (!retry) setDraft('');
     try {
       const message = await api.sendText(id, body, pending.id);
-      if (context === scope.current) setMessages(items => mergeMessages(items, [message]));
+      if (context === scope.current) { setMessages(items => mergeMessages(items, [message])); void markFirstConversationStarted(user.id).catch(() => undefined); }
     } catch {
       if (context === scope.current) {
         setMessages(items => mergeMessages(items, [{ ...pending, status: 'failed' }]));
@@ -129,14 +139,14 @@ export default function ChatScreen() {
     }
   };
   const sendImage = async () => {
-    if (!id || !locationAllowed || busy.current) return;
+    if (!id || !user || !locationAllowed || busy.current) return;
     const context = scope.current;
     busy.current = true; setSending(true); setError(null);
     try {
       const picker = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
       if (picker.canceled || !picker.assets[0] || context !== scope.current) return;
       const message = await api.sendImage(id, picker.assets[0].uri, picker.assets[0].mimeType);
-      if (context === scope.current) { nearBottom.current = true; setMessages(items => mergeMessages(items, [message])); }
+      if (context === scope.current) { nearBottom.current = true; setMessages(items => mergeMessages(items, [message])); void markFirstConversationStarted(user.id).catch(() => undefined); }
     } catch { if (context === scope.current) setError('send'); }
     finally { if (context === scope.current) { busy.current = false; setSending(false); } }
   };
@@ -160,6 +170,7 @@ export default function ChatScreen() {
     <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
       <ChatBackdrop />
       <View style={styles.safety}><Ionicons name="shield-checkmark-outline" size={15} color={theme.colors.accent} /><Text style={[styles.safetyText, { color: theme.colors.textMuted }]}>{t('chat.safety')}</Text></View>
+      {!!promptText && <View style={[styles.prompt, { borderColor: theme.colors.accent, backgroundColor: theme.colors.surface }]}><Text style={{ color: theme.colors.accent, fontWeight: '700' }}>{copy.promptReply}</Text><Text style={{ color: theme.colors.text }}>{promptText}</Text></View>}
       {error && <View accessibilityRole="alert" style={styles.error}>
         <Text style={{ color: theme.colors.danger }}>{t(error === 'load' ? 'chat.loadingError' : error === 'album' ? 'chat.albumError' : 'chat.sendFailed')}</Text>
         {error === 'load' && <Button variant="secondary" label={t('common.retry')} onPress={() => setReload(value => value + 1)} />}
@@ -173,6 +184,7 @@ export default function ChatScreen() {
           <View style={styles.starters}>
             <Text accessibilityRole="header" style={[styles.starterTitle, {color:theme.colors.text}]}>{t('chat.startersTitle')}</Text>
             <Text style={[styles.starterHelp,{color:theme.colors.textMuted}]}>{t('chat.startersHelp')}</Text>
+            {sharedInterests.map(interest => <ChoiceChip key={interest} label={copy.sharedStarter(interest)} selected={draft === copy.sharedStarter(interest)} onPress={() => setDraft(copy.sharedStarter(interest))} />)}
             {(['chat.starterCoffee','chat.starterWeekend','chat.starterMusic'] as const).map(key => <ChoiceChip key={key} label={t(key)} selected={draft === t(key)} onPress={() => setDraft(t(key))} />)}
           </View>}
         renderItem={({item}) => {
@@ -199,6 +211,7 @@ export default function ChatScreen() {
           </View></View>;
         }} />
       {!!draft.trim()&&!validMessageBody(draft)&&<Text accessibilityRole="alert" style={[styles.error,{color:theme.colors.danger}]}>{t('chat.tooLong')}</Text>}
+      {draftError && <Text accessibilityRole="alert" style={[styles.error, { color: theme.colors.danger }]}>{copy.draftError}</Text>}
       <View style={[styles.composer,{backgroundColor:theme.colors.surface,borderTopColor:theme.colors.border,paddingBottom:Math.max(insets.bottom,10)}]}>
         {profileId&&<Pressable accessibilityRole="button" accessibilityLabel={t('chat.shareAlbum')} style={styles.composerIcon} onPress={()=>router.push(`/albums/share?profileId=${profileId}&name=${encodeURIComponent(name??'')}`)}><Ionicons name="lock-closed-outline" size={21} color={theme.colors.accent} /></Pressable>}
         <Pressable accessibilityRole="button" disabled={sending} accessibilityState={{disabled:sending}} accessibilityLabel={t('chat.image')} style={styles.composerIcon} onPress={()=>void sendImage()}><Ionicons name="image-outline" size={22} color={theme.colors.accent} /></Pressable>
@@ -211,7 +224,7 @@ export default function ChatScreen() {
   </Screen>;
 }
 const styles=StyleSheet.create({
-  page:{flex:1},safety:{paddingHorizontal:18,paddingVertical:10,flexDirection:'row',gap:8,alignItems:'center'},safetyText:{fontSize:12,lineHeight:18,flex:1},
+  page:{flex:1},prompt:{marginHorizontal:16,marginBottom:8,padding:12,borderWidth:1,borderRadius:12,gap:6},safety:{paddingHorizontal:18,paddingVertical:10,flexDirection:'row',gap:8,alignItems:'center'},safetyText:{fontSize:12,lineHeight:18,flex:1},
   list:{padding:16,gap:12,flexGrow:1},row:{flexDirection:'row'},mine:{justifyContent:'flex-end'},message:{maxWidth:'84%',gap:5},
   bubble:{paddingHorizontal:15,paddingVertical:11,borderRadius:20},messageImage:{width:210,height:230,borderRadius:12},
   timestamp:{fontSize:11,lineHeight:17,paddingHorizontal:4},album:{maxWidth:'90%',minWidth:250,padding:16,borderWidth:1,borderRadius:20,gap:12},

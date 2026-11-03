@@ -1,4 +1,5 @@
 import type { MeetupPoolSummary } from '@rummal/shared';
+import type { MeetupMediaUpload } from './types';
 import { generateMeetupOccurrences, monthInIceland, TIERS, type TierId, type MeetupMedia, type MeetupReview } from '@rummal/shared';
 import { defaultMeetupEventProfile, meetupEligibility, type MeetupEventProfile } from '@rummal/shared';
 import * as Crypto from 'expo-crypto';
@@ -103,6 +104,7 @@ type DemoMeetup = {
   address?: string;
   arrivalInstructions?: string;
   capacity: number | null;
+  feeIsk?: number;
   baseParticipantCount: number;
   isExplicit: boolean;
   prohibitedServicesAttested: boolean;
@@ -194,6 +196,7 @@ export class DemoMeetupService {
   constructor(now = new Date(), private readonly tier: () => TierId = () => 'plebbi',
     private readonly poolForEvent?: (event: { id: string; hostId: string; startsAt: string; endsAt: string; status: MeetupStatus; participantCount: number }) => MeetupPoolSummary,
     private readonly context: { viewerId?: () => string; now?: () => Date;
+      sponsored?: (meetupId: string, profileId: string) => boolean;
       reservedSeats?: (event: Pick<MeetupSummary, 'id' | 'title' | 'host' | 'seriesId' | 'capacity' | 'participantCount' | 'startsAt' | 'status'>, excluding?: string) => number } = {}) {
     this.referenceNow = now;
     const createdAt = addTime(now, -2);
@@ -363,6 +366,7 @@ export class DemoMeetupService {
   private reviews = new Map<string, MeetupReview[]>();
   private assertOwner(id: string) { if (this.record(id).host.id !== this.viewerId) throw new Error('owned_meetup_required'); }
   async listMedia(id: string): Promise<MeetupMedia[]> { this.record(id); return this.media.get(id) ?? []; }
+  async listMediaUploads(id: string): Promise<MeetupMediaUpload[]> { this.assertOwner(id); return []; }
   async uploadMedia(id: string, uri: string, kind: 'photo' | 'video', _mimeType: string) {
     this.assertOwner(id); const rows = this.media.get(id) ?? [];
     if (rows.length >= 8) throw new Error('event_media_limit');
@@ -403,6 +407,25 @@ export class DemoMeetupService {
   communityParticipants(id: string) {
     const event = this.record(id); return [...new Set([...event.participations, ...event.requests]
       .filter(([, entry]) => ['joined', 'approved'].includes(entry.status)).map(([profileId]) => profileId))];
+  }
+  /** Mirror server block handling: host blocks revoke RSVP; peer blocks pause chat. */
+  revokeAccessOnBlock(profileId: string): string[] {
+    const paused: string[] = [];
+    for (const event of this.meetups) {
+      if (event.status !== 'published') continue;
+      const callerStatus = this.statusFor(event);
+      const peerStatus = event.participations.get(profileId)?.status ?? event.requests.get(profileId)?.status ?? 'none';
+      const removedId = event.host.id === profileId ? this.viewerId : event.host.id === this.viewerId ? profileId : null;
+      if (removedId) {
+        const participation = event.participations.get(removedId);
+        const request = event.requests.get(removedId);
+        if (participation && ['joined', 'approved', 'pending'].includes(participation.status)) participation.status = 'removed';
+        if (request && ['joined', 'approved', 'pending'].includes(request.status)) request.status = 'removed';
+      } else if (['joined', 'approved'].includes(callerStatus) && ['joined', 'approved'].includes(peerStatus)) {
+        paused.push(event.id);
+      }
+    }
+    return paused;
   }
   async allForCommunity() { return this.meetups.filter(event => isLaunchMeetup(event) && (event.status === 'published' || event.host.id === this.viewerId)).map(event => this.detail(event)); }
   async acceptCommunityOffer(id: string, approvedApplication: boolean) {
@@ -461,8 +484,8 @@ export class DemoMeetupService {
         canReport: !isHost && meetup.status !== 'moderation_hidden',
         canBlockHost: !isHost,
         canViewRoster: active && isHost,
-        canViewRoom: isHost || isAttending,
-        canSendRoomMessage: (isHost || isAttending) && active,
+        canViewRoom: diagnosisEligible && (isHost || isAttending) && active && this.now.getTime() < Date.parse(calculateMeetupEffectiveEnd(meetup.startsAt, meetup.endsAt)) + 24 * 60 * 60 * 1000,
+        canSendRoomMessage: diagnosisEligible && (isHost || isAttending) && active,
         canConfirmAttendance: false,
         canCompleteAttendance: false,
       },
@@ -519,6 +542,10 @@ export class DemoMeetupService {
       ? 'protected'
       : meetup.locationVisibility;
     return meetupSummarySchema.parse({
+      feeIsk: meetup.feeIsk ?? 0,
+      admissionMode: meetup.feeIsk ? 'paid' : 'free',
+      priceMinor: meetup.feeIsk || null,
+      currency: meetup.feeIsk ? 'ISK' : null,
       id: meetup.id,
       title: meetup.title,
       category: meetup.category,
@@ -628,9 +655,21 @@ export class DemoMeetupService {
   async listParticipants(id: string): Promise<MeetupRosterEntry[]> {
     const meetup = this.record(id);
     if (meetup.host.id !== this.viewerId) throw new Error('meetup_forbidden');
+    const statusOrder = ['pending', 'joined', 'approved', 'removed', 'declined', 'withdrawn', 'left'];
     return [...meetup.requests.values()]
-      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt))
-      .map((entry) => meetupRosterEntrySchema.parse({ meetupId: meetup.id, profile: entry.profile, status: entry.status, requestedAt: entry.requestedAt, respondedAt: entry.respondedAt }));
+      .map(entry => ({ ...entry, isSponsor: this.context.sponsored?.(id, entry.profile.id) ?? false }))
+      .sort((left, right) => Number(right.isSponsor) - Number(left.isSponsor)
+        || statusOrder.indexOf(left.status) - statusOrder.indexOf(right.status)
+        || left.requestedAt.localeCompare(right.requestedAt) || left.profile.id.localeCompare(right.profile.id))
+      .map((entry) => meetupRosterEntrySchema.parse({ meetupId: meetup.id, profile: entry.profile, status: entry.status, requestedAt: entry.requestedAt, respondedAt: entry.respondedAt, isSponsor: entry.isSponsor, rsvpVisibility: 'private' }));
+  }
+
+  async listPublicRoster(id: string) {
+    const meetup = this.record(id);
+    if (meetup.host.id !== this.viewerId) return { items: [], nextCursor: null };
+    const items = (await this.listParticipants(id)).filter(entry => ['joined', 'approved'].includes(entry.status))
+      .sort((left, right) => Number(right.isSponsor) - Number(left.isSponsor) || left.profile.id.localeCompare(right.profile.id));
+    return { items: items.slice(0, 50), nextCursor: items.length > 50 ? items[49]!.profile.id : null };
   }
 
   async createDraft(input: MeetupDraftInput): Promise<string> {
@@ -667,6 +706,7 @@ export class DemoMeetupService {
       ...(draft.address ? { address: draft.address } : {}),
       ...(draft.arrivalInstructions ? { arrivalInstructions: draft.arrivalInstructions } : {}),
       capacity: draft.capacity ?? null,
+      feeIsk: draft.feeIsk ?? 0,
       baseParticipantCount: 0,
       isExplicit: draft.isExplicit,
       prohibitedServicesAttested: draft.prohibitedServicesAttested,
@@ -735,6 +775,7 @@ export class DemoMeetupService {
     }
     if (update.releasePolicy !== undefined) meetup.releasePolicy = update.releasePolicy;
     if ('capacity' in update) meetup.capacity = update.capacity ?? null;
+    if (update.feeIsk !== undefined) meetup.feeIsk = update.feeIsk;
     if (update.isExplicit !== undefined) meetup.isExplicit = update.isExplicit;
     if (resetsProhibitedServicesAttestation) {
       meetup.prohibitedServicesAttested = update.prohibitedServicesAttested === true;

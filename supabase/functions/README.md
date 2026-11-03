@@ -44,3 +44,17 @@ Required production secrets:
 
 Never log request bodies, address queries, push tokens, notification contents,
 or provider payloads.
+
+## `strax-media`
+
+Deploy with the Strax migration. The mobile client sends up to 40 activity IDs,
+using its current Authorization bearer token. The handler validates the user and
+calls `strax_get` with that token before and after signing. The existing backend
+session, location, blocking, moderation and expiry rules therefore apply.
+
+Only the server signs approved objects in `strax-media`. Direct authenticated
+Storage reads/signing are denied. Returned token expirations are checked against
+the immutable activity deadline; failed or revoked photos are omitted without
+hiding the text listing. This function needs the existing Supabase URL,
+publishable and secret/service-role configuration, with no new provider secret.
+Run `node --test scripts/strax-media.test.mjs` for the isolated real-handler tests.

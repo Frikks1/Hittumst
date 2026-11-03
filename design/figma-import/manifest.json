@@ -1,0 +1,14 @@
+{
+  "name": "Hittumst — editable current UI",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": [
+    "figma"
+  ],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://images.unsplash.com"
+    ],
+    "reasoning": "Load the same public demo portrait assets used by the current app."
+  }
+}

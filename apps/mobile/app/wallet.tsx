@@ -1,11 +1,9 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { View } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import {
-  defaultMeetupFilters,
   type FriendSummary,
-  type MeetupSummary,
   type FinanceCommand,
   type FinanceSnapshot,
   type WithdrawalQuote,
@@ -14,8 +12,6 @@ import { Text, TextInput } from '@/components/Typography';
 import { Button, ChoiceChip, Screen } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';
-import { PoolSummary } from '@/features/hittingar/PoolSummary';
-import { SponsorshipForm } from '@/features/hittingar/SponsorshipForm';
 
 export default function WalletScreen() {
   const { user } = useApp();
@@ -25,15 +21,11 @@ export default function WalletScreen() {
 function WalletSession() {
   const { theme, locale } = useApp();
   const is = locale === 'is';
-  const router = useRouter();
-  const { meetupId: initialMeetupId } = useLocalSearchParams<{ meetupId?: string }>();
   const [friends, setFriends] = useState<FriendSummary[]>([]);
-  const [events, setEvents] = useState<MeetupSummary[]>([]);
 
   const [wallet, setWallet] = useState<FinanceSnapshot | null>(null);
   const [amount, setAmount] = useState('500');
   const [recipient, setRecipient] = useState('');
-  const [meetup, setMeetup] = useState(initialMeetupId ?? '');
   const [quote, setQuote] = useState<WithdrawalQuote | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -58,27 +50,8 @@ function WalletSession() {
         .listFriends()
         .then(setFriends)
         .catch(() => {});
-      void api
-        .discoverMeetups(defaultMeetupFilters)
-        .then(async listed => {
-          if (initialMeetupId && !listed.some(event => event.id === initialMeetupId)) {
-            const targeted = await api.getMeetup(initialMeetupId).catch(() => null);
-            if (targeted) listed = [targeted, ...listed];
-          }
-          setEvents(listed);
-          if (initialMeetupId) setMeetup(initialMeetupId);
-        })
-        .catch(() => {});
-    }, [initialMeetupId]),
+    }, []),
   );
-  const selectedEvent = events.find(event => event.id === meetup);
-  const refreshSelected = async () => {
-    await load();
-    if (meetup) {
-      const next = await api.getMeetup(meetup);
-      setEvents(current => current.map(event => event.id === meetup ? next : event));
-    }
-  };
   const run = async (command: FinanceCommand) => {
     if (busy) return;
     setBusy(true);
@@ -86,8 +59,7 @@ function WalletSession() {
     try {
       const result = await api.walletCommand(command);
       setQuote(command.action === 'quote' ? (result as WithdrawalQuote) : null);
-      await refreshSelected();
-      if (command.action === 'publish_sponsored') router.push(`/hittingar/${encodeURIComponent(command.meetupId)}` as never);
+      await load();
     } catch {
       setError(true);
       setPending(await api.getPendingFinanceCommand().catch(() => null));
@@ -145,8 +117,6 @@ function WalletSession() {
               {wallet.balance.toLocaleString('is-IS')} kr · {is ? 'Peningaveski' : 'Cash wallet'}
             </Text>
             <Text style={{ color: theme.colors.text }}>{is ? 'Til úttektar' : 'Withdrawable'}: {wallet.withdrawableBalance.toLocaleString('is-IS')} kr</Text>
-            <Text style={{ color: theme.colors.text }}>{is ? 'Styrktarinneign' : 'Sponsorship credit'}: {wallet.sponsorshipCredit.toLocaleString('is-IS')} kr</Text>
-            <Text style={{ color: theme.colors.textMuted }}>{is ? 'Styrktarinneign má aðeins nota til að styrkja hittinga. Hún rennur ekki út og er aðskilin frá peningum sem má gefa, nota í verslun eða taka út.' : 'Sponsorship credit is only for meetup pools. It does not expire and is separate from money available for gifts, shopping or withdrawal.'}</Text>
             <TextInput
               accessibilityLabel={is ? 'Upphæð' : 'Amount'}
               keyboardType="number-pad"
@@ -175,32 +145,6 @@ function WalletSession() {
               label={is ? 'Gefa' : 'Gift'}
               onPress={() => void run({ action: 'gift', recipientId: recipient, ...base() })}
             />
-            <Text style={{ color: theme.colors.text }}>
-              {is ? 'Veldu hitting' : 'Choose a meetup'}
-            </Text>
-            {events.map((event) => (
-              <ChoiceChip
-                key={event.id}
-                label={event.title}
-                selected={meetup === event.id}
-                onPress={() => setMeetup(event.id)}
-              />
-            ))}
-            {selectedEvent && <>
-              <PoolSummary pool={selectedEvent.pool} />
-              {selectedEvent.pool?.status === 'accepting' && selectedEvent.status === 'published'
-                ? <SponsorshipForm key={`${meetup}:${wallet.balance}:${wallet.sponsorshipCredit}`} meetupId={meetup} disabled={busy || Boolean(pending)} onComplete={refreshSelected} />
-                : <Text style={{ color: theme.colors.textMuted }}>{is ? 'Lokað fyrir styrki á þennan hitting.' : 'This meetup is not accepting sponsorships.'}</Text>}
-            </>}
-            {meetup && (
-              <Button
-                variant="secondary"
-                label={is ? 'Skrá mætingu' : 'Check in'}
-                onPress={() =>
-                  router.push(`/check-in?meetupId=${encodeURIComponent(meetup)}` as never)
-                }
-              />
-            )}
             <Button
               disabled={busy}
               label={is ? 'Skoða úttekt' : 'Quote withdrawal'}
@@ -244,29 +188,6 @@ function WalletSession() {
                   {new Date(tx.at).toLocaleDateString(locale)} · {tx.amount > 0 ? '+' : ''}
                   {tx.amount} kr
                 </Text>
-              ))}
-            {wallet.contributions
-              .filter((c) => !c.reversed)
-              .map((c) => (
-                <View key={c.id} style={{ gap: 6 }}>
-                  <Text style={{ color: theme.colors.text }}>
-                    {events.find((e) => e.id === c.eventId)?.title ??
-                      (is ? 'Styrkur til hittings' : 'Meetup contribution')}{' '}
-                    · {c.amount} kr
-                  </Text>
-                  <Button
-                    disabled={busy}
-                    variant="secondary"
-                    label={is ? 'Afturkalla fyrir upphaf' : 'Reverse before start'}
-                    onPress={() =>
-                      void run({
-                        action: 'reverse',
-                        contributionId: c.id,
-                        requestId: Crypto.randomUUID(),
-                      })
-                    }
-                  />
-                </View>
               ))}
             {wallet.payouts.map((p) => (
               <Text key={p.id} style={{ color: theme.colors.text }}>

@@ -39,4 +39,20 @@ describe('Event media access and uploads', () => {
     expect(await new LiveMeetupService().listMedia('event-id')).toEqual([{id:'1',kind:'video',url:'https://example.test/signed-video',position:0}]);
     expect(mocks.createSignedUrls).toHaveBeenCalledWith(['event-id/video.mp4'],300);
   });
+
+  it('reads owner upload receipts without signing or exposing quarantine bytes', async () => {
+    const receipt = { id: 'upload-id', status: 'processing', createdAt: '2026-10-14T12:00:00Z', reason: null };
+    mocks.rpc.mockResolvedValue({ error: null, data: [{ ...receipt, object_path: 'private/quarantine', url: 'https://unreviewed.test/photo' }] });
+    expect(await new LiveMeetupService().listMediaUploads('event-id')).toEqual([receipt]);
+    expect(mocks.rpc).toHaveBeenCalledWith('list_my_media_uploads', { target_type: 'meetup', target_id: 'event-id' });
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('keeps receipt errors and malformed metadata visible instead of returning a false empty count', async () => {
+    const service = new LiveMeetupService();
+    mocks.rpc.mockResolvedValueOnce({ error: new Error('account_unavailable'), data: null });
+    await expect(service.listMediaUploads('event-id')).rejects.toThrow('account_unavailable');
+    mocks.rpc.mockResolvedValueOnce({ error: null, data: [{ id: 'upload-id', status: 'unknown', createdAt: 'invalid', reason: null }] });
+    await expect(service.listMediaUploads('event-id')).rejects.toThrow();
+  });
 });

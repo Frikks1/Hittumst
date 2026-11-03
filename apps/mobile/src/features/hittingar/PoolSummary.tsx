@@ -6,7 +6,7 @@ import type { MeetupSummary } from '@rummal/shared';
 export function PoolSummary({ pool, compact = false }: { pool: MeetupSummary['pool']; compact?: boolean }) {
   const { locale, theme } = useApp();
   const is = locale === 'is';
-  if (!pool) return <Text style={{ color: theme.colors.textMuted }}>{is ? 'Styrktarsjóður ekki tiltækur' : 'Reward pool unavailable'}</Text>;
+  if (!pool) return <Text style={{ color: theme.colors.textMuted }}>{is ? 'Sjóður ekki tiltækur' : 'Sjóður unavailable'}</Text>;
   const money = (value: number) => `${value.toLocaleString('is-IS')} kr`;
   const total = pool.status === 'paid_out' ? pool.paidTotal : pool.status === 'refunded' ? pool.refundedTotal : pool.total;
   const status = {
@@ -18,7 +18,7 @@ export function PoolSummary({ pool, compact = false }: { pool: MeetupSummary['po
   }[pool.status];
   return <View style={{ gap: compact ? 3 : 7, padding: compact ? 10 : 16, borderRadius: 16, backgroundColor: theme.colors.accentSoft }}>
     <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: compact ? 17 : 24 }}>
-      {money(total)} · {pool.status === 'paid_out' || pool.status === 'refunded' ? status : is ? 'Styrktarsjóður' : 'Reward pool'}
+      {money(total)} · {pool.status === 'paid_out' || pool.status === 'refunded' ? status : 'Sjóður'}
     </Text>
     <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{status}</Text>
     <Text style={{ color: theme.colors.text, fontSize: 12 }}>

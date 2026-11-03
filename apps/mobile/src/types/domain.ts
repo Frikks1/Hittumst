@@ -1,4 +1,6 @@
 import { defaultDiscoveryExtensions, type DiscoveryExtensions, type ProfileGender, type DiagnosisId, type SexualOrientation } from '@rummal/shared';
+import type { ProfileAppearance } from '@/utils/profileAppearance';
+export type { ProfileAppearance } from '@/utils/profileAppearance';
 export type Identity = SexualOrientation;
 export type Intent = 'chat' | 'dates' | 'friends' | 'relationship';
 export type IcelandRegion = 'capital' | 'south' | 'west' | 'westfjords' | 'north' | 'east';
@@ -6,7 +8,7 @@ export type DistanceBand = 'under1' | '1to3' | '3to10' | '10to25' | '25plus' | '
 export type PhotoStatus = 'pending' | 'approved' | 'rejected';
 export type ProfileTagCategory = 'kinks' | 'hobbies' | 'personality' | 'other';
 export type ProfileTag = { id: string; label: string; category: ProfileTagCategory; sortOrder: number };
-export type SocialPlatform = 'instagram' | 'tiktok' | 'x' | 'discord' | 'steam' | 'youtube' | 'website';
+export type SocialPlatform = 'instagram' | 'tiktok' | 'x' | 'discord' | 'steam' | 'youtube' | 'website' | 'spotify' | 'soundcloud';
 export type ProfileSocial = { platform: SocialPlatform; handle: string };
 export type ProfileVideo = { id: string; url: string; tags: string[]; durationMs?: number; status: PhotoStatus };
 export type ContentTargetType = 'profile' | 'photo' | 'video';
@@ -79,10 +81,13 @@ export type AlbumViewer = {
   items: AlbumItem[];
 };
 
-export type NotificationTarget = { type: 'meetup' | 'conversation' | 'group'; id: string; profileId?: string; displayName?: string };
+export type NotificationTarget = { type: 'meetup' | 'conversation' | 'group' | 'profile' | 'strax'; id: string; profileId?: string; displayName?: string };
+
+export type ActiveStraxBadge = { id: string; title: string; expiresAt: string; serverNow: string; receivedAt: number };
 
 export type PublicProfile = {
   id: string;
+  activeStrax?: ActiveStraxBadge | null;
   displayName: string;
   age: number;
   pronouns?: string;
@@ -95,6 +100,7 @@ export type PublicProfile = {
   customTags: string[];
   interests: string[];
   coverPhotoId?: string | null;
+  appearance?: ProfileAppearance;
   conversationPrompt?: string;
   bio: string;
   region: IcelandRegion;
@@ -102,7 +108,7 @@ export type PublicProfile = {
   distanceBand: DistanceBand | null;
   gender?: ProfileGender | null;
   diagnosisIds?: DiagnosisId[];
-  photos: Array<{ id: string; url: string; status: PhotoStatus; tags?: string[] }>;
+  photos: Array<{ id: string; url: string; posterUrl?: string; position?: number; status: PhotoStatus; tags?: string[]; archivedAt?: string | null }>;
   commentWallEnabled?: boolean;
   anonymousRatingsEnabled?: boolean;
 };
@@ -120,6 +126,7 @@ export type GroupMember = { profileId: string; displayName: string; role: import
 export type GroupAction = 'accept' | 'decline' | 'leave' | 'lock' | 'unlock' | 'archive' | 'remove_member' | 'set_role' | 'hide_message';
 
 export type OwnProfile = Omit<PublicProfile, 'distanceBand'> & {
+  mainPhotoUpload?: { id: string; status: 'pending' | 'rejected' | 'appealed'; reason?: string | null };
   dateOfBirth?: string;
   friendsOfFriendsDiscovery?: boolean;
   isHidden: boolean;
@@ -256,6 +263,8 @@ export type {
   MeetupVenueMode,
   MeetupRsvpVisibility,
   MeetupRoomMessage,
+  MeetupRoomMember,
+  MeetupRoomMedia,
   MeetupRoomMessagePage,
   MeetupRoomSummary,
   MeetupRecurrenceRule,

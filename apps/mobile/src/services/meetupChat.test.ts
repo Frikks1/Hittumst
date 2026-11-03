@@ -1,0 +1,105 @@
+import { describe, expect, it, vi } from 'vitest';
+import { MockRummalApi } from './mockApi';
+import { DemoMeetupService } from './meetupDemo';
+vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
+const walk = '9f433726-18df-41bd-96a1-e9ec1b503a02';
+describe('automatic event group chat membership', () => {
+  it('shows only host and admitted chat members with approved face pictures', async () => {
+    const api = new MockRummalApi();
+    const event = (await api.listMyMeetups()).find(item => item.viewerState.participationStatus === 'host')!;
+    const room = (await api.getMeetupRoom(event.id))!;
+    expect((await api.listMeetupRoomMembers(room.id)).some(member => member.profile.id === 'p-bjarni')).toBe(false);
+    await api.respondToMeetupRequest(event.id, 'p-bjarni', true);
+    const members = await api.listMeetupRoomMembers(room.id);
+    expect(members[0]?.role).toBe('host');
+    expect(members.find(member => member.profile.id === 'p-bjarni')?.profile.avatarUrl).toBeTruthy();
+    await api.block('p-bjarni');
+    expect((await api.listMeetupRoomMembers(room.id)).some(member => member.profile.id === 'p-bjarni')).toBe(false);
+  });
+  it('lets the host set/remove the chat picture and denies ordinary members', async () => {
+    const api = new MockRummalApi();
+    const event = (await api.listMyMeetups()).find(item => item.viewerState.participationStatus === 'host')!;
+    const room = (await api.getMeetupRoom(event.id))!;
+    await api.uploadMeetupRoomAvatar(room.id, 'https://example.test/chat.jpg', 'image/jpeg');
+    expect((await api.getMeetupRoom(event.id))?.avatarUrl).toBe('https://example.test/chat.jpg');
+    await api.removeMeetupRoomAvatar(room.id);
+    expect((await api.getMeetupRoom(event.id))?.avatarUrl).toBeUndefined();
+    await api.joinMeetup(walk);
+    const joined = (await api.getMeetupRoom(walk))!;
+    await expect(api.uploadMeetupRoomAvatar(joined.id, 'https://example.test/chat.jpg', 'image/jpeg')).rejects.toThrow('meetup_host_required');
+  });
+  it('sends captionless photos/video once and revokes media access after leaving', async () => {
+    const api = new MockRummalApi();
+    await api.joinMeetup(walk);
+    const room = (await api.getMeetupRoom(walk))!;
+    const requestId = crypto.randomUUID();
+    const photo = await api.sendMeetupRoomMedia(room.id, 'https://example.test/photo.jpg', 'photo', 'image/jpeg', '', requestId);
+    expect(photo.sender?.avatarUrl).toBeTruthy();
+    expect(await api.sendMeetupRoomMedia(room.id, 'https://example.test/photo.jpg', 'photo', 'image/jpeg', '', requestId)).toEqual(photo);
+    await api.sendMeetupRoomMedia(room.id, 'https://example.test/video.mp4', 'video', 'video/mp4', 'See you here');
+    expect((await api.listMeetupRoomMessages(room.id)).items).toHaveLength(2);
+    const video = (await api.listMeetupRoomMessages(room.id)).items.find(message => message.kind === 'video')!;
+    await expect(api.sendMeetupRoomMessage(room.id, video.body, video.id)).rejects.toThrow('message_id_conflict');
+    await expect(api.sendMeetupRoomMedia(room.id, 'https://example.test/other.jpg', 'photo', 'image/jpeg', '', requestId)).rejects.toThrow('message_id_conflict');
+    await api.leaveMeetup(walk);
+    await expect(api.listMeetupRoomMembers(room.id)).rejects.toThrow('active_room_membership_required');
+    await expect(api.sendMeetupRoomMedia(room.id, 'https://example.test/new.jpg', 'photo', 'image/jpeg')).rejects.toThrow('active_room_membership_required');
+  });
+  it('includes the host and admitted attendees immediately, using one occurrence room', async () => {
+    const api = new MockRummalApi();
+    expect(await api.getMeetupRoom(walk)).toBeNull();
+    await api.joinMeetup(walk);
+    const room = await api.getMeetupRoom(walk);
+    expect(room?.canPost).toBe(true);
+    expect((await api.getMeetupChats()).some(item => item.meetupId === walk && item.id === room!.id)).toBe(true);
+    expect((await api.getMeetupRoom(walk))?.id).toBe(room!.id);
+    const host = (await api.listMyMeetups()).find(item => item.viewerState.participationStatus === 'host')!;
+    expect((await api.getMeetupChats()).some(item => item.meetupId === host.id)).toBe(true);
+  });
+  it('revokes cached room read/send and inbox access after leaving', async () => {
+    const api = new MockRummalApi();
+    await api.joinMeetup(walk);
+    const room = (await api.getMeetupRoom(walk))!;
+    await api.sendMeetupRoomMessage(room.id, 'See you there!');
+    await api.leaveMeetup(walk);
+    expect(await api.getMeetupRoom(walk)).toBeNull();
+    expect((await api.getMeetupChats()).some(item => item.meetupId === walk)).toBe(false);
+    await expect(api.listMeetupRoomMessages(room.id)).rejects.toThrow('active_room_membership_required');
+    await expect(api.sendMeetupRoomMessage(room.id, 'Stale composer')).rejects.toThrow('active_room_membership_required');
+    await expect(api.markMeetupRoomRead(room.id)).rejects.toThrow('active_room_membership_required');
+  });
+  it('revokes cached room access after blocking the host', async () => {
+    const api = new MockRummalApi();
+    await api.joinMeetup(walk);
+    const room = (await api.getMeetupRoom(walk))!;
+    await api.block((await api.getMeetup(walk)).host.id);
+    await expect(api.listMeetupRoomMessages(room.id)).rejects.toThrow('meetup_unavailable');
+    expect((await api.getMeetupChats()).some(item => item.meetupId === walk)).toBe(false);
+    await api.unblock('p-kari');
+    expect(await api.getMeetupRoom(walk)).toBeNull();
+    await expect(api.listMeetupRoomMessages(room.id)).rejects.toThrow('active_room_membership_required');
+    await expect(api.joinMeetup(walk)).rejects.toThrow();
+  });
+  it('removes a blocked attendee while retaining host access to the group chat', async () => {
+    const api = new MockRummalApi();
+    const host = (await api.listMyMeetups()).find(item => item.viewerState.participationStatus === 'host')!;
+    await api.respondToMeetupRequest(host.id, 'p-bjarni', true);
+    const room = (await api.getMeetupRoom(host.id))!;
+    await api.block('p-bjarni');
+    await api.unblock('p-bjarni');
+    expect((await api.listMeetupParticipants(host.id)).find(item => item.profile.id === 'p-bjarni')?.status).toBe('removed');
+    expect((await api.getMeetupRoom(host.id))?.id).toBe(room.id);
+  });
+  it('preserves both peer RSVPs while identifying rooms that need a durable chat pause', async () => {
+    let viewer = 'demo-me';
+    const service = new DemoMeetupService(new Date(), undefined, undefined, { viewerId: () => viewer });
+    await service.join(walk);
+    viewer = 'p-bjarni';
+    await service.join(walk);
+    viewer = 'demo-me';
+    expect(service.revokeAccessOnBlock('p-bjarni')).toEqual([walk]);
+    expect((await service.get(walk)).viewerState.participationStatus).toBe('joined');
+    viewer = 'p-bjarni';
+    expect((await service.get(walk)).viewerState.participationStatus).toBe('joined');
+  });
+});

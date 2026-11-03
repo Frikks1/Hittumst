@@ -626,6 +626,9 @@ export type Database = {
           hidden_at: string | null
           id: string
           sender_id: string | null
+          strax_expires_at: string | null
+          strax_id: string | null
+          strax_title: string | null
         }
         Insert: {
           body: string
@@ -634,6 +637,9 @@ export type Database = {
           hidden_at?: string | null
           id?: string
           sender_id?: string | null
+          strax_expires_at?: string | null
+          strax_id?: string | null
+          strax_title?: string | null
         }
         Update: {
           body?: string
@@ -642,8 +648,18 @@ export type Database = {
           hidden_at?: string | null
           id?: string
           sender_id?: string | null
+          strax_expires_at?: string | null
+          strax_id?: string | null
+          strax_title?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "group_messages_strax_id_fkey"
+            columns: ["strax_id"]
+            isOneToOne: false
+            referencedRelation: "strax_activities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "group_messages_group_id_fkey"
             columns: ["group_id"]
@@ -906,6 +922,7 @@ export type Database = {
       meetup_room_memberships: {
         Row: {
           joined_at: string
+          last_read_at: string | null
           pause_reason: string | null
           profile_id: string
           role: string
@@ -915,6 +932,7 @@ export type Database = {
         }
         Insert: {
           joined_at?: string
+          last_read_at?: string | null
           pause_reason?: string | null
           profile_id: string
           role?: string
@@ -924,6 +942,7 @@ export type Database = {
         }
         Update: {
           joined_at?: string
+          last_read_at?: string | null
           pause_reason?: string | null
           profile_id?: string
           role?: string
@@ -1308,8 +1327,10 @@ export type Database = {
           kind: string
           meetup_id: string | null
           payload: Json
+          profile_tap_actor_id: string | null
           read_at: string | null
           recipient_id: string
+          strax_id: string | null
         }
         Insert: {
           conversation_id?: string | null
@@ -1321,8 +1342,10 @@ export type Database = {
           kind: string
           meetup_id?: string | null
           payload?: Json
+          profile_tap_actor_id?: string | null
           read_at?: string | null
           recipient_id: string
+          strax_id?: string | null
         }
         Update: {
           conversation_id?: string | null
@@ -1334,10 +1357,19 @@ export type Database = {
           kind?: string
           meetup_id?: string | null
           payload?: Json
+          profile_tap_actor_id?: string | null
           read_at?: string | null
           recipient_id?: string
+          strax_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_strax_id_fkey"
+            columns: ["strax_id"]
+            isOneToOne: false
+            referencedRelation: "strax_activities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_conversation_id_fkey"
             columns: ["conversation_id"]
@@ -1376,6 +1408,13 @@ export type Database = {
           {
             foreignKeyName: "notifications_recipient_id_fkey"
             columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_profile_tap_actor_id_fkey"
+            columns: ["profile_tap_actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1554,6 +1593,7 @@ export type Database = {
           onboarding_completed_at: string | null
           privacy_accepted_at: string | null
           privacy_accepted_version: string | null
+          profile_appearance: Json
           profile_tags: string[]
           pronouns: string | null
           region: string | null
@@ -1598,6 +1638,7 @@ export type Database = {
           onboarding_completed_at?: string | null
           privacy_accepted_at?: string | null
           privacy_accepted_version?: string | null
+          profile_appearance?: Json
           profile_tags?: string[]
           pronouns?: string | null
           region?: string | null
@@ -1642,6 +1683,7 @@ export type Database = {
           onboarding_completed_at?: string | null
           privacy_accepted_at?: string | null
           privacy_accepted_version?: string | null
+          profile_appearance?: Json
           profile_tags?: string[]
           pronouns?: string | null
           region?: string | null
@@ -1684,6 +1726,8 @@ export type Database = {
           resolved_at: string | null
           room_message_id: string | null
           status: string
+          strax_id: string | null
+          strax_snapshot: Json | null
           updated_at: string
         }
         Insert: {
@@ -1705,6 +1749,8 @@ export type Database = {
           resolved_at?: string | null
           room_message_id?: string | null
           status?: string
+          strax_id?: string | null
+          strax_snapshot?: Json | null
           updated_at?: string
         }
         Update: {
@@ -1726,9 +1772,18 @@ export type Database = {
           resolved_at?: string | null
           room_message_id?: string | null
           status?: string
+          strax_id?: string | null
+          strax_snapshot?: Json | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reports_strax_id_fkey"
+            columns: ["strax_id"]
+            isOneToOne: false
+            referencedRelation: "strax_activities"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reports_album_item_id_fkey"
             columns: ["album_item_id"]
@@ -1811,6 +1866,80 @@ export type Database = {
           },
         ]
       }
+      strax_activities: {
+        Row: {
+          address: string | null
+          closed_at: string | null
+          created_at: string
+          description: string
+          expires_at: string
+          host_id: string
+          id: string
+          join_mode: string
+          location_text: string | null
+          moderation_reason: string | null
+          moderation_previous_status: string | null
+          request_id: string | null
+          request_input: Json
+          requirements: string | null
+          spaces_needed: number | null
+          status: string
+          title: string
+          updated_at: string
+          venue_mode: string
+        }
+        Insert: {
+          address?: string | null
+          closed_at?: string | null
+          created_at?: string
+          description: string
+          expires_at: string
+          host_id: string
+          id?: string
+          join_mode?: string
+          location_text?: string | null
+          moderation_reason?: string | null
+          moderation_previous_status?: string | null
+          request_id?: string | null
+          request_input: Json
+          requirements?: string | null
+          spaces_needed?: number | null
+          status?: string
+          title: string
+          updated_at?: string
+          venue_mode?: string
+        }
+        Update: {
+          address?: string | null
+          closed_at?: string | null
+          created_at?: string
+          description?: string
+          expires_at?: string
+          host_id?: string
+          id?: string
+          join_mode?: string
+          location_text?: string | null
+          moderation_reason?: string | null
+          moderation_previous_status?: string | null
+          request_id?: string | null
+          request_input?: Json
+          requirements?: string | null
+          spaces_needed?: number | null
+          status?: string
+          title?: string
+          updated_at?: string
+          venue_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strax_activities_host_id_fkey"
+            columns: ["host_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1819,6 +1948,30 @@ export type Database = {
       add_group_member: {
         Args: { group_id: string; profile_id: string; role?: string }
         Returns: undefined
+      }
+      admin_moderate_strax: {
+        Args: { p_id: string; p_action: string; p_reason: string }
+        Returns: undefined
+      }
+      strax_close: { Args: { p_id: string }; Returns: Json }
+      strax_count: { Args: never; Returns: Json }
+      strax_create: { Args: { input: Json; p_request_id?: string }; Returns: Json }
+      strax_discover: { Args: never; Returns: Json }
+      strax_get: { Args: { p_id: string }; Returns: Json }
+      strax_mine: { Args: never; Returns: Json }
+      strax_notifications: { Args: { p_limit?: number }; Returns: Json }
+      strax_participate: {
+        Args: { p_id: string; p_action: string; p_introduction?: string; p_acknowledged?: boolean }
+        Returns: Json
+      }
+      strax_profile_badges: { Args: { p_profile_ids: string[] }; Returns: Json }
+      strax_report: { Args: { p_id: string; p_category: string; p_details?: string }; Returns: string }
+      strax_reserve_media: { Args: { p_id: string }; Returns: Json }
+      strax_respond: { Args: { p_id: string; p_profile_id: string; p_action: string }; Returns: Json }
+      strax_roster: { Args: { p_id: string }; Returns: Json }
+      strax_share: {
+        Args: { p_id: string; p_all_friends?: boolean; p_friend_ids?: string[]; p_group_ids?: string[] }
+        Returns: Json
       }
       admin_get_meetup_location_evidence: {
         Args: { p_reason: string; p_report_id: string }
@@ -2247,6 +2400,7 @@ export type Database = {
         Args: { cursor?: Json; page_size?: number; room_id: string }
         Returns: Json
       }
+      list_meetup_room_members: { Args: { room_id: string }; Returns: Json }
       list_meetup_room_messages: {
         Args: { before_at?: string; page_size?: number; room_id: string }
         Returns: Json
@@ -2373,6 +2527,12 @@ export type Database = {
         Returns: undefined
       }
       resolve_notification: { Args: { notification_id: string }; Returns: Json }
+      get_notification_preferences: { Args: Record<PropertyKey, never>; Returns: Json }
+      list_meetup_chats: { Args: Record<PropertyKey, never>; Returns: Json }
+      mark_meetup_room_read: { Args: { room_id: string }; Returns: undefined }
+      remove_meetup_room_avatar: { Args: { room_id: string }; Returns: undefined }
+      update_notification_preferences: { Args: { preferences: Json }; Returns: Json }
+      set_conversation_muted: { Args: { conversation_id: string; muted: boolean }; Returns: undefined }
       respond_to_album_share: {
         Args: { accept: boolean; share_id: string }
         Returns: Json
@@ -2412,6 +2572,10 @@ export type Database = {
       }
       send_meetup_room_message_once: {
         Args: { body: string; message_id: string; room_id: string }
+        Returns: Json
+      }
+      send_meetup_room_media_once: {
+        Args: { room_id: string; message_id: string; upload_id: string; body?: string }
         Returns: Json
       }
       set_adult_content_preference: {

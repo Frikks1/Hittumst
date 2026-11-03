@@ -1,10 +1,12 @@
-import type { Entitlement, FinanceCommand, FinanceSnapshot, TierId, MeetupMedia, MeetupReview, MeetupSponsorship } from '@rummal/shared';
+import type { Entitlement, FinanceCommand, FinanceSnapshot, TierId, MeetupMedia, MeetupReview, MeetupSponsorship, MeetupSponsor } from '@rummal/shared';
+import type { NotificationPreferences, NotificationPreferenceUpdate } from './notificationPreferences';
+import type { MeetupChatSummary } from './meetupChatTypes';
 import type {
   Album, AlbumAccessMode, AlbumItem, AlbumShare, AlbumViewer, ChatMessage, ConversationSummary, NotificationTarget,
   DiscoveryFilters, GeoCoordinate, LocationVerification, MeetupDetail, MeetupDraftInput,
   MeetupFilters, MeetupNotification, MeetupParticipation, MeetupPlaceResult,
   MeetupPlaceSearchOptions, MeetupProfileHistoryPage, MeetupProfileUpcomingPage, MeetupReinstateStatus, MeetupReportInput, MeetupRequest, MeetupRosterEntry, MeetupRoomMessage,
-  MeetupPublicRosterPage, MeetupRoomMessagePage, MeetupRoomSummary, MeetupRsvpVisibility, MeetupSummary, MeetupUpdateInput,
+  MeetupPublicRosterPage, MeetupRoomMember, MeetupRoomMessagePage, MeetupRoomSummary, MeetupRsvpVisibility, MeetupSummary, MeetupUpdateInput,
   ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
   OwnProfile, Page, ProfileActivity, ProfileActivityKind, ProfileAudience, ProfileReactionEmoji, ProfileSocial, ProfileTag, PublicProfile, PushPlatform, ReportCategory,
   StarredItem, StarredTargetType
@@ -12,6 +14,12 @@ import type {
 
 export type AuthUser = { id: string; email: string | null };
 export type AuthProvider = 'apple' | 'google' | 'facebook';
+export type MeetupMediaUpload = {
+  id: string;
+  status: 'reserved' | 'processing' | 'approved' | 'rejected' | 'appealed';
+  createdAt: string;
+  reason: string | null;
+};
 
 export type OnboardingPayload = {
   dateOfBirth: string;
@@ -62,6 +70,7 @@ export interface RummalApi {
   updateProfile(profile: Partial<OwnProfile>): Promise<OwnProfile>;
   listProfileTags(): Promise<ProfileTag[]>;
   uploadProfilePhoto(uri: string, mimeType?: string): Promise<void>;
+  removeProfilePhoto(photoId: string): Promise<void>;
   uploadProfileVideo(uri: string, mimeType?: string, durationMs?: number, tags?: string[]): Promise<void>;
   updateProfileMediaTags(mediaType: 'photo' | 'video', mediaId: string, tags: string[]): Promise<void>;
   listFeedback(targetType: ContentTargetType, targetId: string): Promise<{ ratings: ContentRating[]; comments: ContentComment[]; reactions: ContentReaction[] }>;
@@ -116,9 +125,11 @@ export interface RummalApi {
   listMyMeetups(): Promise<MeetupDetail[]>;
   listMeetupRequests(id: string): Promise<MeetupRequest[]>;
   listMeetupParticipants(id: string): Promise<MeetupRosterEntry[]>;
+  listMeetupSponsors(id: string): Promise<MeetupSponsor[]>;
   getMeetupGender(id: string): Promise<string | null>;
   setMeetupGender(id: string, gender: string | null): Promise<void>;
   listMeetupMedia(id: string): Promise<MeetupMedia[]>;
+  listMeetupMediaUploads(id: string): Promise<MeetupMediaUpload[]>;
   uploadMeetupMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string): Promise<string | void>;
   removeMeetupMedia(id: string, mediaId: string): Promise<void>;
   listMeetupReviews(id: string): Promise<MeetupReview[]>;
@@ -147,12 +158,21 @@ export interface RummalApi {
   completeMeetupAttendance(id: string, outcome: 'attended' | 'did_not_attend' | 'dismiss', historyVisibility?: 'visible' | 'private'): Promise<void>;
   setMeetupHistoryVisibility(id: string, visibility: 'visible' | 'private'): Promise<void>;
   getMeetupRoom(id: string): Promise<MeetupRoomSummary | null>;
+  getMeetupChats(): Promise<MeetupChatSummary[]>;
+  markMeetupRoomRead(roomId: string): Promise<void>;
   listMeetupRoomMessages(roomId: string, cursor?: string | null): Promise<MeetupRoomMessagePage>;
   sendMeetupRoomMessage(roomId: string, body: string, clientMessageId?: string): Promise<MeetupRoomMessage>;
+  listMeetupRoomMembers(roomId: string): Promise<MeetupRoomMember[]>;
+  uploadMeetupRoomAvatar(roomId: string, uri: string, mimeType: string): Promise<void>;
+  removeMeetupRoomAvatar(roomId: string): Promise<void>;
+  sendMeetupRoomMedia(roomId: string, uri: string, kind: 'photo' | 'video', mimeType: string, body?: string, clientMessageId?: string): Promise<MeetupRoomMessage>;
   subscribeMeetupRoom(roomId: string, onInvalidate: () => void): () => void;
   setAdultContentPreference(enabled: boolean): Promise<void>;
   listMeetupNotifications(limit?: number): Promise<MeetupNotification[]>;
   resolveNotification(notificationId: string): Promise<NotificationTarget>;
+  getNotificationPreferences(): Promise<NotificationPreferences>;
+  updateNotificationPreferences(update: NotificationPreferenceUpdate): Promise<NotificationPreferences>;
+  setConversationMuted(conversationId: string, muted: boolean): Promise<void>;
   markMeetupNotificationRead(notificationId: string): Promise<void>;
   registerPushToken(expoPushToken: string, platform: PushPlatform, locale?: 'is' | 'en'): Promise<void>;
   unregisterPushToken(expoPushToken: string): Promise<void>;

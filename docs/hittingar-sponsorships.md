@@ -1,6 +1,8 @@
 # Hittingar sponsorships — 21 September 2026
 
-This contract supersedes the membership and reward offer documented on 8 September. Real subscription sales, production wallets and real payouts remain behind the existing disabled launch gates. Simulated sandbox balances are not proof of funding.
+> **Retired from the app — 14 October 2026:** Sjóður/event pools and sponsorship have been removed from the app's Hittingar creation, discovery, detail and management screens, and wallet sponsorship controls. The contract below is retained only as a historical legacy record for existing backend data and compatibility. It is not current product scope and does not authorize new sponsorship UI.
+
+The historical contract below superseded the membership and reward offer documented on 8 September. Real subscription sales, production wallets and real payouts remain behind the existing disabled launch gates. Simulated sandbox balances are not proof of funding.
 
 | Monthly benefit | plebbi | Flottari plebbi | Plebba Kóngur |
 | --- | ---: | ---: | ---: |
@@ -31,6 +33,14 @@ Event discovery, details and own-event responses carry an authorized pool projec
 Creating an event supports optional self-sponsorship. Quote first, then submit a persisted idempotent publish_sponsored command. The service-only database transaction validates the actor's live session and current event, then commits publication and the finance revision together. Failed publication leaves a recoverable draft and unchanged funds. Recurring creation funds only the source occurrence, never every recurrence implicitly.
 
 Finance review shows outstanding credit, funded pools, refundable fee escrow and earned fees. Shared types, mobile adapters, the demo and bilingual screens use the same contracts.
+
+## Observed sponsor history
+
+The authenticated `list_meetup_sponsors` read API reports each current sponsor's valid principal amount, cumulative valid support in the same event series, and distinct Atlantic/Reykjavik calendar months with journal-backed contributions. `repeatSupport` becomes true after two contributing months; the month count supports recognition at three months. This is observed contribution history. A membership renewal, unused monthly credit, repeated event schedule, quote or pledge does not count and creates no automatic recurring sponsorship or charge.
+
+Reversed, refunded, uncommitted and future-dated contributions are excluded. Only occurrences the viewer may access contribute to history. Hidden personal profiles have a null identity; blocked, deleted, ineligible and restored/quarantined accounts disclose no sponsor row. This list contains no RSVP or attendance data. Authorized host participant lists put active sponsors of that occurrence first, preserving the existing order within each group and all host-only RSVP access. Waitlist offers and admission rules are unchanged.
+
+These contracts and local migrations are prepared independently of the pending Figma screen transfer. The sponsor list has no new screen layout yet. Hosted migrations and deployment remain separate rollout steps.
 
 ## Economics and activation criteria
 

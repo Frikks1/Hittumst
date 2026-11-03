@@ -54,6 +54,16 @@ export default async function ReportDetailPage({
           {report.meetupSnapshot && (
             <MeetupEvidencePanel report={report} roles={admin.roles} />
           )}
+          {report.straxSnapshot && <section className="panel meetup-evidence-panel">
+            <div className="panel-heading"><div><span className="eyebrow">Report-time snapshot</span><h2>Strax evidence</h2></div><span className="secure-label"><Icons.LockKeyhole aria-hidden="true" /> Staff only</span></div>
+            <h3>{report.straxSnapshot.title}</h3><p>{report.straxSnapshot.description}</p>
+            <dl className="meetup-snapshot-grid">
+              {report.straxSnapshot.locationText && <div><dt>Where / online details</dt><dd>{report.straxSnapshot.locationText}</dd></div>}
+              {report.straxSnapshot.address && <div><dt>Address</dt><dd>{report.straxSnapshot.address}</dd></div>}
+              {report.straxSnapshot.requirements && <div><dt>Requirements</dt><dd>{report.straxSnapshot.requirements}</dd></div>}
+              <div><dt>Published</dt><dd>{absoluteTime(report.straxSnapshot.createdAt)}</dd></div><div><dt>Expired</dt><dd>{absoluteTime(report.straxSnapshot.expiresAt)}</dd></div>
+            </dl>
+          </section>}
 
           <section className="panel evidence-panel">
             <div className="panel-heading"><div><span className="eyebrow">Preserved context</span><h2>Evidence</h2></div><span className="secure-label"><Icons.LockKeyhole aria-hidden="true" /> Staff only</span></div>

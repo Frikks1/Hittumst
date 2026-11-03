@@ -18,7 +18,7 @@ export function ReportActionPanel({
   const [action, setAction] = useState("note");
   const [confirmed, setConfirmed] = useState(false);
   const destructive = action === "ban";
-  const meetupDestructive = action === "meetup_remove" || action === "host_restrict";
+  const meetupDestructive = action === "meetup_remove" || action === "host_restrict" || action === "strax_hide";
 
   return (
     <section className="panel action-panel">
@@ -30,6 +30,7 @@ export function ReportActionPanel({
         <input type="hidden" name="reportId" value={report.id} />
         <input type="hidden" name="profileId" value={report.reported.id} />
         <input type="hidden" name="meetupId" value={report.meetupId ?? ""} />
+        <input type="hidden" name="straxId" value={report.straxId ?? ""} />
         <label>
           <span>Action</span>
           <select name="action" value={action} onChange={(event) => { setAction(event.target.value); setConfirmed(false); }}>
@@ -40,6 +41,8 @@ export function ReportActionPanel({
             {report.meetupId && can(roles, "meetup.manage") && <option value="meetup_remove">Remove meetup</option>}
             {report.meetupId && can(roles, "meetup.manage") && <option value="meetup_restore">Restore meetup</option>}
             {report.meetupId && can(roles, "meetup.manage") && <option value="host_restrict">Restrict host creation</option>}
+            {report.straxId && can(roles, "meetup.manage") && <option value="strax_hide">Hide Strax</option>}
+            {report.straxId && can(roles, "meetup.manage") && <option value="strax_restore">Restore Strax if still active</option>}
             <option value="resolve">Resolve report</option>
             <option value="dismiss">Dismiss report</option>
           </select>
@@ -69,7 +72,7 @@ export function ReportActionPanel({
         {(destructive || meetupDestructive) && (
           <label className="confirm-row">
             <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-            <span>I reviewed the evidence and understand this permanently removes access.</span>
+            <span>I reviewed the evidence and understand this changes access.</span>
           </label>
         )}
         <button

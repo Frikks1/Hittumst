@@ -64,3 +64,6 @@ work/
 
 # Compiled continuous worker
 apps/admin/dist-worker/
+
+# Separate private learning project (not part of Hittumst)
+/prototypes/study-learning/

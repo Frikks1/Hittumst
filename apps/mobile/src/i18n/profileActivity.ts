@@ -1,6 +1,7 @@
 const en = {
   title: 'Interest',
   views: 'Views',
+  openViews: 'See who viewed your profile',
   taps: 'Taps',
   tap: 'Tap',
   tapped: 'Tap sent',
@@ -39,6 +40,7 @@ const en = {
 const is: typeof en = {
   title: 'Áhugi',
   views: 'Skoðanir',
+  openViews: 'Sjá hver skoðaði prófílinn þinn',
   taps: 'Snertingar',
   tap: 'Senda snertingu',
   tapped: 'Snerting send',

@@ -1,4 +1,4 @@
-import { defaultMeetupEventProfile, meetupEventProfileSchema, type MeetupEventProfile } from '@rummal/shared';
+import { defaultMeetupEventProfile, icelandCoordinateSchema, meetupEventProfileSchema, type MeetupEventProfile } from '@rummal/shared';
 import type { TranslationKey } from '@/i18n/translations';
 import {
   meetupTags,
@@ -63,6 +63,8 @@ export type CreateHittingurForm = {
   accessMode: 'open' | 'private';
   locationVisibility: 'public' | 'protected';
   capacity: string;
+  feeIsk: string;
+  preserveLegacyFee?: boolean;
   isExplicit: boolean;
   releasePolicy: 'immediate' | '24_hours_before';
   publicLocationConfirmed: boolean;
@@ -103,6 +105,7 @@ export const initialCreateHittingurForm: CreateHittingurForm = {
   accessMode: 'private',
   locationVisibility: 'protected',
   capacity: '',
+  feeIsk: '0',
   isExplicit: false,
   releasePolicy: '24_hours_before',
   publicLocationConfirmed: false,
@@ -133,6 +136,17 @@ export function generalAreaKey(area: MeetupGeneralAreaId): TranslationKey {
 
 export function generalAreaLabel(item: Pick<MeetupSummary, 'generalArea'>, locale: 'is' | 'en'): string {
   return locale === 'is' ? item.generalArea.labelIs : item.generalArea.labelEn;
+}
+
+export function meetupFeeLabel(item: Pick<MeetupSummary, 'feeIsk' | 'admissionMode' | 'priceMinor' | 'currency'>, locale: 'is' | 'en'): string {
+  const amount = item.feeIsk ?? (item.currency === 'ISK' ? item.priceMinor : null);
+  if (amount && amount > 0) return `${amount.toLocaleString(locale === 'is' ? 'is-IS' : 'en-GB')} kr.`;
+  if (item.admissionMode === 'paid' && item.priceMinor && item.currency) {
+    const formatter = new Intl.NumberFormat(locale === 'is' ? 'is-IS' : 'en-GB', { style: 'currency', currency: item.currency });
+    const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+    return formatter.format(item.priceMinor / 10 ** digits);
+  }
+  return locale === 'is' ? 'Ókeypis' : 'Free';
 }
 
 export function participationKey(status: string | null | undefined): TranslationKey | null {
@@ -194,8 +208,10 @@ export function validateCreateStep(step: number, form: CreateHittingurForm): Tra
   const errors: TranslationKey[] = [];
   if ((step === 0 || step === 3) && !meetupEventProfileSchema.safeParse(form.eventProfile).success) errors.push('hittingar.create.error.eventProfile');
   if (step === 0) {
-    if (form.title.trim().length < 3) errors.push('hittingar.create.error.title');
-    if (form.description.trim().length < 10) errors.push('hittingar.create.error.description');
+    const titleLength = form.title.trim().length;
+    const descriptionLength = form.description.trim().length;
+    if (titleLength < 3 || titleLength > 100) errors.push('hittingar.create.error.title');
+    if (descriptionLength < 10 || descriptionLength > 4_000) errors.push('hittingar.create.error.description');
     if (form.category === 'private_adult' && !form.isExplicit) errors.push('hittingar.create.error.adultCategory');
     if (form.intention === 'casual_adult' && !form.isExplicit) errors.push('hittingar.create.error.adultCategory');
   }
@@ -215,7 +231,7 @@ export function validateCreateStep(step: number, form: CreateHittingurForm): Tra
     }
   }
   if (step === 2) {
-    if (form.venueMode !== 'online' && (!form.generalAreaId || form.latitude === null || form.longitude === null)) {
+    if (form.venueMode !== 'online' && (!form.generalAreaId || !icelandCoordinateSchema.safeParse({ latitude: form.latitude, longitude: form.longitude }).success)) {
       errors.push('hittingar.create.error.location');
     }
     if (form.venueMode !== 'in_person' && !/^https?:\/\//i.test(form.onlineUrl.trim())) errors.push('hittingar.create.error.onlineUrl');
@@ -224,6 +240,7 @@ export function validateCreateStep(step: number, form: CreateHittingurForm): Tra
     }
   }
   if (step === 3) {
+    if (form.feeIsk && (!/^\d+$/.test(form.feeIsk) || Number(form.feeIsk) > 2_147_483_647)) errors.push('hittingar.create.error.fee');
     if (!form.prohibitedServicesAttested) {
       errors.push('hittingar.create.error.attestation');
     }
@@ -235,6 +252,16 @@ export function validateCreateStep(step: number, form: CreateHittingurForm): Tra
     }
   }
   return errors;
+}
+
+export function validateCreateHittingur(
+  form: CreateHittingurForm,
+  { publishing = false, now = Date.now() }: { publishing?: boolean; now?: number } = {},
+): TranslationKey[] {
+  const errors = [0, 1, 2, 3].flatMap(step => validateCreateStep(step, form));
+  const startsAt = reykjavikLocalToUtc(form.startDate, form.startTime);
+  if (publishing && startsAt && Date.parse(startsAt) <= now) errors.push('hittingar.create.error.start');
+  return [...new Set(errors)];
 }
 
 export function toMeetupFeatureCollection(items: HittingurListModel[]): GeoJSON.FeatureCollection<GeoJSON.Point> {

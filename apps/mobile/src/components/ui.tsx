@@ -6,9 +6,16 @@ import { type Href, useRouter, useSegments } from 'expo-router';
 import { useRef, type ReactNode } from 'react';
 import { useAppearance } from '@/providers/AppearanceProvider';
 import { useProfileTransition } from '@/providers/ProfileTransitionProvider';
-import { profilePersonality } from '@/utils/discoveryPreferences';
-import { interestLabel } from '@/data/interestLabels';
-import { ActivityIndicator, type KeyboardTypeOptions, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { selectMainProfilePhoto } from '@/utils/mainProfilePhoto';
+import {
+  ActivityIndicator,
+  type KeyboardTypeOptions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '@/providers/AppProvider';
 import type { PublicProfile } from '@/types/domain';
@@ -38,20 +45,30 @@ export function Screen({
     <View style={[styles.content, { backgroundColor: theme.colors.canvas }]}>{children}</View>
   );
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]} edges={inTabs ? ['top', 'left', 'right'] : ['top', 'bottom', 'left', 'right']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: theme.colors.canvas }]}
+      edges={inTabs ? ['top', 'left', 'right'] : ['top', 'bottom', 'left', 'right']}
+    >
       <DemoBanner />
       {(title || back || right) && (
         <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-          <View style={styles.headerSide}>
-            {back && (
+          {back && (
+            <View style={styles.headerSide}>
               <IconButton
                 icon="chevron-back"
                 label={t('common.back')}
-                onPress={onBack ?? (() => router.canGoBack() ? router.back() : router.replace('/'))}
+                onPress={
+                  onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')))
+                }
               />
-            )}
-          </View>
-          <Text accessibilityRole={title ? "header" : undefined} style={[styles.headerTitle, { color: theme.colors.text }]}>{title}</Text>
+            </View>
+          )}
+          <Text
+            accessibilityRole={title ? 'header' : undefined}
+            style={[styles.headerTitle, { color: theme.colors.text }]}
+          >
+            {title}
+          </Text>
           <View style={[styles.headerSide, styles.headerRight]}>{right}</View>
         </View>
       )}
@@ -62,7 +79,16 @@ export function Screen({
       ) : (
         content
       )}
-      {footer && <View style={[styles.screenFooter, { backgroundColor: theme.colors.canvas, borderTopColor: theme.colors.border }]}>{footer}</View>}
+      {footer && (
+        <View
+          style={[
+            styles.screenFooter,
+            { backgroundColor: theme.colors.canvas, borderTopColor: theme.colors.border },
+          ]}
+        >
+          {footer}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -124,7 +150,10 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: background, borderColor: theme.colors.border },
-        pressed && [reducedMotion ? { opacity: 0.78 } : styles.pressed, variant === 'primary' && { backgroundColor: theme.colors.accentPressed }],
+        pressed && [
+          reducedMotion ? { opacity: 0.78 } : styles.pressed,
+          variant === 'primary' && { backgroundColor: theme.colors.accentPressed },
+        ],
         (disabled || loading) && styles.disabled,
       ]}
     >
@@ -192,7 +221,7 @@ export function Field({
   const { theme } = useApp();
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
+      <Text style={[styles.label, { color: theme.colors.textMuted }]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         value={value}
@@ -245,8 +274,19 @@ export function ChoiceChip({
         pressed && { opacity: 0.75 },
       ]}
     >
-      {selected && <Ionicons accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" name="checkmark-circle" size={16} color={theme.colors.accent} />}
-      <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13, flexShrink: 1 }}>{label}</Text>
+      {selected && (
+        <Ionicons
+          accessible={false}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          name="checkmark-circle"
+          size={16}
+          color={theme.colors.accent}
+        />
+      )}
+      <Text style={{ color: theme.colors.text, fontWeight: '700', fontSize: 13, flexShrink: 1 }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -279,14 +319,30 @@ export function SettingRow({
       style={[styles.setting, { borderBottomColor: theme.colors.border }]}
     >
       <View style={[styles.settingIcon, { backgroundColor: theme.colors.surfaceMuted }]}>
-        <Ionicons name={icon} size={20} color={danger ? theme.colors.danger : theme.colors.accent} />
+        <Ionicons
+          name={icon}
+          size={20}
+          color={danger ? theme.colors.danger : theme.colors.accent}
+        />
       </View>
       <View style={styles.settingCopy}>
-        <Text style={[styles.settingTitle, { color: danger ? theme.colors.danger : theme.colors.text }]}>{title}</Text>
-        {subtitle && <Text style={[styles.caption, { color: theme.colors.textMuted }]}>{subtitle}</Text>}
+        <Text
+          style={[styles.settingTitle, { color: danger ? theme.colors.danger : theme.colors.text }]}
+        >
+          {title}
+        </Text>
+        {subtitle && (
+          <Text style={[styles.caption, { color: theme.colors.textMuted }]}>{subtitle}</Text>
+        )}
       </View>
       {onValueChange ? (
-        <Switch accessibilityLabel={title} accessibilityHint={subtitle} value={value} onValueChange={onValueChange} trackColor={{ true: theme.colors.accent }} />
+        <Switch
+          accessibilityLabel={title}
+          accessibilityHint={subtitle}
+          value={value}
+          onValueChange={onValueChange}
+          trackColor={{ true: theme.colors.accent }}
+        />
       ) : href || onPress ? (
         <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
       ) : null}
@@ -294,57 +350,47 @@ export function SettingRow({
   );
 }
 
-export function ProfileTile({ profile, onPress, compact = false, ownInterests = [], ownTags = [] }: { profile: PublicProfile; onPress: () => void; compact?: boolean; ownInterests?: string[]; ownTags?: string[] }) {
-  const { theme, t, locale } = useApp();
-  const { appearance, reducedMotion } = useAppearance();
+export function ProfileTile({ profile, onPress, compact = false }: {
+  profile: PublicProfile; onPress: () => void; compact?: boolean; ownInterests?: string[]; ownTags?: string[];
+}) {
+  const { theme, t } = useApp();
+  const { reducedMotion } = useAppearance();
   const transition = useProfileTransition();
   const tile = useRef<View>(null);
-  const personality = profilePersonality(profile, ownInterests, ownTags);
-  const detail = personality ? personality.kind === 'intent' ? t(`intent.${personality.value}`) : personality.kind === 'sharedTag' ? t('discovery.sharedInterest', { interest: interestLabel(personality.value, locale) }) : personality.kind === 'shared' ? t('discovery.sharedInterest', { interest: personality.value }) : personality.value : '';
+  const photo = selectMainProfilePhoto(profile);
+  const source = photo?.posterUrl ?? photo?.url;
   const open = () => {
-    const uri = profile.photos[0]?.url;
-    if (!uri || reducedMotion || !tile.current) { onPress(); return; }
-    tile.current.measureInWindow((x, y, width, height) => { transition.start(profile.id, uri, { x, y, width, height }); onPress(); });
+    if (!source || reducedMotion || !tile.current) { onPress(); return; }
+    tile.current.measureInWindow((x, y, width, height) => {
+      transition.start(profile.id, source, { x, y, width, height }); onPress();
+    });
   };
-  const source = profile.photos[0]?.url;
-  return (
-    <Pressable
-      ref={tile}
-      accessibilityRole="button"
-      accessibilityLabel={`${profile.displayName}, ${profile.age}. ${profile.lookingFor.map(intent => t(`intent.${intent}`)).join(", ")}. ${profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}${detail ? `. ${detail}` : ""}${profile.isOnline ? `. ${t("common.online")}` : ""}`}
-      onPress={open}
-      style={({ pressed }) => [
-        styles.tile,
-        { aspectRatio: appearance.discoveryLayout === 'large' ? 1.1 : appearance.discoveryLayout === 'dense' || compact ? 1 : 0.82 },
-        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-        pressed && (reducedMotion ? { opacity: 0.9 } : styles.tilePressed),
-      ]}
-    >
-      {source ? (
-        <Image source={source} recyclingKey={profile.id} cachePolicy="memory" style={styles.tileImage} contentFit="cover" />
-      ) : (
-        <LinearGradient colors={[theme.colors.surfaceMuted, theme.colors.surfaceRaised]} style={styles.tileImage}>
-          <Ionicons name="person" size={compact ? 60 : 90} color={theme.colors.textMuted} style={{ opacity: 0.35 }} />
-        </LinearGradient>
-      )}
-      <LinearGradient colors={['transparent', 'rgba(0,0,0,.9)']} locations={[0.4, 1]} style={[styles.tileOverlay, { padding: compact ? 8 : appearance.density === 'compact' ? 9 : 12 }]}>
-        <View style={styles.nameLine}>
-          <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileName, compact && styles.tileNameCompact]}>{profile.displayName}</Text>
-          <Text numberOfLines={1} style={[styles.tileAge, compact && styles.tileNameCompact]}>{profile.age}</Text>
-        </View>
-        {!compact && detail ? <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileIntent, { color: '#F4F4F5' }]}>{detail}</Text> : null}
-        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.tileMeta, compact && styles.tileMetaCompact]}>{profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
-      </LinearGradient>
-      {profile.isOnline && <View style={styles.onlineDot} />}
-    </Pressable>
-  );
+  return <Pressable ref={tile} accessibilityRole="button"
+    accessibilityLabel={profile.displayName + ', ' + profile.age + '. ' + (profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`))}
+    onPress={open} style={({ pressed }) => [styles.tile, { aspectRatio: 0.78, borderRadius: 16, backgroundColor: theme.colors.surface, borderColor: theme.colors.border }, pressed && { opacity: 0.85 }]}>
+    {source ? <Image source={source} recyclingKey={profile.id} cachePolicy="memory" style={styles.tileImage} contentFit="cover" />
+      : <View style={[styles.tileImage, { backgroundColor: theme.colors.surfaceMuted }]}><Ionicons name="person" size={70} color={theme.colors.textMuted} /></View>}
+    <LinearGradient colors={['transparent', 'rgba(0,0,0,.9)']} locations={[0.4, 1]} style={[styles.tileOverlay, { padding: compact ? 10 : 12 }]}>
+      <Text numberOfLines={1} style={[styles.tileName, { fontSize: compact ? 14 : 16 }]}>{profile.displayName}, {profile.age}</Text>
+      <Text numberOfLines={1} style={[styles.tileMeta, { fontSize: 11 }]}>{profile.distanceBand ? t(`distance.${profile.distanceBand}`) : t(`region.${profile.region}`)}</Text>
+    </LinearGradient>
+    {profile.isOnline && <View style={{ position: 'absolute', top: 10, left: 10, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: 'rgba(6,14,11,0.8)', flexDirection: 'row', alignItems: 'center', gap: 4 }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D9AE' }} /><Text style={{ fontSize: 9, fontWeight: '700', color: '#00D9AE' }}>{t('common.online')}</Text></View>}
+  </Pressable>;
 }
 
 export function DemoBanner() {
   const { demo, t, theme } = useApp();
   if (!demo) return null;
   return (
-    <View accessible accessibilityRole="text" accessibilityLabel={t('demo.banner')} style={[styles.demoBanner, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+    <View
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={t('demo.banner')}
+      style={[
+        styles.demoBanner,
+        { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+      ]}
+    >
       <Ionicons name="sparkles" size={15} color={theme.colors.lava} />
       <Text style={[styles.demoText, { color: theme.colors.textMuted }]}>{t('demo.banner')}</Text>
     </View>
@@ -362,13 +408,15 @@ export function TrustBanner({
 }) {
   const { theme } = useApp();
   return (
-    <View style={[styles.trustBanner, { backgroundColor: theme.colors.accentSoft }]}> 
-      <View style={[styles.trustIcon, { backgroundColor: theme.colors.surfaceRaised }]}> 
+    <View style={[styles.trustBanner, { backgroundColor: theme.colors.accentSoft }]}>
+      <View style={[styles.trustIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
         <Ionicons name={icon} size={19} color={theme.colors.accent} />
       </View>
       <View style={styles.trustCopy}>
         <Text style={[styles.trustTitle, { color: theme.colors.text }]}>{title}</Text>
-        {body ? <Text style={[styles.trustBody, { color: theme.colors.textMuted }]}>{body}</Text> : null}
+        {body ? (
+          <Text style={[styles.trustBody, { color: theme.colors.textMuted }]}>{body}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -379,7 +427,9 @@ export function SectionHeader({ title, detail }: { title: string; detail?: strin
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{title}</Text>
-      {detail ? <Text style={[styles.sectionDetail, { color: theme.colors.textMuted }]}>{detail}</Text> : null}
+      {detail ? (
+        <Text style={[styles.sectionDetail, { color: theme.colors.textMuted }]}>{detail}</Text>
+      ) : null}
     </View>
   );
 }
@@ -401,17 +451,23 @@ export function EmptyState({
       <View style={[styles.emptyIcon, { backgroundColor: theme.colors.accentSoft }]}>
         <Ionicons name={icon} size={30} color={theme.colors.accent} />
       </View>
-      <Text style={[textStyles.heading, { color: theme.colors.text, textAlign: 'center' }]}>{title}</Text>
-      {body ? <Text style={[textStyles.body, { color: theme.colors.textMuted, textAlign: 'center' }]}>{body}</Text> : null}
+      <Text style={[textStyles.heading, { color: theme.colors.text, textAlign: 'center' }]}>
+        {title}
+      </Text>
+      {body ? (
+        <Text style={[textStyles.body, { color: theme.colors.textMuted, textAlign: 'center' }]}>
+          {body}
+        </Text>
+      ) : null}
       {action}
     </View>
   );
 }
 
 export const textStyles = StyleSheet.create({
-  eyebrow: { fontSize: 12, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
-  hero: { fontSize: 44, lineHeight: 46, fontWeight: '900', letterSpacing: -2 },
-  title: { fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: -1.2 },
+  eyebrow: { fontSize: 12, fontWeight: '800', letterSpacing: 0, textTransform: 'uppercase' },
+  hero: { fontSize: 44, lineHeight: 46, fontWeight: '900', letterSpacing: 0 },
+  title: { fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: 0 },
   heading: { fontSize: 20, lineHeight: 26, fontWeight: '800' },
   body: { fontSize: 16, lineHeight: 24 },
   caption: { fontSize: 13, lineHeight: 18 },
@@ -421,53 +477,168 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { flex: 1 },
   scroll: { flexGrow: 1 },
-  screenFooter: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  header: { minHeight: 58, paddingVertical: 5, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth },
+  screenFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  header: {
+    minHeight: 64,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   headerSide: { minWidth: 48 },
   headerRight: { alignItems: 'flex-end' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: -0.3 },
+  headerTitle: { flex: 1, fontSize: 22, fontWeight: '800', letterSpacing: 0 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  brandMark: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bubble: { width: 25, height: 19, borderRadius: 7 },
   bubbleDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, right: 8, bottom: 9 },
-  brandText: { fontSize: 27, fontWeight: '900', letterSpacing: -1.2 },
-  button: { minHeight: 48, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  buttonLabel: { fontSize: 15, lineHeight: 20, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
+  brandText: { fontSize: 27, fontWeight: '900', letterSpacing: 0 },
+  button: {
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  buttonLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
+  },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.45 },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
+  iconButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   field: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '800' },
-  input: { minHeight: 52, borderWidth: 1, borderRadius: 15, paddingHorizontal: 16, fontSize: 16 },
-  multiline: { minHeight: 112, paddingTop: 14, textAlignVertical: 'top' },
-  chip: { minHeight: 44, borderWidth: 1, paddingVertical: 9, paddingHorizontal: 13, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-  setting: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 13, borderBottomWidth: StyleSheet.hairlineWidth },
-  settingIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  input: { minHeight: 44, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, fontSize: 15 },
+  multiline: { minHeight: 96, paddingTop: 12, textAlignVertical: 'top' },
+  chip: {
+    minHeight: 44,
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  setting: {
+    minHeight: 74,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  settingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   settingCopy: { flex: 1, gap: 3 },
   settingTitle: { fontSize: 16, fontWeight: '700' },
   caption: { fontSize: 13, lineHeight: 18 },
-  tile: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden' },
+  tile: { flex: 1, aspectRatio: 0.82, borderRadius: 8, overflow: 'hidden' },
   tilePressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   tileImage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   tileOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', padding: 13 },
   nameLine: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  onlineDot: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: '#17251D', backgroundColor: '#38E890' },
-  tileName: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '700', flexShrink: 1, minWidth: 0 },
+  onlineDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#17251D',
+    backgroundColor: '#38E890',
+  },
+  tileName: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    flexShrink: 1,
+    minWidth: 0,
+  },
   tileAge: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '500', flexShrink: 0 },
   tileNameCompact: { fontSize: 13, lineHeight: 17 },
   tileIntent: { color: '#C0F3E2', fontSize: 12, lineHeight: 16, fontWeight: '600', marginTop: 3 },
   tileMeta: { color: '#E6ECE8', fontSize: 12, lineHeight: 16, marginTop: 2, fontWeight: '500' },
   tileMetaCompact: { fontSize: 11, lineHeight: 14 },
-  demoBanner: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  demoBanner: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   demoText: { flexShrink: 1, fontSize: 11, fontWeight: '700' },
-  trustBanner: { borderRadius: 20, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  trustIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  trustBanner: {
+    borderRadius: 8,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  trustIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   trustCopy: { flex: 1, gap: 2 },
   trustTitle: { fontSize: 14, lineHeight: 19, fontWeight: '900' },
   trustBody: { fontSize: 12, lineHeight: 17 },
   sectionHeader: { gap: 3 },
-  sectionTitle: { fontSize: 20, lineHeight: 25, fontWeight: '900', letterSpacing: -0.5 },
+  sectionTitle: { fontSize: 20, lineHeight: 25, fontWeight: '900', letterSpacing: 0 },
   sectionDetail: { fontSize: 12, lineHeight: 17 },
-  emptyState: { minHeight: 350, padding: 28, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  emptyIcon: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  emptyState: {
+    minHeight: 350,
+    padding: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
 });

@@ -34,15 +34,15 @@ export const spacing = {
   md: 16,
   lg: 24,
   xl: 32,
-  xxl: 48
+  xxl: 48,
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 16,
-  lg: 24,
+  sm: 6,
+  md: 8,
+  lg: 8,
   xl: 32,
-  pill: 999
+  pill: 999,
 } as const;
 
 const common = { spacing, radius };
@@ -51,8 +51,8 @@ export const lightTheme: AppTheme = {
   ...common,
   dark: false,
   colors: {
-    canvas: '#F4F2EC',
-    surface: '#FCFBF7',
+    canvas: '#F5F8F7',
+    surface: '#FFFFFF',
     surfaceRaised: '#FFFFFF',
     surfaceMuted: '#E9ECE7',
     text: '#10201B',
@@ -66,8 +66,8 @@ export const lightTheme: AppTheme = {
     warning: '#9A6500',
     danger: '#B4233A',
     success: '#167555',
-    scrim: 'rgba(10, 20, 18, 0.58)'
-  }
+    scrim: 'rgba(10, 20, 18, 0.58)',
+  },
 };
 
 export const darkTheme: AppTheme = {
@@ -89,25 +89,66 @@ export const darkTheme: AppTheme = {
     warning: '#F6C35B',
     danger: '#FF8FA0',
     success: '#70D3B1',
-    scrim: 'rgba(0, 0, 0, 0.7)'
-  }
+    scrim: 'rgba(0, 0, 0, 0.7)',
+  },
 };
 
-export function resolveTheme(mode: ThemeMode, systemScheme: ColorSchemeName, appearance: AppearancePreferences = defaultAppearance): AppTheme {
-  const base = mode === 'dark' || (mode === 'system' && systemScheme === 'dark') ? darkTheme : lightTheme;
+export function resolveTheme(
+  mode: ThemeMode,
+  systemScheme: ColorSchemeName,
+  appearance: AppearancePreferences = defaultAppearance,
+): AppTheme {
+  const base =
+    mode === 'dark' || (mode === 'system' && systemScheme === 'dark') ? darkTheme : lightTheme;
   const palettes = {
-    forest: { canvas: '#070E0C', surface: '#0D1B17', surfaceRaised: '#182C25', surfaceMuted: '#20382F', border: '#355247' },
-    midnight: { canvas: '#080D1B', surface: '#121B30', surfaceRaised: '#1B2944', surfaceMuted: '#283653', border: '#3F506F' },
-    charcoal: { canvas: '#101114', surface: '#1B1D22', surfaceRaised: '#26292F', surfaceMuted: '#34373E', border: '#4A4F59' },
+    forest: {
+      canvas: '#060E0B',
+      surface: '#0B1A15',
+      surfaceRaised: '#10231C',
+      surfaceMuted: '#19372C',
+      border: '#294E40',
+    },
+    midnight: {
+      canvas: '#080D1B',
+      surface: '#121B30',
+      surfaceRaised: '#1B2944',
+      surfaceMuted: '#283653',
+      border: '#3F506F',
+    },
+    charcoal: {
+      canvas: '#101114',
+      surface: '#1B1D22',
+      surfaceRaised: '#26292F',
+      surfaceMuted: '#34373E',
+      border: '#4A4F59',
+    },
   };
-  const accents = base.dark ? {
-    pink: ['#FF6B98', '#FF90B0', '#341826'], mint: ['#78DFC1', '#A8E8D7', '#153B31'],
-    violet: ['#BCACFF', '#D4CAFF', '#292340'], amber: ['#F3C776', '#F9DCA6', '#382E1B'],
-  } : {
-    pink: ['#B91C50', '#95113C', '#FBE3ED'], mint: ['#0D705B', '#095242', '#DCEFE8'],
-    violet: ['#6240B9', '#492C91', '#EDE7FC'], amber: ['#845A08', '#644304', '#F5EAD2'],
-  };
+  const accents = base.dark
+    ? {
+        pink: ['#FF4275', '#F82E65', '#341826'],
+        mint: ['#8BE4D0', '#AFEFE0', '#153B31'],
+        violet: ['#BCACFF', '#D4CAFF', '#292340'],
+        amber: ['#F3C776', '#F9DCA6', '#382E1B'],
+      }
+    : {
+        pink: ['#B91C50', '#95113C', '#FBE3ED'],
+        mint: ['#0D705B', '#095242', '#DCEFE8'],
+        violet: ['#6240B9', '#492C91', '#EDE7FC'],
+        amber: ['#845A08', '#644304', '#F5EAD2'],
+      };
   const [accent, accentPressed, accentSoft] = accents[appearance.accent];
-  return { ...base, colors: { ...base.colors, ...(base.dark ? palettes[appearance.darkPreset] : {}),
-    accent: accent!, accentPressed: accentPressed!, accentSoft: accentSoft!, textOnAccent: base.dark ? '#101318' : '#FFFFFF' } };
+  return {
+    ...base,
+    colors: {
+      ...base.colors,
+      ...(base.dark ? palettes[appearance.darkPreset] : {}),
+      accent: accent!,
+      accentPressed: accentPressed!,
+      accentSoft: accentSoft!,
+      textOnAccent: base.dark && appearance.accent !== 'pink' ? '#101318' : '#FFFFFF',
+      ...(base.dark && appearance.darkPreset === 'forest'
+        ? { text: '#F5FAF7', textMuted: '#8FAA9F' }
+        : {}),
+    },
+  };
 }

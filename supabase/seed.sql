@@ -52,6 +52,9 @@ values
   ('10000000-0000-0000-0000-000000000003', extensions.st_setsrid(extensions.st_makepoint(-21.91, 64.14), 4326)::extensions.geography, now(), now(), now(), 1)
 on conflict (profile_id) do update set verified_at = now(), last_submission_at = now();
 
+-- Trusted synthetic fixtures model a previously approved profile during a clean
+-- local reset. Runtime uploads still go through the generation-bound finalizer.
+alter table public.profile_photos disable trigger main_profile_photo_guard;
 insert into public.profile_photos (
   id, profile_id, storage_path, position, approval_status, reviewed_at, reviewed_by
 )
@@ -59,6 +62,7 @@ values
   ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002/profile.jpg', 1, 'approved', now(), '90000000-0000-0000-0000-000000000001'),
   ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000003/pending.jpg', 1, 'pending', null, null)
 on conflict (id) do nothing;
+alter table public.profile_photos enable trigger main_profile_photo_guard;
 
 insert into public.reports (
   id, reporter_id, reported_id, category, details, status

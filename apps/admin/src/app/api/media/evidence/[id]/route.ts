@@ -28,7 +28,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const normalized = await normalizeMedia(
       new Uint8Array(await file.data.arrayBuffer()),
       evidence.data.mediaType,
-      mediaLimits(evidence.data.targetType ?? 'album'),
+      mediaLimits(evidence.data.targetType ?? 'album', evidence.data.mediaType),
     );
     // Proxy normalized bytes instead of disclosing raw storage paths or reusable signed URLs.
     return new Response(new Uint8Array(normalized.bytes), {

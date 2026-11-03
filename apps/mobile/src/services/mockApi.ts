@@ -1,7 +1,7 @@
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
 import { activityRank, matchesActivity, profileOrientationTagsSchema, requiredSexualOrientationSelectionSchema } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
-import { getPoolSummary, settleEvent, TIERS, type MeetupSponsorship, activeTier, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId } from '@rummal/shared';
+import { getPoolSummary, settleEvent, TIERS, type MeetupSponsorship, activeTier, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId, sponsorSupportHistory, meetupSponsorsSchema } from '@rummal/shared';
 import { CommerceDemo } from './commerceDemo';
 import * as Crypto from 'expo-crypto';
 import { mockConversations, mockMessages, mockOwnProfile, mockProfiles } from '@/data/mock';
@@ -12,7 +12,7 @@ import type {
   MeetupPlaceSearchOptions, MeetupReinstateStatus, MeetupReportInput, MeetupUpdateInput, OwnProfile, PublicProfile,
   PushPlatform, ContentComment, ContentRating, ContentReaction, ContentTargetType, FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, GroupVoiceSession,
   ProfileActivity, ProfileActivityKind, ProfileAudience, ProfileReactionEmoji, StarredItem, StarredTargetType,
-  MeetupRoomMessage, MeetupRoomSummary, MeetupRsvpVisibility,
+  MeetupRoomMember, MeetupRoomMessage, MeetupRoomSummary, MeetupRsvpVisibility,
 } from '@/types/domain';
 import { expoPushTokenSchema, pushTokenRegistrationSchema } from '@/types/domain';
 import { DemoMeetupService } from './meetupDemo';
@@ -20,11 +20,34 @@ import type { OnboardingPayload, RummalApi } from './types';
 import { pageByTime } from '@/utils/messagePagination';
 import { matchesIdentityGroups } from '@/utils/discoveryPreferences';
 import { calculateAge } from '@/utils/age';
+import { normalizeProfileAppearance, validateProfileAppearance } from '@/utils/profileAppearance';
+import { normalizeProfileEdit } from '@/utils/profileEditing';
+import { mainProfilePhotos, selectMainProfilePhoto } from '@/utils/mainProfilePhoto';
+import { defaultNotificationPreferences, notificationPreferencesSchema, parseNotificationPreferenceUpdate, type NotificationPreferences, type NotificationPreferenceUpdate } from './notificationPreferences';
+import { hittingarFeature } from '@/features/hittingar/config';
+import { mergeStraxBadges } from '@/utils/straxBadge';
+import { getDemoStraxApi } from './straxDemo';
 
 const delay = (ms = 160) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class MockRummalApi implements RummalApi {
+  constructor() {
+    const main = selectMainProfilePhoto(this.own);
+    this.own.photos = this.own.photos.map(photo => ({ ...photo, archivedAt: photo.id === main?.id ? null : new Date().toISOString() }));
+    this.own.coverPhotoId = main?.id ?? null;
+    const demoCovers = [
+      ['6b7d4dc6-640b-4d10-8f0f-e45778159a01', 'photo-1501339847302-ac426a4a7cbb'],
+      ['9f433726-18df-41bd-96a1-e9ec1b503a02', 'photo-1531366936337-7c912a4589a7'],
+      ['c38df8a4-f792-4aa7-aec7-093140d54a04', 'photo-1610890716171-6b1bb98ffd09'],
+    ];
+    for (const [eventId, photoId] of demoCovers) this.demoCommunityStore.covers.set(eventId!, {
+      id: `demo-cover-${eventId}`, kind: 'photo',
+      url: `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=900&q=85`,
+    });
+  }
+
   readonly isDemo = true;
+  private notificationPreferences: NotificationPreferences = { ...defaultNotificationPreferences, mutedConversationIds: [] };
   readonly demoCommunityStore = new DemoCommunityStore();
   readonly communityDemo: DemoCommunityBridge = {
     sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
@@ -97,14 +120,19 @@ export class MockRummalApi implements RummalApi {
     return pool;
   }, {
     now: () => new Date(),
+    sponsored: (id, profileId) => this.communityDemo.sponsored(id, profileId),
     reservedSeats: (event, excluding) => refreshDemoQueue(this.demoCommunityStore, event, Date.now(), profileId => this.communityDemo.eligible(event.id, profileId), profileId => this.communityDemo.sponsored(event.id, profileId))
       .filter(row => row.status === 'offered' && row.profileId !== excluding).length,
   });
-  private own: OwnProfile = structuredClone(mockOwnProfile);
+  private own: OwnProfile = {
+    ...structuredClone(mockOwnProfile),
+    photos: structuredClone(mockOwnProfile.photos).map((photo, index) => ({ ...photo, position: index + 1 })),
+  };
   private profiles = structuredClone(mockProfiles);
   private conversations = structuredClone(mockConversations);
   private messages = structuredClone(mockMessages);
   private blocked = new Set<string>();
+  private sponsorConsentWithdrawn = false;
   private profileTapSends: number[] = [];
   private profileActivity: Array<ProfileActivity & { actorId: string; recipientId: string; kind: ProfileActivityKind }> = this.profiles.slice(0, 5).flatMap((profile, index) => {
     const occurredAt = new Date(Date.now() - (index + 1) * 45 * 60_000).toISOString();
@@ -124,6 +152,7 @@ export class MockRummalApi implements RummalApi {
   private meetupRooms = new Map<string, MeetupRoomSummary>();
   private meetupRoomMessages = new Map<string, MeetupRoomMessage[]>();
   private meetupRoomListeners = new Map<string, Set<() => void>>();
+  private pausedMeetupRooms = new Set<string>();
   private albums: Album[] = [
     {
       id: 'album-private', ownerId: 'demo-me', name: 'Private', contentVersion: 1,
@@ -161,14 +190,24 @@ export class MockRummalApi implements RummalApi {
       && (filters.tags.length === 0 || filters.tags.some((tag) => profile.tags.includes(tag)))
     );
     items.sort((a,b) => activityRank(this.discoveryFixture(a.id).lastActive,this.discoveryFixture(a.id).visible,Date.now())-activityRank(this.discoveryFixture(b.id).lastActive,this.discoveryFixture(b.id).visible,Date.now()));
-    return { items, nextCursor: null };
+    let enriched: PublicProfile[] = structuredClone(items).map(profile => ({ ...profile, photos: mainProfilePhotos(profile), videos: [], profileVideos: [] }));
+    if (hittingarFeature.enabled) {
+      try { enriched = mergeStraxBadges(enriched, await getDemoStraxApi(this).badges(enriched.map(profile => profile.id))); }
+      catch { enriched = enriched.map(profile => ({ ...profile, activeStrax: null })); }
+    }
+    return { items: enriched, nextCursor: null };
   }
 
   async getProfile(id: string) {
     await delay(80);
     const profile = this.profiles.find((item) => item.id === id);
     if (!profile || this.blocked.has(id)) throw new Error('Profile not found');
-    return structuredClone(profile);
+    const result = structuredClone({ ...profile, photos: mainProfilePhotos(profile), videos: [], profileVideos: [], appearance: normalizeProfileAppearance(profile.appearance) });
+    if (hittingarFeature.enabled) {
+      try { return mergeStraxBadges([result], await getDemoStraxApi(this).badges([id]))[0]!; }
+      catch { return { ...result, activeStrax: null }; }
+    }
+    return result;
   }
 
   async listProfileActivity(kind: ProfileActivityKind, cursor?: string | null) {
@@ -176,7 +215,10 @@ export class MockRummalApi implements RummalApi {
     if (!this.own.locationSharing) throw new Error('profile_access_required');
     const visible = this.profileActivity.filter(item => item.recipientId === this.own.id && item.kind === kind &&
       !this.blocked.has(item.actorId) && this.discoveryFixture(item.actorId).visible);
-    return structuredClone(pageByTime(visible, item => item.occurredAt, 40, cursor));
+    const page = structuredClone(pageByTime(visible, item => item.occurredAt, 40, cursor));
+    return { ...page, items: page.items.map(item => ({ ...item, profile: {
+      ...item.profile, photos: mainProfilePhotos(item.profile), videos: [], profileVideos: [],
+    } })) };
   }
 
   private async recordActivity(profileId: string, kind: ProfileActivityKind) {
@@ -207,14 +249,37 @@ export class MockRummalApi implements RummalApi {
   async sendProfileTap(profileId: string): Promise<void> { await this.recordActivity(profileId, 'taps'); }
 
   async hasCompletedOnboarding() { return true; }
-  async getOwnProfile() { await delay(80); return structuredClone(this.own); }
+  async getOwnProfile() {
+    await delay(80);
+    return structuredClone({ ...this.own,
+      age: this.own.dateOfBirth ? calculateAge(this.own.dateOfBirth) ?? this.own.age : this.own.age,
+      appearance: normalizeProfileAppearance(this.own.appearance) });
+  }
   async updateProfile(profile: Partial<OwnProfile>) {
+    profile = normalizeProfileEdit(profile);
     if (profile.identity !== undefined) profileOrientationTagsSchema.parse(profile.identity);
-    this.own = { ...this.own, ...profile }; await delay(); return structuredClone(this.own);
+    if (profile.coverPhotoId != null && !this.own.photos.some(photo => photo.id === profile.coverPhotoId
+      && photo.status === 'approved' && !photo.archivedAt)) throw new Error('cover_requires_own_approved_photo');
+    const appearance = profile.appearance === undefined ? normalizeProfileAppearance(this.own.appearance) : validateProfileAppearance(profile.appearance);
+    this.own = { ...this.own, ...structuredClone(profile), appearance }; return this.getOwnProfile();
   }
   async listProfileTags() { await delay(40); return structuredClone(profileTags); }
   async uploadProfilePhoto(uri: string) {
-    this.own.photos.push({ id: Crypto.randomUUID(), url: uri, status: 'pending' });
+    if (this.own.mainPhotoUpload?.status === 'pending' || this.own.mainPhotoUpload?.status === 'appealed') throw new Error('main_photo_replacement_pending');
+    const id = Crypto.randomUUID();
+    this.own.mainPhotoUpload = { id, status: 'pending' };
+    // The demo simulates approval while keeping its former picture during review.
+    await delay();
+    const archivedAt = new Date().toISOString();
+    this.own.photos = this.own.photos.map(photo => ({ ...photo, archivedAt: photo.archivedAt ?? archivedAt }));
+    this.own.photos.push({ id, url: uri, position: 1, status: 'approved', archivedAt: null });
+    this.own.coverPhotoId = id;
+    this.own.mainPhotoUpload = undefined;
+  }
+  async removeProfilePhoto(photoId: string): Promise<void> {
+    if (!this.own.photos.some(photo => photo.id === photoId)) throw new Error('profile_photo_unavailable');
+    this.own.photos = this.own.photos.filter(photo => photo.id !== photoId);
+    if (this.own.coverPhotoId === photoId) this.own.coverPhotoId = null;
     await delay();
   }
   async uploadProfileVideo(uri: string, _mimeType = 'video/mp4', durationMs = 0, tags: string[] = []) {
@@ -320,6 +385,10 @@ export class MockRummalApi implements RummalApi {
     await delay();
     return structuredClone(message);
   }
+  setDemoGroupStraxReference(messageId: string, reference: import('@rummal/shared').StraxMessageReference) {
+    const message = this.groupMessages.find(item => item.id === messageId);
+    if (message) message.strax = structuredClone(reference);
+  }
   async startGroupVoice(_groupId: string): Promise<GroupVoiceSession> {
     throw new Error('voice_provider_unavailable');
   }
@@ -342,8 +411,10 @@ export class MockRummalApi implements RummalApi {
   async listConversations(cursor?: string | null, query = '') {
     await delay();
     const needle = query.trim().toLocaleLowerCase();
-    return structuredClone(pageByTime(this.conversations.filter(c => !this.blocked.has(c.member.id) &&
+    const page = structuredClone(pageByTime(this.conversations.filter(c => !this.blocked.has(c.member.id) &&
       `${c.member.displayName} ${c.lastMessage}`.toLocaleLowerCase().includes(needle)), c => c.lastMessageAt, 30, cursor));
+    return { ...page, items: page.items.map(conversation => ({ ...conversation,
+      member: { ...conversation.member, photos: mainProfilePhotos(conversation.member) } })) };
   }
   async startConversation(profileId: string) {
     const existing = this.conversations.find((item) => item.member.id === profileId);
@@ -517,11 +588,17 @@ export class MockRummalApi implements RummalApi {
   async deleteConversation(conversationId: string) { this.conversations = this.conversations.filter((item) => item.id !== conversationId); await delay(); }
   async block(profileId: string) {
     this.blocked.add(profileId);
+    getDemoStraxApi(this).revokeBlock(this.own.id, profileId);
+    this.meetupService.revokeAccessOnBlock(profileId).forEach(id => this.pausedMeetupRooms.add(id));
+    this.meetupRoomListeners.forEach(listeners => listeners.forEach(listener => listener()));
     this.profileActivity = this.profileActivity.filter(item => item.actorId !== profileId && item.recipientId !== profileId);
     this.albumShares = this.albumShares.map((share) => [share.ownerId, share.recipientId].includes(profileId) && ['pending', 'accepted', 'consumed'].includes(share.status) ? { ...share, status: 'revoked' } : share);
     await delay();
   }
   async unblock(profileId: string) { this.blocked.delete(profileId); await delay(); }
+  canViewDemoStraxHost(profileId: string) {
+    return !this.blocked.has(profileId) && (profileId === this.own.id ? !this.own.isHidden : this.discoveryFixture(profileId).visible);
+  }
   async listBlocked() { await delay(); return structuredClone(this.profiles.filter((item) => this.blocked.has(item.id))); }
   async report() { await delay(250); }
   async discoverMeetups(filters: MeetupFilters) { await delay(); const results=(await this.meetupService.discover(filters)).map(event=>decorateDemoCommunity(event, this.own.id, this.demoCommunityStore)); return results.filter(event=>!this.blocked.has(event.host.id)).filter(event=>filters.social==='all'||filters.social==='favorites'&&this.stars.some(s=>s.targetType==='event'&&s.targetId===event.id)||filters.social==='friends'&&this.friends.some(f=>f.profileId===event.host.id&&f.status==='accepted')||filters.social==='friends_of_friends'&&this.discoveryFixture(event.host.id).fof&&this.friends.some(f=>f.status==='accepted')); }
@@ -529,9 +606,24 @@ export class MockRummalApi implements RummalApi {
   async listMyMeetups() { await delay(); return (await this.meetupService.listMine()).filter(event => !this.blocked.has(event.host.id)).map(event => decorateDemoCommunity(event, this.own.id, this.demoCommunityStore)); }
   async listMeetupRequests(id: string) { await delay(); return this.meetupService.listRequests(id); }
   async listMeetupParticipants(id: string) { await delay(); return this.meetupService.listParticipants(id); }
+  async listMeetupSponsors(id: string) {
+    const event = await this.getMeetup(id);
+    if (event.status !== 'published' || event.requiresDiagnosisVerification) return [];
+    const visible = (await this.communityDemo.all()).filter(item => item.status === 'published' && !item.requiresDiagnosisVerification);
+    const scope = event.seriesId ? visible.filter(item => item.seriesId === event.seriesId).map(item => item.id) : [id];
+    const rows = sponsorSupportHistory(this.commerce.state, id, scope).flatMap(({ memberId, ...support }) => {
+      if (this.blocked.has(memberId) || memberId === this.own.id && this.sponsorConsentWithdrawn) return [];
+      const profile = memberId === this.own.id ? this.own : this.profiles.find(item => item.id === memberId);
+      if (!profile) return [];
+      const visibleProfile = memberId === this.own.id ? !this.own.isHidden : this.discoveryFixture(memberId).visible;
+      return [{ ...support, profile: visibleProfile ? { id: profile.id, displayName: profile.displayName, ...(profile.photos[0]?.url ? { avatarUrl: profile.photos[0].url } : {}) } : null }];
+    });
+    return meetupSponsorsSchema.parse(rows);
+  }
   async getMeetupGender(id: string) { return this.meetupService.getGender(id); }
   async setMeetupGender(id: string, gender: string | null) { return this.meetupService.setGender(id, gender); }
   async listMeetupMedia(id: string) { await this.getMeetup(id); return this.meetupService.listMedia(id); }
+  async listMeetupMediaUploads(id: string) { return this.meetupService.listMediaUploads(id); }
   async uploadMeetupMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string) { return this.meetupService.uploadMedia(id, uri, kind, mimeType); }
   async removeMeetupMedia(id: string, mediaId: string) { await this.meetupService.removeMedia(id, mediaId); if (this.demoCommunityStore.covers.get(id)?.id === mediaId) this.demoCommunityStore.covers.delete(id); }
   async listMeetupReviews(id: string) { return this.meetupService.listReviews(id); }
@@ -570,41 +662,125 @@ export class MockRummalApi implements RummalApi {
     await delay();
   }
   async reportMeetup(id: string, input: MeetupReportInput) { await delay(); return this.meetupService.report(id, input); }
-  async listPublicMeetupRoster(_id: string) { await delay(); return { items: [], nextCursor: null }; }
+  async listPublicMeetupRoster(id: string) { await delay(); return this.meetupService.listPublicRoster(id); }
   async listProfileMeetupHistory(_profileId: string) { await delay(); return { items: [], nextCursor: null }; }
   async listProfileUpcomingMeetups(_profileId: string) { await delay(); return { items: [], nextCursor: null }; }
   async setMeetupRsvpVisibility(_id: string, _visibility: MeetupRsvpVisibility) { await delay(20); }
   async confirmMeetupAttendance(_id: string) { await delay(20); }
   async completeMeetupAttendance(_id: string, _outcome: 'attended' | 'did_not_attend' | 'dismiss', _historyVisibility: 'visible' | 'private' = 'private') { await delay(20); }
   async setMeetupHistoryVisibility(_id: string, _visibility: 'visible' | 'private') { await delay(20); }
+  async getMeetupChats() {
+    const result = [];
+    for (const detail of await this.listMyMeetups()) {
+      const room = await this.getMeetupRoom(detail.id);
+      if (!room) continue;
+      const last = room.isPaused ? undefined : this.meetupRoomMessages.get(room.id)?.at(-1);
+      result.push({ id: room.id, meetupId: detail.id, title: detail.title, startsAt: detail.startsAt,
+        ...(last ? { lastMessage: last.body, lastMessageKind: last.kind, lastMessageAt: last.createdAt } : {}),
+        ...(!room.isPaused && room.avatarUrl ? { avatarUrl: room.avatarUrl } : {}),
+        unreadCount: room.unreadCount, canPost: room.canPost, isPaused: room.isPaused });
+    }
+    return result.sort((a, b) => (b.lastMessageAt ?? b.startsAt).localeCompare(a.lastMessageAt ?? a.startsAt));
+  }
+  async markMeetupRoomRead(roomId: string) {
+    await this.requireMeetupRoom(roomId);
+    const room = [...this.meetupRooms.values()].find(item => item.id === roomId)!;
+    room.unreadCount = 0;
+  }
+  private async requireMeetupRoom(roomId: string, posting = false) {
+    const cached = [...this.meetupRooms.values()].find(item => item.id === roomId);
+    const room = cached ? await this.getMeetupRoom(cached.meetupId) : null;
+    if (!room || room.isPaused) throw new Error('active_room_membership_required');
+    if (posting && !room.canPost) throw new Error('room_posting_closed');
+    return room;
+  }
   async getMeetupRoom(id: string) {
+    const detail = await this.getMeetup(id);
+    if (detail.status !== 'published' || !detail.capabilities.canViewRoom
+      || detail.requiresDiagnosisVerification || Date.now() >= Date.parse(detail.effectiveEnd) + 24 * 60 * 60 * 1000) return null;
     let room = this.meetupRooms.get(id);
     if (!room) {
-      const detail = await this.meetupService.get(id);
-      if (!detail.capabilities.canViewRoom) return null;
       room = { id: Crypto.randomUUID(), meetupId: id, postingClosesAt: new Date(Date.parse(detail.effectiveEnd) + 2 * 60 * 60 * 1000).toISOString(), readingClosesAt: new Date(Date.parse(detail.effectiveEnd) + 24 * 60 * 60 * 1000).toISOString(), isPaused: false, canPost: true, unreadCount: 0 };
       this.meetupRooms.set(id, room);
       this.meetupRoomMessages.set(room.id, []);
     }
+    room.postingClosesAt = new Date(Date.parse(detail.effectiveEnd) + 2 * 60 * 60 * 1000).toISOString();
+    room.readingClosesAt = new Date(Date.parse(detail.effectiveEnd) + 24 * 60 * 60 * 1000).toISOString();
+    room.isPaused = this.pausedMeetupRooms.has(id);
+    room.canPost = !room.isPaused && detail.capabilities.canSendRoomMessage && Date.now() < Date.parse(room.postingClosesAt);
+    room.title = detail.title;
+    room.canManageAvatar = detail.host.id === this.own.id && room.canPost;
+    if (room.isPaused) room.unreadCount = 0;
     await delay();
     return structuredClone(room);
   }
   async listMeetupRoomMessages(roomId: string, cursor?: string | null) {
+    await this.requireMeetupRoom(roomId);
     await delay();
     const page = pageByTime(this.meetupRoomMessages.get(roomId) ?? [], message => message.createdAt, 50, cursor);
     return structuredClone({ ...page, items: page.items.reverse() });
   }
   async sendMeetupRoomMessage(roomId: string, body: string, clientMessageId = Crypto.randomUUID()) {
+    await this.requireMeetupRoom(roomId, true);
+    if (!body.trim() || body.trim().length > 2000) throw new Error('invalid_message_body');
     const previous = this.meetupRoomMessages.get(roomId)?.find(item => item.id === clientMessageId);
     if (previous) {
-      if (previous.body !== body.trim()) throw new Error('message_id_conflict');
+      if (previous.kind !== 'text' || previous.body !== body.trim()) throw new Error('message_id_conflict');
       return structuredClone(previous);
     }
     const links = body.match(/https?:\/\/[^\s<>{}"']+/gi) ?? [];
-    const message: MeetupRoomMessage = { id: clientMessageId, roomId, sender: { id: this.own.id, displayName: this.own.displayName }, kind: 'text', body: body.trim(), linkHostnames: links.flatMap((url) => { try { return [new URL(url).hostname]; } catch { return []; } }), createdAt: new Date().toISOString() };
+    const message: MeetupRoomMessage = { id: clientMessageId, roomId, sender: this.roomProfile(this.own.id), kind: 'text', body: body.trim(), linkHostnames: links.flatMap((url) => { try { return [new URL(url).hostname]; } catch { return []; } }), createdAt: new Date().toISOString() };
     const messages = this.meetupRoomMessages.get(roomId) ?? [];
     messages.push(message); this.meetupRoomMessages.set(roomId, messages);
     this.meetupRoomListeners.get(roomId)?.forEach((listener) => listener());
+    await delay(); return structuredClone(message);
+  }
+  private roomProfile(profileId: string, fallbackName = 'Hittumst member') {
+    const profile = profileId === this.own.id ? this.own : this.profiles.find(item => item.id === profileId);
+    const visible = profile && (profileId === this.own.id ? !this.own.isHidden : this.discoveryFixture(profileId).visible);
+    const avatarUrl = visible ? profile.photos.find(photo => photo.status === 'approved')?.url : undefined;
+    return { id: profileId, displayName: profile?.displayName ?? fallbackName, ...(avatarUrl ? { avatarUrl } : {}) };
+  }
+  async listMeetupRoomMembers(roomId: string): Promise<MeetupRoomMember[]> {
+    const room = await this.requireMeetupRoom(roomId);
+    const event = await this.getMeetup(room.meetupId);
+    const members: MeetupRoomMember[] = [{ profile: this.roomProfile(event.host.id, event.host.displayName), role: 'host' }];
+    for (const profileId of this.meetupService.communityParticipants(event.id)) {
+      if (profileId !== event.host.id && !this.blocked.has(profileId)) members.push({ profile: this.roomProfile(profileId), role: 'participant' });
+    }
+    return structuredClone(members);
+  }
+  async uploadMeetupRoomAvatar(roomId: string, uri: string, mimeType: string) {
+    const room = await this.requireMeetupRoom(roomId, true);
+    if (!room.canManageAvatar) throw new Error('meetup_host_required');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) throw new Error('invalid_media_type');
+    const cached = this.meetupRooms.get(room.meetupId)!;
+    cached.avatarUrl = uri;
+    this.meetupRoomListeners.get(roomId)?.forEach(listener => listener());
+    await delay();
+  }
+  async removeMeetupRoomAvatar(roomId: string) {
+    const room = await this.requireMeetupRoom(roomId, true);
+    if (!room.canManageAvatar) throw new Error('meetup_host_required');
+    delete this.meetupRooms.get(room.meetupId)!.avatarUrl;
+    this.meetupRoomListeners.get(roomId)?.forEach(listener => listener());
+    await delay();
+  }
+  async sendMeetupRoomMedia(roomId: string, uri: string, kind: 'photo' | 'video', mimeType: string, body = '', clientMessageId = Crypto.randomUUID()): Promise<MeetupRoomMessage> {
+    await this.requireMeetupRoom(roomId, true);
+    const valid = kind === 'photo' ? ['image/jpeg', 'image/png', 'image/webp'] : ['video/mp4', 'video/quicktime', 'video/webm'];
+    if (!valid.includes(mimeType)) throw new Error('invalid_media_type');
+    if (!uri || body.trim().length > 2000) throw new Error('invalid_message_body');
+    const previous = this.meetupRoomMessages.get(roomId)?.find(message => message.id === clientMessageId);
+    if (previous) {
+      if (previous.kind !== kind || previous.body !== body.trim() || previous.media?.url !== uri) throw new Error('message_id_conflict');
+      return structuredClone(previous);
+    }
+    const links = body.match(/https?:\/\/[^\s<>{}"']+/gi) ?? [];
+    const message: MeetupRoomMessage = { id: clientMessageId, roomId, sender: this.roomProfile(this.own.id), kind, body: body.trim(), media: { kind, status: 'approved', url: uri }, linkHostnames: links.flatMap(url => { try { return [new URL(url).hostname]; } catch { return []; } }), createdAt: new Date().toISOString() };
+    const messages = this.meetupRoomMessages.get(roomId) ?? [];
+    messages.push(message); this.meetupRoomMessages.set(roomId, messages);
+    this.meetupRoomListeners.get(roomId)?.forEach(listener => listener());
     await delay(); return structuredClone(message);
   }
   subscribeMeetupRoom(roomId: string, onInvalidate: () => void) {
@@ -648,13 +824,29 @@ export class MockRummalApi implements RummalApi {
     this.pushTokens.delete(expoPushTokenSchema.parse(expoPushToken));
     await delay(20);
   }
+  async getNotificationPreferences() {
+    await delay();
+    return { ...this.notificationPreferences, mutedConversationIds: [...this.notificationPreferences.mutedConversationIds] };
+  }
+  async updateNotificationPreferences(update: NotificationPreferenceUpdate) {
+    const parsed = parseNotificationPreferenceUpdate(update);
+    this.notificationPreferences = notificationPreferencesSchema.parse({ ...this.notificationPreferences, ...parsed });
+    return this.getNotificationPreferences();
+  }
+  async setConversationMuted(conversationId: string, muted: boolean) {
+    if (!this.conversations.some(item => item.id === conversationId) || typeof muted !== 'boolean') throw new Error('conversation_unavailable');
+    const ids = new Set(this.notificationPreferences.mutedConversationIds);
+    if (muted) ids.add(conversationId); else ids.delete(conversationId);
+    this.notificationPreferences.mutedConversationIds = [...ids];
+    await delay();
+  }
   async searchMeetupPlaces(query: string, options?: MeetupPlaceSearchOptions) {
     await delay(80); return this.meetupService.searchPlaces(query, options);
   }
   async reverseGeocodeMeetupPlace(coordinate: GeoCoordinate, options?: MeetupPlaceSearchOptions) {
     await delay(80); return this.meetupService.reverseGeocode(coordinate, options);
   }
-  async requestExport() { await delay(300); return JSON.stringify({ demo: true, profile: this.own, conversations: this.conversations, messages: this.messages, albums: this.albums.filter(album => album.ownerId === this.own.id), profileActivity: this.profileActivity.filter(item => item.actorId === this.own.id || !this.blocked.has(item.actorId) && this.discoveryFixture(item.actorId).visible).map(({ profile: _profile, ...item }) => item), profileTapSends: this.profileTapSends.map(sentAt => new Date(sentAt).toISOString()) }, null, 2); }
-  async withdrawSensitiveConsent() { this.own.isHidden = true; await delay(); }
-  async deleteAccount() { this.profileActivity = []; this.profileTapSends = []; await delay(300); }
+  async requestExport() { await delay(300); return JSON.stringify({ demo: true, profile: this.own, conversations: this.conversations, messages: this.messages, albums: this.albums.filter(album => album.ownerId === this.own.id), profileActivity: this.profileActivity.filter(item => item.actorId === this.own.id || !this.blocked.has(item.actorId) && this.discoveryFixture(item.actorId).visible).map(({ profile: _profile, ...item }) => item), profileTapSends: this.profileTapSends.map(sentAt => new Date(sentAt).toISOString()), notificationPreferences: this.notificationPreferences }, null, 2); }
+  async withdrawSensitiveConsent() { this.own.isHidden = true; this.sponsorConsentWithdrawn = true; await delay(); }
+  async deleteAccount() { this.profileActivity = []; this.profileTapSends = []; this.sponsorConsentWithdrawn = true; await delay(300); }
 }

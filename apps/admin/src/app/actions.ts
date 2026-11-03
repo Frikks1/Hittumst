@@ -30,6 +30,7 @@ export async function performModerationAction(formData: FormData) {
   const reportId = value(formData, "reportId");
   const profileId = value(formData, "profileId") || undefined;
   const meetupId = value(formData, "meetupId") || undefined;
+  const straxId = value(formData, "straxId") || undefined;
   const action = value(formData, "action");
   const reason = value(formData, "reason");
   const suspensionDaysRaw = value(formData, "suspensionDays");
@@ -37,7 +38,7 @@ export async function performModerationAction(formData: FormData) {
   const path = `/reports/${encodeURIComponent(reportId)}`;
 
   const validation = validateModerationAction(
-    { reportId, profileId, meetupId, action, reason, suspensionDays },
+    { reportId, profileId, meetupId, straxId, action, reason, suspensionDays },
     admin.roles,
   );
   if (!validation.ok) {
@@ -48,7 +49,10 @@ export async function performModerationAction(formData: FormData) {
     const supabase = await createClient();
     let error: { message: string } | null;
 
-    if (["meetup_remove", "meetup_restore", "host_restrict"].includes(validation.value.action)) {
+    if (["strax_hide", "strax_restore"].includes(validation.value.action)) {
+      const result = await supabase.rpc("admin_moderate_strax", { p_id: straxId, p_action: validation.value.action === "strax_hide" ? "hide" : "restore", p_reason: reason });
+      error = result.error;
+    } else if (["meetup_remove", "meetup_restore", "host_restrict"].includes(validation.value.action)) {
       const meetupAction = validation.value.action === "meetup_remove"
         ? "remove"
         : validation.value.action === "meetup_restore"

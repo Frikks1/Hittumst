@@ -25,7 +25,8 @@ export interface ReportListItem {
   evidenceCount: number;
   assignedAdmin?: string;
   meetupId?: string;
-  targetType: "member" | "meetup";
+  straxId?: string;
+  targetType: "member" | "meetup" | "strax" | "community_post" | "community_comment";
 }
 
 export interface EvidenceItem {
@@ -71,6 +72,7 @@ export interface ReportDetail extends ReportListItem {
   resolutionNotes?: string;
   evidence: EvidenceItem[];
   meetupSnapshot?: MeetupReportSnapshot;
+  straxSnapshot?: { id: string; title: string; description: string; locationText?: string; address?: string; requirements?: string; createdAt: string; expiresAt: string };
 }
 
 export interface PhotoReviewItem {

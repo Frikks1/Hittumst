@@ -23,6 +23,14 @@ import {
 const coordinate = { latitude: 64.1466, longitude: -21.9426 };
 
 describe('Hittingar contracts', () => {
+  it('validates whole ISK fees and allows omitted fields on legacy updates', () => {
+    expect(meetupUpdateInputSchema.parse({ feeIsk: 0 })).toEqual({ feeIsk: 0 });
+    expect(meetupUpdateInputSchema.parse({ feeIsk: 1500 })).toEqual({ feeIsk: 1500 });
+    expect(meetupUpdateInputSchema.parse({ capacity: 20 })).not.toHaveProperty('feeIsk');
+    for (const feeIsk of [-1, 1.5, 2147483648, '1000', null]) {
+      expect(meetupUpdateInputSchema.safeParse({ feeIsk }).success).toBe(false);
+    }
+  });
   it('makes protected locked locations structurally incapable of carrying exact coordinates', () => {
     const locked = {
       state: 'protected_locked',

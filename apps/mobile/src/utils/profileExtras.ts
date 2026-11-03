@@ -20,6 +20,16 @@ export const socialPlatforms: Array<{ platform: SocialPlatform; labelKey: 'profi
   { platform: 'website', labelKey: 'profile.website' },
 ];
 
+export const musicSocialPlatforms = [
+  { platform: 'spotify', labelKey: 'profile.spotify' },
+  { platform: 'soundcloud', labelKey: 'profile.soundcloud' },
+] as const;
+
+export const supportedSocialPlatforms: readonly SocialPlatform[] = [
+  ...socialPlatforms.map(item => item.platform),
+  ...musicSocialPlatforms.map(item => item.platform),
+];
+
 export function parseProfileList(value: string, limit: number): string[] {
   return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))].slice(0, limit);
 }
@@ -31,8 +41,23 @@ export function updateSocialHandle(socials: ProfileSocial[], platform: SocialPla
 }
 
 export function socialUrl(social: ProfileSocial): string {
-  const value = social.handle.replace(/^@/, '');
-  if (social.platform === 'website') return /^https?:\/\//i.test(social.handle) ? social.handle : `https://${social.handle}`;
-  const host = social.platform === 'instagram' ? 'instagram.com/' : social.platform === 'tiktok' ? 'tiktok.com/@' : social.platform === 'x' ? 'x.com/' : social.platform === 'youtube' ? 'youtube.com/@' : social.platform === 'discord' ? 'discord.com/users/' : social.platform === 'steam' ? 'steamcommunity.com/id/' : 'x.com/';
-  return `https://${host}${value}`;
+  const value = social.handle.trim().replace(/^@/, '');
+  if (!value || /\s/.test(value)) return '';
+  const bases: Record<Exclude<SocialPlatform, 'website'>, string> = {
+    instagram: 'https://instagram.com/', tiktok: 'https://tiktok.com/@',
+    x: 'https://x.com/', youtube: 'https://youtube.com/@',
+    discord: 'https://discord.com/users/', steam: 'https://steamcommunity.com/id/',
+    spotify: 'https://open.spotify.com/user/', soundcloud: 'https://soundcloud.com/',
+  };
+  const base = social.platform === 'website' ? undefined : bases[social.platform];
+  const expectedHost = base ? new URL(base).hostname : undefined;
+  const isUrl = /^https?:\/\//i.test(value) || social.platform === 'website'
+    || Boolean(expectedHost && (value.toLowerCase().startsWith(`${expectedHost}/`) || value.toLowerCase().startsWith(`www.${expectedHost}/`)));
+  try {
+    const url = new URL(isUrl ? /^https?:\/\//i.test(value) ? value : `https://${value}` : `${base}${value}`);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password
+      || expectedHost && url.hostname.replace(/^www\./, '') !== expectedHost) return '';
+    url.protocol = 'https:';
+    return url.toString();
+  } catch { return ''; }
 }

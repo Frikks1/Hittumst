@@ -7,6 +7,7 @@ import type { Locale } from '@/i18n/translations';
 import { authService, type RummalApi } from '@/services';
 import type { NotificationTarget } from '@/types/domain';
 import { createNotificationDispatcher } from '@/services/notificationDelivery';
+import { cancelAllMeetupReminders, reconcileMeetupReminders } from './eventReminders';
 
 type Options = { api: RummalApi; locale: Locale; navigateToMeetup?: (id: string) => void; onInboxChanged?: () => void };
 type GlobalOptions = { api: RummalApi; enabled: boolean; accountId?: string | null; navigateToMeetup: (id: string) => void; navigateToTarget?: (target: NotificationTarget) => void; onInboxChanged?: () => void };
@@ -69,7 +70,10 @@ export function usePushTokenRegistration({ api, locale, accountId }: { api: Rumm
   useEffect(() => {
     if (!accountId || api.isDemo) return;
     let active = true;
-    const sync = () => { void registerDevice(api, locale, false, accountId, () => active).catch(() => undefined); };
+    const sync = () => {
+      void registerDevice(api, locale, false, accountId, () => active).catch(() => undefined);
+      void reconcileMeetupReminders(api).catch(() => undefined);
+    };
     sync();
     const foreground = AppState.addEventListener('change', state => { if (state === 'active') sync(); });
     const changed = Notifications.addPushTokenListener(sync);
@@ -89,7 +93,24 @@ export function useGlobalHittingarNotifications({ api, enabled, accountId, navig
       navigate: target => { if (navigateToTarget) navigateToTarget(target); else if (target.type === 'meetup') navigateToMeetup(target.id); },
       clear: () => Notifications.clearLastNotificationResponseAsync(), changed: onInboxChanged,
     });
-    const open = (response: Notifications.NotificationResponse | null) => response && dispatch(response.notification.request.content.data?.notificationId);
+    const open = async (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const data = response.notification.request.content.data;
+      if (typeof data?.meetupReminderId === 'string') {
+        const owner = account.current;
+        try {
+          if (!owner || data.accountId !== owner || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(data.meetupReminderId)) return;
+          const detail = await api.getMeetup(data.meetupReminderId);
+          if (active && account.current === owner && detail.status === 'published' &&
+            detail.capabilities.canViewRoom) {
+            navigateToMeetup(detail.id);
+          }
+        } catch { /* Removed members and cancelled events cannot open from stale reminders. */ }
+        finally { if (active && account.current === owner) await Notifications.clearLastNotificationResponseAsync().catch(() => undefined); }
+        return;
+      }
+      await dispatch(data?.notificationId);
+    };
     const received = Notifications.addNotificationReceivedListener(() => onInboxChanged?.());
     const opened = Notifications.addNotificationResponseReceivedListener(response => { void open(response); });
     void Notifications.getLastNotificationResponseAsync().then(open).catch(() => undefined);
@@ -99,6 +120,7 @@ export function useGlobalHittingarNotifications({ api, enabled, accountId, navig
 
 export async function unregisterStoredHittingarPushToken(api: RummalApi): Promise<void> {
   pushGeneration++;
+  await cancelAllMeetupReminders().catch(() => undefined);
   await serializePush(async () => {
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     if (!token) return;

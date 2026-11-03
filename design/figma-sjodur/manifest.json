@@ -1,0 +1,9 @@
+{
+  "name": "Hittingar — Sjóður and sponsors",
+  "id": "hittingar-sjodur-local",
+  "api": "1.0.0",
+  "main": "build.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {"allowedDomains": ["none"]}
+}

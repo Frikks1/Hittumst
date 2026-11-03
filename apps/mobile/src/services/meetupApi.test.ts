@@ -5,10 +5,32 @@ import {
   type MeetupDraftInput,
 } from '@/types/domain';
 import { MockRummalApi } from './mockApi';
+import { DemoMeetupService } from './meetupDemo';
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
 
 describe('MockRummalApi Hittingar', () => {
+  it('preserves fees across host edits and joins a paid meetup without payment gates', async () => {
+    let viewerId = 'host-fee-test';
+    const now = new Date();
+    const service = new DemoMeetupService(now, () => 'flottari_plebbi', undefined, { viewerId: () => viewerId });
+    const id = await service.createDraft({
+      title: 'Kvöldkaffi', description: 'Rólegt kvöld með kaffi og spjalli.', category: 'coffee_food',
+      intention: 'friends_social', venueMode: 'in_person', rsvpVisibility: 'private', recurrence: null,
+      tags: [], startsAt: new Date(now.getTime() + 86400000).toISOString(),
+      accessMode: 'open', locationVisibility: 'protected', releasePolicy: 'immediate',
+      generalAreaId: 'reykjavik', capacity: 3, isExplicit: false,
+      prohibitedServicesAttested: true, publicLocationConfirmed: false,
+      latitude: 64.1466, longitude: -21.9426, feeIsk: 1500,
+    });
+    expect(await service.publish(id)).toMatchObject({ feeIsk: 1500, currency: 'ISK' });
+    expect(await service.update(id, { capacity: 4 })).toMatchObject({ feeIsk: 1500 });
+    viewerId = 'participant-fee-test';
+    await expect(service.update(id, { feeIsk: 0 })).rejects.toThrow('meetup_forbidden');
+    await expect(service.join(id)).resolves.toMatchObject({ status: 'joined' });
+    viewerId = 'host-fee-test';
+    expect(await service.update(id, { feeIsk: 0 })).toMatchObject({ feeIsk: 0, admissionMode: 'free', priceMinor: null, currency: null });
+  });
   it('never exposes protected exact coordinates before access and reveals immediate locations after join', async () => {
     const api = new MockRummalApi();
     const meetups = await api.discoverMeetups(defaultMeetupFilters);

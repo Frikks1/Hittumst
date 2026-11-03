@@ -8,8 +8,7 @@ import { Animated, Linking, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { useAppearance } from '@/providers/AppearanceProvider';
 import { Button, textStyles } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
-import { PoolSummary } from './PoolSummary';
-import { categoryKey, generalAreaLabel, participationKey, primaryHittingurAction, type HittingurListModel } from './model';
+import { categoryKey, generalAreaLabel, meetupFeeLabel, participationKey, primaryHittingurAction, type HittingurListModel } from './model';
 
 export function formatHittingurDate(value: string, locale: 'is' | 'en'): string {
   return formatMeetupReykjavikDate(value, locale);
@@ -38,19 +37,16 @@ export function StatusPill({ icon, label, tone = 'neutral' }: {
   );
 }
 
-export function HittingurCard({ item, onPress, primary = false, paidSponsor = false, onSponsor }: {
+export function HittingurCard({ item, onPress, primary = false }: {
   item: HittingurListModel;
   onPress: () => void;
   primary?: boolean;
-  paidSponsor?: boolean;
-  onSponsor?: () => void;
 }) {
   const { locale, t, theme } = useApp();
   const { appearance } = useAppearance();
   const participation = participationKey(item.viewerState.participationStatus);
   const area = generalAreaLabel(item, locale);
   return (
-    <View style={{ gap: 6 }}>
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${item.title}, ${area}, ${formatHittingurDate(item.startsAt, locale)}`}
@@ -78,13 +74,6 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
         )}
       </View>
       {item.diagnosisRestricted&&<Text style={{color:theme.colors.textMuted}}>{t('diagnosis.required')}</Text>}
-      {primary ? <PoolSummary pool={item.pool} compact /> : item.pool && item.pool.total > 0 && (
-        <View style={[styles.rewardRow, { backgroundColor: theme.colors.accentSoft }]}>
-          <Ionicons name="gift-outline" size={16} color={theme.colors.accent} />
-          <Text style={[styles.rewardText, { color: theme.colors.text }]}>{item.pool.total.toLocaleString('is-IS')} kr · {locale === 'is' ? 'Styrktarsjóður' : 'Reward pool'}</Text>
-          <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
-        </View>
-      )}
       <View style={styles.metaRow}>
         <Ionicons name="location-outline" size={17} color={theme.colors.textMuted} />
         <Text numberOfLines={1} style={[styles.meta, { color: theme.colors.textMuted }]}>{area}</Text>
@@ -92,7 +81,7 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
       </View>
       <View style={styles.pills}>
         <StatusPill label={t(categoryKey(item.category))} />
-        {item.follows && item.follows.event.count > 0 && <StatusPill icon="heart-outline" label={`${item.follows.event.count} ${locale === 'is' ? 'fylgjendur' : 'followers'}`} />}
+        <StatusPill label={meetupFeeLabel(item, locale)} />
         <StatusPill icon={item.accessMode === 'open' ? 'lock-open-outline' : 'lock-closed-outline'} label={item.eventProfile ? t(`event.${item.eventProfile.joinMode}`) : t(`hittingar.access.${item.accessMode}`)} tone="accent" />
         {item.locationVisibility === 'protected' && <StatusPill icon="shield-checkmark-outline" label={t('hittingar.location.protected')} tone="warning" />}
         {item.isExplicit && <StatusPill label="18+" tone="danger" />}
@@ -108,8 +97,6 @@ export function HittingurCard({ item, onPress, primary = false, paidSponsor = fa
         </Text>
       </View>
     </Pressable>
-    {onSponsor && item.pool?.status === 'accepting' && item.status === 'published' && <Pressable accessibilityRole="button" onPress={onSponsor} style={({ pressed }) => [styles.sponsorAction, pressed && styles.pressed]}><Ionicons name="gift-outline" size={17} color={theme.colors.accent} /><Text style={[styles.sponsorText, { color: theme.colors.accent }]}>{paidSponsor ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor meetup') : (locale === 'is' ? 'Gerast áskrifandi og styrkja' : 'Upgrade to sponsor')}</Text><Ionicons name="chevron-forward" size={15} color={theme.colors.accent} /></Pressable>}
-    </View>
   );
 }
 
@@ -261,10 +248,6 @@ const styles = StyleSheet.create({
   mapFallback: { padding: 12, gap: 10, paddingBottom: 24 },
   fallbackNotice: { borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   locationFallbackText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  rewardRow: { borderRadius: 10, padding: 9, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  rewardText: { flex: 1, fontSize: 13, fontWeight: '700' },
-  sponsorAction: { minHeight: 44, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  sponsorText: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
   center: { textAlign: 'center' },
   fallbackList: { alignSelf: 'stretch', gap: 8, marginTop: 8 },
   fallbackRow: { minHeight: 58, borderRadius: 15, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },

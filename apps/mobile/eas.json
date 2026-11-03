@@ -33,6 +33,12 @@
         "buildType": "app-bundle"
       }
     },
+    "ios-simulator": {
+      "extends": "staging",
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "distribution": "store",
       "environment": "production",

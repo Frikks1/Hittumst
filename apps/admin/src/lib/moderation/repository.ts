@@ -65,6 +65,8 @@ const actionLabels: Record<string, string> = {
   "meetup.room_locked": "Occurrence room locked",
   "meetup.participant_removed": "Participant removed",
   "meetup.series_removed": "Meetup series removed",
+  strax_hide: "Strax hidden",
+  strax_restore: "Strax restored",
 };
 
 function record(value: unknown): UnknownRecord {
@@ -194,7 +196,8 @@ function normalizeReport(value: unknown): ReportListItem {
     assignedAdmin:
       string(row.assigned_admin_name ?? row.assigned_admin) || undefined,
     meetupId: string(row.meetup_id) || undefined,
-    targetType: string(row.meetup_id) ? "meetup" : "member",
+    straxId: string(row.strax_id) || undefined,
+    targetType: string(row.social_feed_comment_id) ? "community_comment" : string(row.social_feed_post_id) ? "community_post" : string(row.strax_id) ? "strax" : string(row.meetup_id) ? "meetup" : "member",
   };
 }
 
@@ -253,9 +256,14 @@ export function normalizeReportDetail(value: unknown): ReportDetail {
   const row = record(value);
   const reportRow = record(row.report ?? row);
   const base = normalizeReport(reportRow);
+  const strax = record(reportRow.strax_snapshot ?? row.strax_snapshot);
+  const straxSnapshot = string(strax.id) ? { id: string(strax.id), title: string(strax.title), description: string(strax.description), locationText: string(strax.locationText) || undefined,
+    address: string(strax.address) || undefined, requirements: string(strax.requirements) || undefined, createdAt: string(strax.createdAt), expiresAt: string(strax.expiresAt) } : undefined;
   const evidence: EvidenceItem[] = Array.isArray(row.evidence)
     ? row.evidence.map(normalizeEvidence)
     : [];
+  const feed = record(reportRow.social_feed_snapshot ?? row.social_feed_snapshot);
+  if (string(feed.id)) evidence.push({ id: string(feed.id), type: "context", label: string(feed.kind) === "comment" ? "Reported community comment" : "Reported community post", body: string(feed.body), createdAt: string(feed.capturedAt) || undefined });
   const message = record(row.message_evidence);
   if (string(message.id)) evidence.push({
     id: string(message.id), type: string(message.image_path) ? "image" : "message",
@@ -287,12 +295,13 @@ export function normalizeReportDetail(value: unknown): ReportDetail {
     ...base,
     reporter: person(row.reporter_profile, reportRow.reporter_id, "Anonymous reporter"),
     reported: person(row.reported_profile, reportRow.reported_id, "Reported member"),
-    evidenceCount: Math.max(base.evidenceCount, evidence.length),
+    evidenceCount: Math.max(base.evidenceCount, evidence.length + (straxSnapshot ? 1 : 0)),
     conversationId: string(row.conversation_id ?? row.conversationId) || undefined,
     messageId: string(row.message_id ?? row.messageId) || undefined,
     resolutionNotes:
       string(row.resolution_notes ?? row.resolutionNotes) || undefined,
     evidence,
+    straxSnapshot,
     meetupId: string(reportRow.meetup_id ?? row.meetup_id) || base.meetupId,
     targetType: string(reportRow.meetup_id ?? row.meetup_id) ? "meetup" : base.targetType,
     meetupSnapshot: normalizeMeetupSnapshot(

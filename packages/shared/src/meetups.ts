@@ -598,6 +598,11 @@ export type MeetupSponsorship = {
 };
 
 const meetupSummaryShape = {
+  // ISK has no fractional participation units in this app: 1 stored unit = 1 króna.
+  feeIsk: z.number().int().min(0).max(2_147_483_647).optional(),
+  admissionMode: z.enum(['free', 'paid']).optional(),
+  priceMinor: z.number().int().positive().nullable().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
   id: z.uuid(),
   title: z.string().trim().min(3).max(100),
   category: meetupCategorySchema,
@@ -701,6 +706,7 @@ export type MeetupDetail = z.infer<typeof meetupDetailSchema>;
 
 const meetupDraftInputObjectSchema = z
   .object({
+    feeIsk: z.number().int().min(0).max(2_147_483_647).optional(),
     title: z.string().trim().min(3).max(100),
     description: z.string().trim().min(10).max(4_000),
     category: meetupCategorySchema,
@@ -858,6 +864,8 @@ export const meetupRosterEntrySchema = z
     respondedAt: z.iso.datetime({ offset: true }).optional(),
     rsvpVisibility: meetupRsvpVisibilitySchema.default('inherit'),
     attendanceState: meetupAttendanceStateSchema.default('not_required'),
+    // Older servers omit sponsorship metadata. This flag never changes admission.
+    isSponsor: z.boolean().default(false),
   })
   .strict();
 export type MeetupRosterEntry = z.infer<typeof meetupRosterEntrySchema>;
@@ -891,28 +899,79 @@ export type MeetupProfileUpcomingItem = z.infer<typeof meetupProfileUpcomingItem
 export const meetupRoomSummarySchema = z.object({
   id: z.uuid(),
   meetupId: z.uuid(),
+  title: z.string().trim().min(1).max(100).optional(),
+  avatarUrl: z.url().optional(),
+  canManageAvatar: z.boolean().optional(),
   postingClosesAt: z.iso.datetime({ offset: true }),
   readingClosesAt: z.iso.datetime({ offset: true }),
   isPaused: z.boolean(),
   canPost: z.boolean(),
   unreadCount: z.number().int().nonnegative().default(0),
+  muted: z.boolean().optional(),
+  pinnedMessageId: z.uuid().nullable().optional(),
 }).strict();
 export type MeetupRoomSummary = z.infer<typeof meetupRoomSummarySchema>;
 
-export const meetupRoomMessageKinds = ['text', 'system'] as const;
+export const meetupRoomMemberSchema = z.object({
+  profile: meetupParticipantProfileSchema,
+  role: z.enum(['host', 'participant']),
+}).strict();
+export type MeetupRoomMember = z.infer<typeof meetupRoomMemberSchema>;
+
+export const meetupRoomMediaSchema = z.object({
+  kind: z.enum(['photo', 'video']),
+  status: z.enum(['pending', 'approved', 'rejected']),
+  url: z.url().optional(),
+  thumbnailUrl: z.url().optional(),
+}).strict().refine(media => media.status === 'approved' || (!media.url && !media.thumbnailUrl), { message: 'Unapproved media cannot have viewable URLs' });
+export type MeetupRoomMedia = z.infer<typeof meetupRoomMediaSchema>;
+
+export const meetupRoomMessageKinds = ['text', 'system', 'photo', 'video', 'poll'] as const;
 export const meetupRoomMessageKindSchema = z.enum(meetupRoomMessageKinds);
 export type MeetupRoomMessageKind = z.infer<typeof meetupRoomMessageKindSchema>;
+
+// Read-only compatibility for previous room experiments. These schemas do not
+// enable creation, reactions, or voting endpoints in the restored experience.
+export const meetupRoomReplySchema = z.object({
+  id: z.uuid(),
+  unavailable: z.boolean(),
+  senderName: z.string().trim().min(1).max(80).optional(),
+  body: z.string().max(2_000).optional(),
+  kind: meetupRoomMessageKindSchema.optional(),
+}).strict().refine(reply => !reply.unavailable || (!reply.senderName && !reply.body && !reply.kind), {
+  message: 'Unavailable quoted messages cannot reveal their content',
+});
+
+export const meetupRoomReactionSchema = z.object({
+  emoji: z.string().min(1).max(32), count: z.number().int().nonnegative(), reacted: z.boolean(),
+}).strict();
+
+export const meetupRoomPollSchema = z.object({
+  question: z.string().trim().min(1).max(200),
+  options: z.array(z.object({ id: z.string().min(1).max(128), text: z.string().trim().min(1).max(100), voteCount: z.number().int().nonnegative() }).strict()).min(2).max(6),
+  totalVotes: z.number().int().nonnegative(),
+  votedOptionId: z.string().min(1).max(128).nullable().optional(),
+  closed: z.boolean(), canClose: z.boolean().optional(),
+}).strict();
 
 export const meetupRoomMessageSchema = z.object({
   id: z.uuid(),
   roomId: z.uuid(),
   sender: meetupParticipantProfileSchema.nullable(),
   kind: meetupRoomMessageKindSchema,
-  body: z.string().trim().min(1).max(2_000),
+  body: z.string().trim().max(2_000),
+  media: meetupRoomMediaSchema.optional(),
+  replyTo: meetupRoomReplySchema.optional(),
+  reactions: z.array(meetupRoomReactionSchema).max(64).optional(),
+  poll: meetupRoomPollSchema.optional(),
+  isPinned: z.boolean().optional(),
+  pinnedAt: z.iso.datetime({ offset: true }).optional(),
   linkHostnames: z.array(z.string().trim().min(1).max(253)).max(10).default([]),
   createdAt: z.iso.datetime({ offset: true }),
   hiddenAt: z.iso.datetime({ offset: true }).optional(),
-}).strict();
+}).strict().refine(message => message.kind === 'photo' || message.kind === 'video'
+  ? message.media?.kind === message.kind
+  : (message.kind === 'poll' || message.body.length > 0) && !message.media, { message: 'Invalid room message content' });
 export type MeetupRoomMessage = z.infer<typeof meetupRoomMessageSchema>;
 
 export const meetupRoomMessagePageSchema = meetupCursorPageSchema(meetupRoomMessageSchema);

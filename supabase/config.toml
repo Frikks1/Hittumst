@@ -383,6 +383,10 @@ verify_jwt = false
 [functions.push-worker]
 verify_jwt = false
 
+[functions.strax-media]
+# The handler validates the bearer identity and current session through Strax RPC.
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

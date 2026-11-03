@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { straxMessageReferenceSchema } from './strax';
 
 export const profileAudienceSchema = z.enum(['everyone', 'friends', 'no_one']);
 export type ProfileAudience = z.infer<typeof profileAudienceSchema>;
@@ -52,6 +53,7 @@ export const groupMessageSchema = z.object({
   senderName: z.string().trim().min(1).max(80),
   body: z.string().trim().min(1).max(2_000),
   createdAt: z.iso.datetime(),
+  strax: straxMessageReferenceSchema.optional(),
 }).strict();
 export type GroupMessage = z.infer<typeof groupMessageSchema>;
 

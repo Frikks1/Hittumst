@@ -6,6 +6,14 @@ import {
   reportPriority,
 } from "./repository";
 
+it('preserves reported Strax context after the source activity expires or is deleted', () => {
+  const snapshot = { id: 'expired-activity', title: 'One more gamer', description: 'Join tonight', address: 'Optional address', requirements: 'Own the game', createdAt: '2026-10-13T23:00:00Z', expiresAt: '2026-10-14T03:00:00Z' };
+  const report = normalizeReportDetail({ report: { id: 'report', category: 'other', strax_id: null, strax_snapshot: snapshot } });
+  expect(report.straxSnapshot).toMatchObject(snapshot);
+  expect(report.straxId).toBeUndefined();
+  expect(report.evidenceCount).toBe(1);
+});
+
 describe("canonical report priority", () => {
   it.each([
     "minor_suspected",

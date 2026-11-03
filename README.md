@@ -1,5 +1,7 @@
 # Hittumst
 
+**Tæknileg yfirferð / reviewer handoff (3. nóvember 2026): [Íslensk afhendingarskýrsla](docs/YFIRFERD-IS.md) · [Ferskar prófunarniðurstöður](docs/YFIRFERD-PROFANIR-2026-11-03.md).** Byrja hér til að skilja nýjustu stöðu; eldri launch-skjöl innihalda dagsettar sögulegar niðurstöður.
+
 Launch setup: [owner guide](docs/START-HERE.md), [current feature inventory](docs/feature-verification.md), [Android test APK instructions](docs/android-testing.md). Full launch remains gated on connected services, approved money providers, signed-device verification and store review.
 
 Hittumst is an original Iceland-first, 18+ LGBTQ+ social and dating MVP for iOS and Android. It

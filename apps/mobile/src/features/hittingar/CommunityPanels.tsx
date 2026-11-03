@@ -78,7 +78,6 @@ export function EventAdmission({ detail, value, reload }: { detail: MeetupDetail
   if (!canApply && !canWaitlist && !existing && !waitlist) return null;
   return <View style={{ gap: 12, padding: 16, borderRadius: 20, backgroundColor: theme.colors.surface }}>
     <Text style={[textStyles.heading, { color: theme.colors.text }]}>{waitlist ? c('Biðlisti', 'Waitlist') : c('Umsókn um þátttöku', 'Apply to join')}</Text>
-    {(waitlist || canWaitlist) && <Text style={{ color: theme.colors.textMuted }}>{c('Styrktaraðilar þessa hittings fá forgang á biðlista. Innan hvors hóps ræður skráningartími. Styrkur tryggir ekki aðgang og þegar útgefin tilboð haldast.', 'Sponsors of this event receive waitlist priority. Within each group, earlier entries come first. Sponsorship does not guarantee admission or displace existing offers.')}</Text>}
     {existing && <Text style={{ color: theme.colors.textMuted }}>{c('Staða umsóknar', 'Application status')}: {({ pending: c('Í bið', 'Pending'), approved: c('Samþykkt', 'Approved'), declined: c('Hafnað', 'Declined'), waitlisted: c('Á biðlista', 'Waitlisted'), offered: c('Pláss í boði', 'Place offered'), joined: c('Skráð', 'Joined') })[existing.status]}</Text>}
     {waitlist?.status === 'waiting' && <>
       <Text style={{ color: theme.colors.text }}>{c('Þú ert á biðlista. Þú færð tilkynningu þegar þér býðst pláss.', 'You are on the waitlist. We will notify you when a place is offered.')}{waitlist.position !== null ? ` ${c('Röð', 'Position')}: ${waitlist.position}` : ''}</Text>

@@ -10,7 +10,7 @@ function setup() {
   return { dispatch, resolve, navigate, clear, changeAccount: (value: string | null) => { account = value; } };
 }
 describe('private notification routing', () => {
-  it.each(['conversation', 'group', 'meetup'])('accepts only a typed authorized %s target', type => {
+  it.each(['conversation', 'group', 'meetup', 'profile', 'strax'])('accepts only a typed authorized %s target', type => {
     expect(parseNotificationTarget({ type, id, url: 'https://attacker.test' })).toEqual({ type, id });
   });
   it.each([{ type: 'url', id }, { type: 'group', id: '../../settings' }, { type: 'conversation', id: null }, null])('rejects arbitrary targets', target => {

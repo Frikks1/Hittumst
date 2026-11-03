@@ -2,6 +2,20 @@
   "status": "draft-unapproved",
   "releaseVersion": "0.1.0",
   "productName": "Hittumst",
+  "storeAccounts": {
+    "apple": {
+      "accountType": "individual",
+      "sellerName": "Account holder's legal name; enter it directly in App Store Connect"
+    },
+    "googlePlay": {
+      "accountType": "personal",
+      "developerName": "Hittumst"
+    }
+  },
+  "storeAvailability": {
+    "countries": ["IS"],
+    "confirmedByOwner": true
+  },
   "ios": {
     "bundleIdentifier": "is.rummal.app",
     "buildNumber": null,

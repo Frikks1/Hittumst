@@ -38,6 +38,10 @@ import { resolveTheme, type AppTheme, type ThemeMode } from '@/theme/tokens';
 import { evaluateLocationFix, isLocationFresh } from '@/utils/location';
 import { useAppearance } from './AppearanceProvider';
 import { useSavedFilters } from './useSavedFilters';
+import { ChatInboxProvider } from './ChatInboxProvider';
+import { clearChatLocalAccount } from '@/utils/chatLocalState';
+import { cancelAllMeetupReminders } from '@/features/hittingar/eventReminders';
+import { clearOnboardingLocalDraft } from '@/features/onboarding/draftStorage';
 
 const PREFERENCES_KEY = 'rummal.preferences.v1';
 
@@ -149,7 +153,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLocationVerifiedAt(null);
       setDiscoveryFilters({ ...defaultFilters });
       setMeetupFilters({ ...defaultMeetupFilters });
-      if (oldId) void clearHittingarLocalDraft(oldId).catch(() => undefined);
+      if (oldId) {
+        void clearHittingarLocalDraft(oldId).catch(() => undefined);
+        void clearChatLocalAccount(oldId).catch(() => undefined);
+        void clearOnboardingLocalDraft(oldId).catch(() => undefined);
+        void cancelAllMeetupReminders().catch(() => undefined);
+      }
     }
   }, [user?.id]);
 
@@ -211,6 +220,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (target: NotificationTarget) => {
       if (target.type === 'meetup') {
         if (hittingarFeature.enabled) navigateToMeetupFromPush(target.id);
+      } else if (target.type === 'strax') {
+        if (hittingarFeature.enabled) router.push(`/hittingar/strax/${target.id}` as Href);
       } else if (target.type === 'conversation') {
         const query = target.profileId
           ? '?profileId=' +
@@ -219,7 +230,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             encodeURIComponent(target.displayName ?? '')
           : '';
         router.push(('/chat/' + target.id + query) as Href);
-      } else router.push(('/groups/' + target.id) as Href);
+      } else if (target.type === 'profile') router.push(('/profile/' + target.id) as Href);
+      else router.push(('/groups/' + target.id) as Href);
     },
     [router, navigateToMeetupFromPush],
   );
@@ -287,7 +299,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await unregisterStoredHittingarPushToken(api).catch(() => undefined);
-    if (user?.id) await clearHittingarLocalDraft(user.id).catch(() => undefined);
+    if (user?.id) {
+      await clearHittingarLocalDraft(user.id).catch(() => undefined);
+      await clearChatLocalAccount(user.id).catch(() => undefined);
+      await clearOnboardingLocalDraft(user.id).catch(() => undefined);
+    }
+    await cancelAllMeetupReminders().catch(() => undefined);
     await authService.signOut();
     setLocationVerifiedAt(null);
     setUser(null);
@@ -362,7 +379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={value}><ChatInboxProvider userId={user?.id ?? null} locationAllowed={locationAllowed}>{children}</ChatInboxProvider></AppContext.Provider>;
 }
 
 export function useApp() {

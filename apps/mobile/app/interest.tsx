@@ -89,7 +89,7 @@ export default function InterestScreen() {
         const selected = activityKind === kind;
         const title = activityKind === 'views' ? copy.views : copy.taps;
         return <Pressable key={activityKind} accessibilityRole="tab" accessibilityLabel={`${title} ${countLabel(activityKind)}`}
-          accessibilityState={{ selected }} onPress={() => setKind(activityKind)}
+          accessibilityState={{ selected }} aria-selected={selected} onPress={() => setKind(activityKind)}
           style={({ pressed }) => [styles.tab, { borderBottomColor: selected ? theme.colors.accent : 'transparent' }, pressed && styles.pressed]}>
           <Ionicons name={activityKind === 'views' ? 'eye-outline' : 'flame-outline'} size={19} color={selected ? theme.colors.accent : theme.colors.textMuted} />
           <Text style={[styles.tabLabel, { color: selected ? theme.colors.text : theme.colors.textMuted }]}>{title}</Text>
@@ -153,7 +153,8 @@ function ActivityRow({ activity, kind, onPress }: { activity: ProfileActivity; k
   const { theme, locale, t } = useApp();
   const copy = profileActivityCopy(locale);
   const profile = activity.profile;
-  const source = (profile.photos.find(photo => photo.id === profile.coverPhotoId && photo.status === 'approved') ?? profile.photos.find(photo => photo.status === 'approved'))?.url;
+  const photo = profile.photos.find(photo => photo.id === profile.coverPhotoId && photo.status === 'approved') ?? profile.photos.find(photo => photo.status === 'approved');
+  const source = photo?.posterUrl ?? photo?.url;
   const time = profileActivityTime(activity.occurredAt, locale);
   const action = kind === 'views' ? copy.viewed : copy.tappedYou;
   return <Pressable accessibilityRole="button" accessibilityLabel={`${profile.displayName}, ${profile.age}. ${action}. ${time}. ${activity.count}×`}

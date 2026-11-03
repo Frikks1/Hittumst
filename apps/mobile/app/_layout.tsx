@@ -9,6 +9,8 @@ import { AppProvider, useApp } from '@/providers/AppProvider';
 import { AppearanceProvider, useAppearance } from '@/providers/AppearanceProvider';
 import { ProfileTransitionProvider } from '@/providers/ProfileTransitionProvider';
 import { hittingarFeature, isHittingarRoute } from '@/features/hittingar/config';
+import { isParkedExperienceRoute } from '@/utils/restoredExperience';
+import { ParkedFeatureScreen } from '@/components/ParkedFeatureScreen';
 
 initializeCrashReporting();
 
@@ -22,6 +24,7 @@ function Navigator() {
   if (startupError) return <StartupGate unavailable retry={retryStartup} />;
   const publicRoute = !segments.length || segments[0] === 'auth' || segments[0] === 'support';
   if (!user && !publicRoute) return <Redirect href="/" />;
+  if (isParkedExperienceRoute(segments)) return <ParkedFeatureScreen />;
 
   if (!hittingarFeature.enabled && isHittingarRoute(segments)) {
     return <Redirect href="/" />;
@@ -38,6 +41,7 @@ function Navigator() {
         <Stack.Screen name="profile/[id]" options={{ animation: 'none' }} />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="interest" />
+        <Stack.Screen name="settings" />
         <Stack.Screen name="report/[profileId]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="filters" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="appearance" />
@@ -58,7 +62,9 @@ function Navigator() {
         <Stack.Screen name="hittingar/[id]/manage" />
         <Stack.Screen name="hittingar/[id]/room" />
         <Stack.Screen name="hittingar/[id]/report" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="hittingar/create" />
+        <Stack.Screen name="hittingar/create" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+        <Stack.Screen name="hittingar/strax/create" />
+        <Stack.Screen name="hittingar/strax/[id]" />
         <Stack.Screen name="hittingar/filters" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
         <Stack.Screen name="hittingar/mine" />
         <Stack.Screen name="hittingar/notifications" />

@@ -69,4 +69,9 @@ describe("moderation action validation", () => {
     );
     expect(result.ok).toBe(true);
   });
+  it('requires Strax context and staff permission for hiding or restoring activities', () => {
+    expect(validateModerationAction({ ...base, action: 'strax_hide' }, ['moderator']).ok).toBe(false);
+    expect(validateModerationAction({ ...base, action: 'strax_hide', straxId: 'activity' }, ['moderator']).ok).toBe(true);
+    expect(validateModerationAction({ ...base, action: 'strax_restore', straxId: 'activity' }, []).ok).toBe(false);
+  });
 });

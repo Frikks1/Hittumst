@@ -10,6 +10,7 @@ import { Icons } from "./icon";
 
 const navigation = [
   { href: "/attendance-reviews", label: "Attendance review", icon: Icons.FileSearch },
+  { href: "/communities", label: "Public communities", icon: Icons.FileSearch },
   { href: "/diagnosis-review", label: "Diagnosis review", icon: Icons.FileSearch },
   { href: "/dashboard", label: "Overview", icon: Icons.LayoutDashboard },
   { href: "/reports", label: "Reports", icon: Icons.MessageSquareWarning },

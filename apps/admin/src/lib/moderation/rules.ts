@@ -10,6 +10,8 @@ export const moderationActions = [
   "meetup_remove",
   "meetup_restore",
   "host_restrict",
+  "strax_hide",
+  "strax_restore",
 ] as const;
 
 export type ModerationAction = (typeof moderationActions)[number];
@@ -20,6 +22,7 @@ export interface ModerationActionInput {
   suspensionDays?: number;
   profileId?: string;
   meetupId?: string;
+  straxId?: string;
   reportId: string;
 }
 
@@ -41,6 +44,8 @@ const permissionByAction: Record<ModerationAction, ModerationPermission> = {
   meetup_remove: "meetup.manage",
   meetup_restore: "meetup.manage",
   host_restrict: "meetup.manage",
+  strax_hide: "meetup.manage",
+  strax_restore: "meetup.manage",
 };
 
 export function permissionForAction(action: ModerationAction) {
@@ -69,6 +74,7 @@ export function validateModerationAction(
   if (["meetup_remove", "meetup_restore", "host_restrict"].includes(action) && !input.meetupId) {
     errors.push("A meetup is required for this action.");
   }
+  if (["strax_hide", "strax_restore"].includes(action) && !input.straxId) errors.push("A Strax activity is required for this action.");
   if (input.reason.trim().length < 8) {
     errors.push("Add a clear internal reason of at least 8 characters.");
   }

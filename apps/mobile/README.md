@@ -18,6 +18,20 @@ Hittingar is disabled by default. Set `EXPO_PUBLIC_HITTINGAR_ENABLED=true` in de
 to show the fifth tab. Native MapLibre maps and remote push notifications require a development or
 store build rather than Expo Go; list mode remains available without a native map.
 
+## iOS builds
+
+The app is configured for iOS with bundle identifier `is.rummal.app`. To create a staging build for
+an iOS Simulator, run from this directory:
+
+```sh
+eas build --platform ios --profile ios-simulator
+```
+
+For an installable staging build on registered iPhones, run `eas build --platform ios --profile staging`.
+Internal iOS distribution requires Apple signing credentials and registered test devices.
+The `production` profile creates an App Store Connect build; Apple signing and App Store Connect
+credentials must be configured in EAS before building or submitting it.
+
 To preview the main app while keeping local Supabase variables configured, set
 `EXPO_PUBLIC_DEV_BYPASS_AUTH=true`. This development-only switch uses the same seeded offline data,
 opens the discovery tabs directly, and bypasses the Iceland location check. It is ignored when

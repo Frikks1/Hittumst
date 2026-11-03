@@ -1,0 +1,15 @@
+{
+  "fileKey": "zFMhaTVnbO70o1soPjNmhL",
+  "pageId": "0:1",
+  "scope": "Sjóður cards, expandable sponsors, recurring recognition, priority attendance",
+  "sectionId": "53:16",
+  "overviewId": "53:193",
+  "originalScreenId": "9:219",
+  "panelIds": ["53:30", "53:87", "53:124"],
+  "componentIds": ["53:19", "53:25"],
+  "originalDisclosureIds": ["53:176", "53:182", "53:188"],
+  "panelHeights": [868, 596, 778],
+  "textBoundsProblems": [],
+  "status": "visual bounds and open/close prototype verified",
+  "prototypeUrl": "https://www.figma.com/proto/zFMhaTVnbO70o1soPjNmhL/?node-id=53-193&starting-point-node-id=53%3A193&scaling=scale-down&page-id=0%3A1"
+}

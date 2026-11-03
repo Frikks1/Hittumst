@@ -1,6 +1,7 @@
 export * from './meetups';
 export * from './reports';
 export * from './social';
+export * from './social-feed';
 export * from './theme';
 export * from './types';
 export * from './validation';
@@ -15,3 +16,7 @@ export * from './discovery';
 
 export * from './community';
 export * from './profile-orientation';
+export * from './memory-wall';
+export * from './sponsorship';
+export * from './showcases';
+export * from './strax';

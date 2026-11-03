@@ -8,9 +8,153 @@ vi.mock('expo-image-manipulator',()=>({manipulateAsync:vi.fn(),SaveFormat:{JPEG:
 import { LiveRummalApi } from './liveApi';
 import { defaultMeetupFilters, type MeetupPoolSummary } from '@rummal/shared';
 import { FinancialCommandRejected } from './financialOutbox';
+import { defaultProfileAppearance } from '@/utils/profileAppearance';
+import { defaultNotificationPreferences } from './notificationPreferences';
 const row={id:'stable-id',conversation_id:'chat',sender_id:'me',body:'Hello',image_path:null,message_kind:'text',album_share_id:null,album_item_id:null,created_at:'2026-09-07T12:00:00Z',deleted_at:null};
 function chain(result:unknown){const query:any={};for(const method of ['insert','select','eq','update','lt'])query[method]=vi.fn(()=>query);query.single=vi.fn(async()=>result);return query;}
 beforeEach(()=>{vi.clearAllMocks();mock.getUser.mockResolvedValue({data:{user:{id:'me'}},error:null});});
+
+describe('notification preference API', () => {
+  it('reads preferences through the caller-only RPC', async () => {
+    mock.rpc.mockResolvedValue({ data: { ...defaultNotificationPreferences, mutedConversationIds: ['chat'] }, error: null });
+    expect(await new LiveRummalApi().getNotificationPreferences()).toMatchObject({ messages: true, mutedConversationIds: ['chat'] });
+    expect(mock.rpc).toHaveBeenCalledWith('get_notification_preferences');
+  });
+  it('writes a partial update without an account selector', async () => {
+    mock.rpc.mockResolvedValue({ data: { ...defaultNotificationPreferences, events: false }, error: null });
+    expect((await new LiveRummalApi().updateNotificationPreferences({ events: false })).events).toBe(false);
+    expect(mock.rpc).toHaveBeenCalledWith('update_notification_preferences', { preferences: { events: false } });
+  });
+  it('rejects malformed time and forged owner before any network write', async () => {
+    const api = new LiveRummalApi();
+    await expect(api.updateNotificationPreferences({ quietHoursStart: '24:00' })).rejects.toThrow();
+    await expect(api.updateNotificationPreferences({ profileId: 'other' } as never)).rejects.toThrow();
+    expect(mock.rpc).not.toHaveBeenCalled();
+  });
+  it('uses the guarded mute endpoint and propagates revocation', async () => {
+    mock.rpc.mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: new Error('conversation_unavailable') });
+    const api = new LiveRummalApi();
+    await api.setConversationMuted('chat', true);
+    expect(mock.rpc).toHaveBeenCalledWith('set_conversation_muted', { conversation_id: 'chat', muted: true });
+    await expect(api.setConversationMuted('removed-chat', false)).rejects.toThrow('conversation_unavailable');
+  });
+  it('fails visibly when the server errors or returns malformed preferences', async () => {
+    mock.rpc.mockResolvedValueOnce({ error: new Error('offline') }).mockResolvedValueOnce({ data: { messages: true }, error: null });
+    const api = new LiveRummalApi();
+    await expect(api.getNotificationPreferences()).rejects.toThrow('offline');
+    await expect(api.getNotificationPreferences()).rejects.toThrow();
+  });
+});
+
+describe('live profile editor contract', () => {
+  it('writes entered profile fields and music links without writing age or account identifiers', async () => {
+    const query = { update: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ error: null }) };
+    mock.from.mockReturnValue(query);
+    const api = new LiveRummalApi();
+    vi.spyOn(api, 'getOwnProfile').mockResolvedValue({ displayName: 'Alex' } as Awaited<ReturnType<LiveRummalApi['getOwnProfile']>>);
+    await api.updateProfile({ id: 'forged', age: 19, dateOfBirth: '2007-01-01', photos: [],
+      displayName: ' Alex ', pronouns: 'they/them', gender: 'nonbinary', bio: 'Music and coffee',
+      identity: ['queer'], interests: ['Music', 'Coffee'], lookingFor: ['chat', 'friends'],
+      socials: [{ platform: 'spotify', handle: 'alex' }, { platform: 'soundcloud', handle: 'alex-synth' }] });
+    expect(query.update).toHaveBeenCalledWith({ display_name: 'Alex', pronouns: 'they/them', gender: 'nonbinary',
+      bio: 'Music and coffee', identity_tags: ['queer'], interests: ['Music', 'Coffee'], looking_for: ['chat', 'friends'],
+      socials: [{ platform: 'spotify', handle: 'alex' }, { platform: 'soundcloud', handle: 'alex-synth' }] });
+    expect(query.eq).toHaveBeenCalledWith('id', 'me');
+  });
+  it('rejects an invalid edit before authentication or the profile query', async () => {
+    await expect(new LiveRummalApi().updateProfile({ displayName: 'Changed', interests: ['x'.repeat(81)] })).rejects.toThrow('invalid_profile_interests');
+    expect(mock.getUser).not.toHaveBeenCalled();
+    expect(mock.from).not.toHaveBeenCalled();
+  });
+  it('removes only the authenticated owner photo and requires a confirmed deletion', async () => {
+    const query = { delete: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), select: vi.fn().mockResolvedValue({ data: [{ id: 'photo' }], error: null }) };
+    mock.from.mockReturnValue(query);
+    const api = new LiveRummalApi();
+    await api.removeProfilePhoto('photo');
+    expect(mock.from).toHaveBeenCalledWith('profile_photos');
+    expect(query.eq.mock.calls).toEqual([['id', 'photo'], ['profile_id', 'me']]);
+    query.select.mockResolvedValueOnce({ data: [], error: null });
+    await expect(api.removeProfilePhoto('not-owned')).rejects.toThrow('profile_photo_unavailable');
+    query.select.mockResolvedValueOnce({ data: null, error: new Error('offline') });
+    await expect(api.removeProfilePhoto('photo')).rejects.toThrow('offline');
+  });
+  it('preserves music socials returned by the public profile RPC', async () => {
+    mock.rpc.mockResolvedValue({ data: { id: 'other', display_name: 'Member', age: 28,
+      socials: [{ platform: 'spotify', handle: 'alex' }, { platform: 'soundcloud', handle: 'alex-synth' }], photo_paths: [] }, error: null });
+    expect((await new LiveRummalApi().getProfile('other')).socials).toEqual([
+      { platform: 'spotify', handle: 'alex' }, { platform: 'soundcloud', handle: 'alex-synth' },
+    ]);
+  });
+});
+describe('live profile appearance', () => {
+  const appearance = { palette: 'fern', banner: 'aurora', effect: 'fireflies', avatarBorder: 'ferns' } as const;
+  it('writes a validated catalog choice using the existing owner update', async () => {
+    const query = { update: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ error: null }) };
+    mock.from.mockReturnValue(query);
+    const api = new LiveRummalApi();
+    vi.spyOn(api, 'getOwnProfile').mockResolvedValue({ appearance } as Awaited<ReturnType<LiveRummalApi['getOwnProfile']>>);
+    expect((await api.updateProfile({ appearance })).appearance).toEqual(appearance);
+    expect(query.update).toHaveBeenCalledWith({ profile_appearance: appearance });
+    expect(query.eq).toHaveBeenCalledWith('id', 'me');
+  });
+  it('rejects unsupported appearance before contacting the backend', async () => {
+    const api = new LiveRummalApi();
+    await expect(api.updateProfile({ appearance: { ...appearance, banner: 'external' } as unknown as typeof appearance })).rejects.toThrow('invalid_profile_appearance');
+    expect(mock.from).not.toHaveBeenCalled();
+    expect(mock.getUser).not.toHaveBeenCalled();
+  });
+  it('normalizes public RPC appearance and signs GIF first frames along with approved photos', async () => {
+    mock.rpc.mockResolvedValue({ data: { id: 'other', display_name: 'Member', age: 28, profile_appearance: appearance, photo_paths: [{ id: 'photo', path: 'other/photo.gif' }] }, error: null });
+    mock.storageFrom.mockReturnValue({ createSignedUrls: mock.signedUrls });
+    mock.signedUrls.mockResolvedValue({ data: [{ path: 'other/photo.gif', signedUrl: 'https://private.test/photo.gif' }, { path: 'other/photo-thumb.jpg', signedUrl: 'https://private.test/poster.jpg' }], error: null });
+    const profile = await new LiveRummalApi().getProfile('other');
+    expect(profile.appearance).toEqual(appearance);
+    expect(profile.photos[0]).toMatchObject({ url: 'https://private.test/photo.gif', posterUrl: 'https://private.test/poster.jpg' });
+    expect(mock.signedUrls).toHaveBeenCalledWith(['other/photo.gif', 'other/photo-thumb.jpg'], 300);
+  });
+  it('defaults profiles returned by an older server', async () => {
+    mock.rpc.mockResolvedValue({ data: { id: 'other', display_name: 'Member', age: 28, photo_paths: [] }, error: null });
+    expect((await new LiveRummalApi().getProfile('other')).appearance).toEqual(defaultProfileAppearance);
+  });
+  it('signs only the current cover even when an older payload includes legacy extras and videos', async () => {
+    mock.rpc.mockResolvedValue({ data: { id: 'other', display_name: 'Member', age: 28, cover_photo_id: 'cover',
+      photo_paths: [{ id: 'extra', path: 'other/extra.jpg' }, { id: 'cover', path: 'other/main.jpg' },
+        { id: 'archived', path: 'other/archive.gif', archived_at: '2026-10-14T00:00:00Z' }],
+      videos: ['https://unwanted.test/video'], profile_videos: [{ id: 'video', path: 'other/video.mp4' }] }, error: null });
+    mock.storageFrom.mockReturnValue({ createSignedUrls: mock.signedUrls });
+    mock.signedUrls.mockResolvedValue({ data: [{ path: 'other/main.jpg', signedUrl: 'https://private.test/main' }], error: null });
+    const profile = await new LiveRummalApi().getProfile('other');
+    expect(profile.photos).toEqual([expect.objectContaining({ id: 'cover', url: 'https://private.test/main' })]);
+    expect(profile.profileVideos).toEqual([]);
+    expect(profile.videos).toEqual([]);
+    expect(mock.storageFrom).toHaveBeenCalledTimes(1);
+    expect(mock.storageFrom).toHaveBeenCalledWith('profile-photos');
+    expect(mock.signedUrls).toHaveBeenCalledWith(['other/main.jpg'], 300);
+  });
+  it('keeps archives owner-only and exposes a staged replacement without changing the current picture', async () => {
+    const profile = { id: 'me', display_name: 'Member', date_of_birth: '1990-01-01', identity_tags: [], looking_for: [], profile_tags: [], videos: [], custom_tags: [], interests: [], socials: [], cover_photo_id: 'main' };
+    mock.from.mockImplementation(table => table === 'profiles' ? chain({ data: profile, error: null })
+      : { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockResolvedValue({ data: table === 'profile_photos'
+        ? [{ id: 'main', storage_path: 'me/main.jpg', approval_status: 'approved', position: 1, tags: [], archived_at: null },
+          { id: 'archived', storage_path: 'me/archive.jpg', approval_status: 'approved', position: 2, tags: [], archived_at: '2026-10-14T00:00:00Z' }] : [], error: null }) });
+    mock.rpc.mockResolvedValue({ data: { id: 'replacement', status: 'pending', reason: null }, error: null });
+    mock.storageFrom.mockReturnValue({ createSignedUrls: mock.signedUrls });
+    mock.signedUrls.mockResolvedValue({ data: [{ path: 'me/main.jpg', signedUrl: 'https://private.test/main' }, { path: 'me/archive.jpg', signedUrl: 'https://private.test/archive' }], error: null });
+    const own = await new LiveRummalApi().getOwnProfile();
+    expect(own.mainPhotoUpload).toEqual({ id: 'replacement', status: 'pending', reason: null });
+    expect(own.photos.find(photo => photo.id === 'archived')?.archivedAt).toBe('2026-10-14T00:00:00Z');
+    expect(mock.rpc).toHaveBeenCalledWith('get_main_profile_photo_upload');
+  });
+  it('maps the owner appearance with a reduced-motion GIF poster', async () => {
+    const profile = { id: 'me', display_name: 'Member', date_of_birth: '1990-01-01', identity_tags: [], looking_for: [], profile_tags: [], videos: [], custom_tags: [], interests: [], socials: [], profile_appearance: appearance };
+    mock.from.mockImplementation(table => table === 'profiles'
+      ? chain({ data: profile, error: null })
+      : { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), order: vi.fn().mockResolvedValue({ data: table === 'profile_photos' ? [{ id: 'photo', storage_path: 'me/photo.gif', approval_status: 'approved', tags: [] }] : [], error: null }) });
+    mock.storageFrom.mockReturnValue({ createSignedUrls: mock.signedUrls });
+    mock.signedUrls.mockResolvedValue({ data: [{ path: 'me/photo.gif', signedUrl: 'https://private.test/photo.gif' }, { path: 'me/photo-thumb.jpg', signedUrl: 'https://private.test/poster.jpg' }], error: null });
+    expect(await new LiveRummalApi().getOwnProfile()).toMatchObject({ appearance, photos: [{ posterUrl: 'https://private.test/poster.jpg' }] });
+  });
+});
 describe('live text delivery',()=>{
   it('reuses the caller message identifier in its insert',async()=>{
     const query=chain({data:row,error:null});mock.from.mockReturnValue(query);

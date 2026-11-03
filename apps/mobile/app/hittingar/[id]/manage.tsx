@@ -1,6 +1,4 @@
 import { ApplicationInbox, EventAnnouncements } from '@/features/hittingar/CommunityPanels';
-import { PoolSummary } from '@/features/hittingar/PoolSummary';
-import { useEntitlement } from '@/hooks/useEntitlement';
 import { EventInvitations } from '@/features/hittingar/EventInvitations';
 import { EventMediaGallery } from '@/features/hittingar/EventMedia';
 import { Text } from '@/components/Typography';
@@ -22,7 +20,6 @@ export default function ManageHittingurScreen() {
   const { id } = useLocalSearchParams<ManageParams>();
   const router = useRouter();
   const { locale, t, theme, user } = useApp();
-  const { entitlement } = useEntitlement();
   const [detail, setDetail] = useState<MeetupDetail | null>(null);
   const [participants, setParticipants] = useState<MeetupRosterEntry[]>([]);
   const [capacity, setCapacity] = useState('');
@@ -101,8 +98,6 @@ export default function ManageHittingurScreen() {
   return (
     <Screen back title={t('hittingar.manage.title')}>
       <View style={styles.page}>
-        <PoolSummary pool={detail.pool} />
-        {detail.status === 'published' && detail.pool?.status === 'accepting' && <Button label={entitlement && entitlement.tier !== 'plebbi' ? (locale === 'is' ? 'Styrkja hitting' : 'Sponsor meetup') : (locale === 'is' ? 'Skoða áskriftir' : 'Upgrade to sponsor')} onPress={() => router.push((entitlement && entitlement.tier !== 'plebbi' ? `/wallet?meetupId=${encodeURIComponent(detail.id)}` : '/membership') as Href)} />}
         {error && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('common.error')}</Text>}
         <View style={styles.headingRow}>
           <View style={styles.copy}><Text style={[textStyles.title, { color: theme.colors.text }]}>{detail.title}</Text><Text style={[styles.meta, { color: theme.colors.textMuted }]}>{formatHittingurDate(detail.startsAt, locale)}</Text></View>
@@ -122,7 +117,7 @@ export default function ManageHittingurScreen() {
           </View>
         )}
 
-        {detail.capabilities.canEdit && <EventMediaGallery id={detail.id} editable />}
+        {detail.capabilities.canEdit && <EventMediaGallery id={detail.id} editable creationPhotos />}
         {detail.capabilities.canEdit && detail.status === 'published' && <EventAnnouncements id={detail.id} editable />}
         {detail.capabilities.canManageRequests && <ApplicationInbox id={detail.id} onChanged={load} />}
         {detail.capabilities.canEdit && detail.status === 'published' && <Button variant="secondary" icon="qr-code-outline" label={locale === 'is' ? 'Sýna innritunarkóða' : 'Show check-in code'} onPress={() => router.push(`/check-in?meetupId=${detail.id}` as Href)} />}

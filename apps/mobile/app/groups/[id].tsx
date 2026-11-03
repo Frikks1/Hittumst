@@ -7,6 +7,7 @@ import { Button, Screen, TrustBanner } from '@/components/ui';
 import { useApp } from '@/providers/AppProvider';
 import { api } from '@/services';
 import type { FriendSummary, GroupAction, GroupMember, GroupMessage, GroupSummary, Page } from '@/types/domain';
+import { StraxMessageCard } from '@/components/StraxMessageCard';
 import { confirmAction } from '@/utils/confirmAction';
 import { createRefreshCoordinator } from '@/utils/refreshCoordinator';
 import GroupVoice from '@/components/GroupVoice';
@@ -124,7 +125,7 @@ export default function GroupScreen() {
       {notice ? <Text accessibilityRole="alert" style={{ color: theme.colors.textMuted }}>{notice}</Text> : null}
       {cursor && <Button variant="secondary" label={is ? 'Eldri skilaboð' : 'Older messages'} onPress={() => { if (!refreshCoordinator.current.isRunning()) { pageDepth.current++; void load(); } }} />}
       <View style={styles.messages}>{messages.map(item => <View key={item.id} style={[styles.message, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-        <Text style={[styles.sender, { color: theme.colors.text }]}>{item.senderName}</Text><Text style={{ color: theme.colors.text }}>{item.body}</Text>
+        <Text style={[styles.sender, { color: theme.colors.text }]}>{item.senderName}</Text>{item.strax ? <StraxMessageCard reference={item.strax} /> : <Text style={{ color: theme.colors.text }}>{item.body}</Text>}
         {moderator && <Button variant="ghost" label={is ? 'Fela skilaboð' : 'Hide message'} disabled={busy} onPress={() => confirm(is ? 'Fela skilaboð' : 'Hide message', 'hide_message', { messageId: item.id })} />}
         {item.senderId !== user?.id && item.senderId !== 'deleted' && <Button variant="ghost" label={is ? 'Tilkynna sendanda' : 'Report sender'} onPress={() => router.push(`/report/${item.senderId}` as never)} />}
       </View>)}</View>

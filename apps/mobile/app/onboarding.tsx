@@ -14,12 +14,19 @@ import * as Linking from 'expo-linking';
 import type { Identity, IcelandRegion, Intent, ProfileSocial } from '@/types/domain';
 import { parseProfileList, profileIdentityChoices, socialPlatforms, toggleProfileIdentity, updateSocialHandle } from '@/utils/profileExtras';
 import { isAtLeast18, parseDateOnly } from '@/utils/age';
+import { clearOnboardingLocalDraft } from '@/features/onboarding/draftStorage';
+import { useOnboardingDraft } from '@/features/onboarding/useOnboardingDraft';
+import { startOnboardingChecklist } from '@/features/onboarding/checklistStorage';
+import { resumedOnboardingStep } from '@/utils/onboardingDraft';
+import { onboardingChecklistCopy } from '@/i18n/onboardingChecklist';
 
 const regions: IcelandRegion[] = ['capital', 'south', 'west', 'westfjords', 'north', 'east'];
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { locale, setLocale, t, theme, verifyLocation } = useApp();
+  const { locale, setLocale, t, theme, verifyLocation, user } = useApp();
+  const currentAccount = useRef(user?.id);
+  currentAccount.current = user?.id;
   const [step, setStep] = useState(0);
   const [optionalOpen, setOptionalOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -37,7 +44,7 @@ export default function OnboardingScreen() {
       else setChecking(false);
     }).catch(() => { if (active) { setChecking(false); setCheckFailed(true); } });
     return () => { active = false; };
-  }, [checkAttempt, router]);
+  }, [checkAttempt, router, user?.id]);
   const [dob, setDob] = useState('');
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
@@ -54,6 +61,13 @@ export default function OnboardingScreen() {
   const [region, setRegion] = useState<IcelandRegion>('capital');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const draft = useOnboardingDraft(user?.id, { version: 1, step, dob, displayName, pronouns, identity, lookingFor, bio, videos, socials, interests, region }, value => {
+    setStep(resumedOnboardingStep(value)); setDob(value.dob); setDisplayName(value.displayName); setPronouns(value.pronouns);
+    setIdentity(value.identity); setLookingFor(value.lookingFor); setBio(value.bio); setVideos(value.videos);
+    setSocials(value.socials); setInterests(value.interests); setRegion(value.region);
+    setTerms(false); setPrivacy(false); setGuidelines(false); setSensitive(false); setError(''); setLoading(false); setOptionalOpen(false);
+  }, !checking && !checkFailed && step < 5 && !loading);
+  const checklistCopy = onboardingChecklistCopy(locale);
 
   const valid = useMemo(() => {
     if (step === 1) return parseDateOnly(dob) !== null && isAtLeast18(dob);
@@ -75,6 +89,7 @@ export default function OnboardingScreen() {
     if (step === 4) {
       if (!isAtLeast18(dob) || !terms || !privacy || !guidelines || !sensitive || displayName.trim().length < 2 || identity.length === 0) return setError(t('onboarding.required'));
       setLoading(true);
+      const accountId = user?.id;
       try {
         await api.completeOnboarding({
           dateOfBirth: dob,
@@ -93,6 +108,11 @@ export default function OnboardingScreen() {
           guidelinesAccepted: guidelines,
           locale,
         });
+        if (accountId) await Promise.all([
+          clearOnboardingLocalDraft(accountId).catch(() => undefined),
+          startOnboardingChecklist(accountId).catch(() => undefined),
+        ]);
+        if (currentAccount.current !== accountId) return;
         setStep(5);
       } catch {
         setError(t('common.error'));
@@ -121,7 +141,7 @@ export default function OnboardingScreen() {
   ] as const;
   const current = copy[step] ?? copy[0];
 
-  if (checking) return <StartupGate />;
+  if (checking || !draft.ready) return <StartupGate />;
   if (checkFailed) return <StartupGate unavailable retry={() => setCheckAttempt(value => value + 1)} />;
   return (
     <Screen scroll={false} back={step > 0 && step < 5} onBack={() => { if (!loading) { setError(''); setStep(value => Math.max(0, value - 1)); } }}>
@@ -135,6 +155,8 @@ export default function OnboardingScreen() {
         <Text style={[textStyles.eyebrow, { color: theme.colors.accent }]}>{setup.stepLabel(step + 1, copy.length)}</Text>
         <Text accessibilityRole="header" style={[styles.title, { color: theme.colors.text }]}>{step === 3 ? setup.basics : step === 4 ? setup.intentions : t(current[1])}</Text>
         <Text style={[styles.body, { color: theme.colors.textMuted }]}>{step === 3 ? setup.basicsBody : step === 4 ? setup.intentionsBody : t(current[2])}</Text>
+        {draft.restored && step < 5 && <Text accessibilityLiveRegion="polite" style={[styles.hint, { color: theme.colors.textMuted }]}>{checklistCopy.restored}</Text>}
+        {draft.unavailable && step < 5 && <Text accessibilityLiveRegion="polite" style={[styles.hint, { color: theme.colors.textMuted }]}>{checklistCopy.draftUnavailable}</Text>}
 
         <View style={styles.stepBody}>
           {step === 0 && (

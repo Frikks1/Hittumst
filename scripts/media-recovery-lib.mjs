@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 const magic = Buffer.from('HITTUMST-MEDIA-1\0');
-export const approvedBuckets = ['profile-photos','profile-videos','album-media','message-images','meetup-media'];
+export const approvedBuckets = ['profile-photos','profile-videos','album-media','message-images','meetup-media','meetup-room-media','showcase-media','strax-media','social-feed-media'];
 export function recoveryKey(value) {
  if (!/^[a-f0-9]{64}$/i.test(value ?? '')) throw new Error('256_bit_backup_key_required');
  return Buffer.from(value,'hex');
@@ -23,7 +23,8 @@ export function validateRecoveryObject(entry) {
   !/^[a-f0-9-]{36}\/[a-z0-9/._-]+$/i.test(entry.name)||entry.name.split('/').some(piece=>piece==='.'||piece==='..')||
   !/^[a-f0-9-]{36}\.enc$/i.test(entry.file)||!/^[a-f0-9]{64}$/.test(entry.sha256)||
   !Number.isSafeInteger(entry.bytes)||entry.bytes<1||entry.bytes>52428800||
-  !['image/jpeg','image/png','image/webp','video/mp4'].includes(entry.contentType))throw new Error('invalid_backup_manifest');
+  !['image/jpeg','image/png','image/webp','video/mp4', ...(entry.bucket==='profile-photos' ? ['image/gif'] : [])].includes(entry.contentType)||
+  entry.bucket==='social-feed-media'&&entry.contentType!=='image/jpeg')throw new Error('invalid_backup_manifest');
  return entry;
 }
 export async function restoreRecoveryObject(entry,bytes,operations) {

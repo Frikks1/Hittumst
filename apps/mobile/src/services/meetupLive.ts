@@ -24,9 +24,14 @@ import {
   meetupReportInputSchema,
   meetupRoomMessagePageSchema,
   meetupRoomMessageSchema,
+  meetupRoomPollSchema,
+  meetupRoomReactionSchema,
+  meetupRoomReplySchema,
+  meetupRoomMemberSchema,
   meetupRoomSummarySchema,
   meetupRequestSchema,
   meetupRosterEntrySchema,
+  meetupSponsorsSchema,
   meetupSummarySchema,
   meetupUpdateInputSchema,
   normalizeMeetupNotificationKind,
@@ -48,16 +53,27 @@ import {
   type MeetupReportInput,
   type MeetupRequest,
   type MeetupRoomMessage,
+  type MeetupRoomMember,
   type MeetupRoomMessagePage,
   type MeetupRoomSummary,
   type MeetupRsvpVisibility,
   type MeetupRosterEntry,
+  type MeetupSponsor,
   type MeetupSummary,
   type MeetupUpdateInput,
   type PushPlatform,
 } from '@rummal/shared';
 import type { Json } from '@/types/database';
 import { supabase } from './supabase';
+import { z } from 'zod';
+import type { MeetupMediaUpload } from './types';
+
+const meetupMediaUploadSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(['reserved', 'processing', 'approved', 'rejected', 'appealed']),
+  createdAt: z.iso.datetime({ offset: true }),
+  reason: z.string().nullable(),
+});
 
 type JsonRecord = Record<string, Json | undefined>;
 
@@ -107,6 +123,49 @@ function normalizeHost(value: unknown, urls: Map<string, string>) {
   };
 }
 
+async function signedRoomUrls(bucket: 'profile-photos' | 'meetup-room-media', paths: string[]) {
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return new Map<string, string>();
+  const { data, error } = await supabase!.storage.from(bucket).createSignedUrls(unique, 60);
+  if (error) throw error;
+  return new Map((data ?? []).flatMap(item => !item.error && item.path && item.signedUrl ? [[item.path, item.signedUrl] as const] : []));
+}
+
+async function normalizeRoomMessages(values: unknown[]): Promise<MeetupRoomMessage[]> {
+  const rows = values.map(asRecord);
+  const [profiles, mediaUrls] = await Promise.all([
+    signedRoomUrls('profile-photos', rows.flatMap(row => {
+      const sender = asRecord(row?.sender);
+      return typeof sender?.avatarPath === 'string' ? [sender.avatarPath] : [];
+    })),
+    signedRoomUrls('meetup-room-media', rows.flatMap(row => {
+      const media = asRecord(row?.media);
+      return media?.status === 'approved' ? [media.storagePath, media.thumbnailPath].filter((path): path is string => typeof path === 'string') : [];
+    })),
+  ]);
+  return rows.map(row => {
+    const media = asRecord(row?.media);
+    const url = media?.status === 'approved' && typeof media.storagePath === 'string' ? mediaUrls.get(media.storagePath) : undefined;
+    const thumbnailUrl = media?.status === 'approved' && typeof media.thumbnailPath === 'string' ? mediaUrls.get(media.thumbnailPath) : undefined;
+    const rawReply = asRecord(row?.replyTo);
+    const reply = meetupRoomReplySchema.safeParse(rawReply?.unavailable
+      ? { id: rawReply.id, unavailable: true } : rawReply);
+    const poll = meetupRoomPollSchema.safeParse(row?.poll);
+    const reactions = z.array(meetupRoomReactionSchema).max(64).safeParse(row?.reactions);
+    return meetupRoomMessageSchema.parse({
+      id: row?.id, roomId: row?.roomId, sender: normalizeHost(row?.sender, profiles),
+      kind: row?.kind, body: row?.kind === 'poll' && typeof row.body !== 'string' ? '' : row?.body, linkHostnames: row?.linkHostnames, createdAt: row?.createdAt,
+      ...(typeof row?.hiddenAt === 'string' ? { hiddenAt: row.hiddenAt } : {}),
+      ...(reply.success ? { replyTo: reply.data } : {}),
+      ...(poll.success ? { poll: poll.data } : {}),
+      ...(reactions.success ? { reactions: reactions.data } : {}),
+      ...(typeof row?.isPinned === 'boolean' ? { isPinned: row.isPinned } : {}),
+      ...(typeof row?.pinnedAt === 'string' ? { pinnedAt: row.pinnedAt } : {}),
+      ...(media ? { media: { kind: media.kind, status: media.status, ...(url ? { url } : {}), ...(thumbnailUrl ? { thumbnailUrl } : {}) } } : {}),
+    });
+  });
+}
+
 function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unknown {
   const row = asRecord(value);
   if (!row) return value;
@@ -122,6 +181,10 @@ function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unkno
       ? normalizeMeetupRegion(generalArea.region)
       : null;
   return {
+    feeIsk: row.feeIsk ?? undefined,
+    admissionMode: row.admissionMode,
+    priceMinor: row.priceMinor,
+    currency: row.currency,
     eventProfile: row.eventProfile,
     cover: row.cover, follows: row.follows,
     diagnosisRestricted: row.diagnosisRestricted, requiresDiagnosisVerification: row.requiresDiagnosisVerification,
@@ -264,6 +327,9 @@ async function parseMeetupRoster(value: unknown): Promise<MeetupRosterEntry[]> {
       status: row?.status,
       ...(typeof row?.requestedAt === 'string' ? { requestedAt: row.requestedAt } : {}),
       ...(typeof row?.respondedAt === 'string' ? { respondedAt: row.respondedAt } : {}),
+      ...(row?.isSponsor !== undefined ? { isSponsor: row.isSponsor } : {}),
+      ...(row?.rsvpVisibility !== undefined ? { rsvpVisibility: row.rsvpVisibility } : {}),
+      ...(row?.attendanceState !== undefined ? { attendanceState: row.attendanceState } : {}),
     });
   });
 }
@@ -313,6 +379,7 @@ async function queryPlaceSearchProxy(
 }
 
 export class LiveMeetupService {
+  private pendingRoomMedia = new Map<string, { roomId: string; uri: string; kind: 'photo' | 'video'; mimeType: string; body: string; uploadId: Promise<string> }>();
   async discover(filters: MeetupFilters): Promise<MeetupSummary[]> {
     const parsed = meetupFiltersSchema.parse(filters);
     const { data, error } = await supabase!.rpc('discover_hittingar', {
@@ -354,6 +421,11 @@ export class LiveMeetupService {
     if (error) throw error;
     return rows.flatMap((row, i) => data[i]?.signedUrl ? [meetupMediaSchema.parse({ id: row.id, kind: row.kind, position: row.position, url: data[i].signedUrl })] : []);
   }
+  async listMediaUploads(id: string): Promise<MeetupMediaUpload[]> {
+    const { data, error } = await supabase!.rpc('list_my_media_uploads', { target_type: 'meetup', target_id: id });
+    if (error) throw error;
+    return z.array(meetupMediaUploadSchema).parse(data);
+  }
   async uploadMedia(id: string, uri: string, kind: 'photo' | 'video', mimeType: string) {
     return queueMediaUpload('meetup', id, uri, kind === 'photo' ? 'image' : 'video', mimeType);
   }
@@ -388,6 +460,26 @@ export class LiveMeetupService {
     const { data, error } = await supabase!.rpc('list_meetup_participants', { meetup_id: id });
     if (error) throw error;
     return parseMeetupRoster(data);
+  }
+
+  async listSponsors(id: string): Promise<MeetupSponsor[]> {
+    const client = supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> };
+    const { data, error } = await client.rpc('list_meetup_sponsors', { meetup_id: id });
+    if (error) throw error;
+    // The server removes hidden identities before this media-signing boundary.
+    if (!Array.isArray(data)) throw new Error('invalid_meetup_sponsors');
+    const rows = data;
+    const paths = rows.flatMap(candidate => {
+      const profile = asRecord(asRecord(candidate)?.profile);
+      return typeof profile?.avatarPath === 'string' ? [profile.avatarPath] : [];
+    });
+    const urls = await signedProfileUrls(paths);
+    return meetupSponsorsSchema.parse(rows.map(candidate => {
+      const row = asRecord(candidate);
+      const profile = asRecord(row?.profile);
+      const avatarUrl = profile && typeof profile.avatarPath === 'string' ? urls.get(profile.avatarPath) : undefined;
+      return { ...row, profile: profile ? { id: profile.id, displayName: profile.displayName, ...(avatarUrl ? { avatarUrl } : {}) } : null };
+    }));
   }
 
   async createDraft(input: MeetupDraftInput) {
@@ -513,7 +605,8 @@ export class LiveMeetupService {
       meetup_id: id, cursor: undefined, page_size: 50,
     });
     if (error) throw error;
-    return meetupPublicRosterPageSchema.parse(data);
+    const page = asRecord(data);
+    return meetupPublicRosterPageSchema.parse({ items: await parseMeetupRoster(page?.items), nextCursor: page?.nextCursor });
   }
 
   async listProfileHistory(profileId: string): Promise<MeetupProfileHistoryPage> {
@@ -547,22 +640,85 @@ export class LiveMeetupService {
     if (error) throw error;
   }
 
+  async listChats() {
+    const { meetupChatSummarySchema } = await import('./meetupChatTypes');
+    const { data, error } = await supabase!.rpc('list_meetup_chats');
+    if (error) throw error;
+    const rows = asArray(data).map(asRecord);
+    const urls = await signedRoomUrls('meetup-room-media', rows.flatMap(row => typeof row?.avatarPath === 'string' && !row.isPaused ? [row.avatarPath] : []));
+    return meetupChatSummarySchema.array().parse(rows.map(row => {
+      const { avatarPath, ...summary } = row ?? {};
+      const avatarUrl = typeof avatarPath === 'string' && !row?.isPaused ? urls.get(avatarPath) : undefined;
+      return { ...summary, ...(avatarUrl ? { avatarUrl } : {}) };
+    }));
+  }
+
+  async markRoomRead(roomId: string) {
+    const { error } = await supabase!.rpc('mark_meetup_room_read', { room_id: roomId });
+    if (error) throw error;
+  }
+
   async getRoom(id: string): Promise<MeetupRoomSummary | null> {
     const { data, error } = await supabase!.rpc('get_meetup_room_summary', { meetup_id: id });
     if (error) throw error;
-    return data ? meetupRoomSummarySchema.parse(data) : null;
+    if (!data) return null;
+    const row = asRecord(data);
+    const avatarPath = optionalString(row?.avatarPath);
+    const avatarUrl = avatarPath ? (await signedRoomUrls('meetup-room-media', [avatarPath])).get(avatarPath) : undefined;
+    const { avatarPath: _path, ...summary } = row ?? {};
+    return meetupRoomSummarySchema.parse({ ...summary, ...(avatarUrl ? { avatarUrl } : {}) });
   }
 
   async listRoomMessages(roomId: string, cursor?: string | null): Promise<MeetupRoomMessagePage> {
     const { data, error } = await supabase!.rpc('list_meetup_room_message_page', { room_id: roomId, cursor: decodeMessageCursor(cursor), page_size: 50 });
     if (error) throw error;
-    return meetupRoomMessagePageSchema.parse(data);
+    const page = asRecord(data);
+    return meetupRoomMessagePageSchema.parse({ ...page, items: await normalizeRoomMessages(asArray(page?.items)) });
   }
 
   async sendRoomMessage(roomId: string, body: string, clientMessageId = Crypto.randomUUID()): Promise<MeetupRoomMessage> {
     const { data, error } = await supabase!.rpc('send_meetup_room_message_once', { room_id: roomId, message_id: clientMessageId, body });
     if (error) throw error;
-    return meetupRoomMessageSchema.parse(data);
+    return (await normalizeRoomMessages([data]))[0]!;
+  }
+
+  async listRoomMembers(roomId: string): Promise<MeetupRoomMember[]> {
+    const { data, error } = await supabase!.rpc('list_meetup_room_members', { room_id: roomId });
+    if (error) throw error;
+    const rows = asArray(data).map(asRecord);
+    const urls = await signedRoomUrls('profile-photos', rows.flatMap(row => {
+      const profile = asRecord(row?.profile);
+      return typeof profile?.avatarPath === 'string' ? [profile.avatarPath] : [];
+    }));
+    return rows.map(row => meetupRoomMemberSchema.parse({ ...row, profile: normalizeHost(row?.profile, urls) }));
+  }
+
+  async uploadRoomAvatar(roomId: string, uri: string, mimeType: string) {
+    await queueMediaUpload('meetup_room_avatar', roomId, uri, 'image', mimeType);
+  }
+
+  async removeRoomAvatar(roomId: string) {
+    const { error } = await supabase!.rpc('remove_meetup_room_avatar', { room_id: roomId });
+    if (error) throw error;
+  }
+
+  async sendRoomMedia(roomId: string, uri: string, kind: 'photo' | 'video', mimeType: string, body = '', clientMessageId = Crypto.randomUUID()): Promise<MeetupRoomMessage> {
+    if (body.trim().length > 2000) throw new Error('invalid_message_body');
+    let pending = this.pendingRoomMedia.get(clientMessageId);
+    if (pending && (pending.roomId !== roomId || pending.uri !== uri || pending.kind !== kind || pending.mimeType !== mimeType || pending.body !== body.trim())) throw new Error('message_id_conflict');
+    if (!pending) {
+      const uploadId = queueMediaUpload('meetup_room_message', roomId, uri, kind === 'photo' ? 'image' : 'video', mimeType, [], clientMessageId);
+      pending = { roomId, uri, kind, mimeType, body: body.trim(), uploadId };
+      this.pendingRoomMedia.set(clientMessageId, pending);
+    }
+    let uploadId: string;
+    try { uploadId = await pending.uploadId; }
+    catch (error) { if (this.pendingRoomMedia.get(clientMessageId) === pending) this.pendingRoomMedia.delete(clientMessageId); throw error; }
+    const { data, error } = await supabase!.rpc('send_meetup_room_media_once', { room_id: roomId, message_id: clientMessageId, upload_id: uploadId, body: pending.body });
+    if (error) throw error;
+    const message = (await normalizeRoomMessages([data]))[0]!;
+    this.pendingRoomMedia.delete(clientMessageId);
+    return message;
   }
 
   subscribeRoom(roomId: string, onInvalidate: () => void): () => void {
@@ -572,6 +728,7 @@ export class LiveMeetupService {
       .channel(`hittingur:${roomId}`, { config: { private: true } })
       .on('broadcast', { event: 'message_changed' }, invalidate)
       .on('broadcast', { event: 'membership_changed' }, invalidate)
+      .on('broadcast', { event: 'room_changed' }, invalidate)
       .subscribe(status => { if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'CLOSED') invalidate(); });
     return () => { active = false; void supabase!.removeChannel(channel); };
   }

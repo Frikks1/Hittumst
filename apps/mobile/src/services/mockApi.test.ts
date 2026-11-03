@@ -1,8 +1,72 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFilters } from '@/types/domain';
 import { MockRummalApi } from './mockApi';
+import { defaultProfileAppearance } from '@/utils/profileAppearance';
+import { mainProfilePhotos } from '@/utils/mainProfilePhoto';
 
 vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
+
+describe('demo profile editor', () => {
+  it('keeps the registered birthday and account while saving editor fields', async () => {
+    const api = new MockRummalApi();
+    const original = await api.getOwnProfile();
+    const saved = await api.updateProfile({ id: 'forged', age: 18, dateOfBirth: '2008-01-01', photos: [],
+      displayName: ' Alex ', pronouns: 'they/them', bio: 'Music and coffee', interests: ['Music', 'Coffee'],
+      lookingFor: ['chat', 'friends'], socials: [{ platform: 'spotify', handle: 'alex' }] });
+    expect(saved).toMatchObject({ id: original.id, age: original.age, dateOfBirth: original.dateOfBirth,
+      photos: original.photos, displayName: 'Alex', pronouns: 'they/them', bio: 'Music and coffee',
+      interests: ['Music', 'Coffee'], lookingFor: ['chat', 'friends'], socials: [{ platform: 'spotify', handle: 'alex' }] });
+    saved.interests.push('Modified response');
+    expect((await api.getOwnProfile()).interests).toEqual(['Music', 'Coffee']);
+  });
+  it('rejects invalid edits without partially changing the profile', async () => {
+    const api = new MockRummalApi();
+    const before = await api.getOwnProfile();
+    await expect(api.updateProfile({ displayName: 'Changed', bio: 'x'.repeat(501) })).rejects.toThrow('invalid_profile_bio');
+    expect(await api.getOwnProfile()).toEqual(before);
+  });
+  it('stages one main picture and preserves legacy positions privately after approval', async () => {
+    const api = new MockRummalApi();
+    const before = await api.getOwnProfile();
+    const upload = api.uploadProfilePhoto('file:///replacement.jpg');
+    await expect(api.uploadProfilePhoto('file:///concurrent.jpg')).rejects.toThrow('main_photo_replacement_pending');
+    expect(mainProfilePhotos(await api.getOwnProfile())[0]?.id).toBe(mainProfilePhotos(before)[0]?.id);
+    await upload;
+    const replaced = await api.getOwnProfile();
+    expect(replaced.photos).toHaveLength(before.photos.length + 1);
+    expect(mainProfilePhotos(replaced)).toEqual([expect.objectContaining({ url: 'file:///replacement.jpg', position: 1, status: 'approved' })]);
+    for (const photo of before.photos) expect(replaced.photos.find(item => item.id === photo.id)).toMatchObject({ position: photo.position, url: photo.url, archivedAt: expect.any(String) });
+    await expect(api.updateProfile({ coverPhotoId: before.photos[0]!.id })).rejects.toThrow('cover_requires_own_approved_photo');
+    expect(mainProfilePhotos(await api.getOwnProfile())[0]?.url).toBe('file:///replacement.jpg');
+    await expect(api.removeProfilePhoto('someone-elses-photo')).rejects.toThrow('profile_photo_unavailable');
+  });
+  it('clears a removed cover photo without changing the remaining slots', async () => {
+    const api = new MockRummalApi();
+    const profile = await api.getOwnProfile();
+    await api.updateProfile({ coverPhotoId: profile.photos[0]!.id });
+    await api.removeProfilePhoto(profile.photos[0]!.id);
+    expect((await api.getOwnProfile()).coverPhotoId).toBeNull();
+  });
+});
+
+describe('demo profile appearance', () => {
+  it('defaults older demo profiles and preserves a saved choice across unrelated edits', async () => {
+    const api = new MockRummalApi();
+    expect((await api.getOwnProfile()).appearance).toEqual(defaultProfileAppearance);
+    const appearance = { palette: 'violet', banner: 'midnight', effect: 'sparkles', avatarBorder: 'orbit' } as const;
+    const saved = await api.updateProfile({ appearance });
+    expect(saved.appearance).toEqual(appearance);
+    saved.appearance!.palette = 'ember';
+    expect((await api.updateProfile({ bio: 'New bio' })).appearance).toEqual(appearance);
+    expect((await api.getOwnProfile()).appearance).toEqual(appearance);
+  });
+  it('rejects an invalid choice without partially saving the profile', async () => {
+    const api = new MockRummalApi();
+    const before = await api.getOwnProfile();
+    await expect(api.updateProfile({ displayName: 'Should not save', appearance: { ...defaultProfileAppearance, effect: 'unknown' } as unknown as typeof defaultProfileAppearance })).rejects.toThrow('invalid_profile_appearance');
+    expect(await api.getOwnProfile()).toEqual(before);
+  });
+});
 
 describe('MockRummalApi albums and tags', () => {
   it('matches any selected tag within the category', async () => {

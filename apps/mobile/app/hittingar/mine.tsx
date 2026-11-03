@@ -16,7 +16,6 @@ export default function MyHittingarScreen() {
   const router = useRouter();
   const { t, theme, user, locale } = useApp();
   const { entitlement, limits } = useEntitlement();
-  const paidSponsor = Boolean(entitlement && entitlement.tier !== 'plebbi');
   const [items, setItems] = useState<MeetupDetail[]>([]);
   const [section, setSection] = useState<MySection>('upcoming');
   const [loading, setLoading] = useState(true);
@@ -59,7 +58,7 @@ export default function MyHittingarScreen() {
         ) : visible.map((item) => (
           <View key={item.id} style={styles.item}>
             {item.status !== 'published' && <View style={styles.status}><StatusPill label={t(`hittingar.status.${item.status}`)} tone={item.status === 'draft' ? 'warning' : 'danger'} /></View>}
-            <HittingurCard item={item} paidSponsor={paidSponsor} onSponsor={() => router.push((paidSponsor ? `/wallet?meetupId=${encodeURIComponent(item.id)}` : '/membership') as Href)} onPress={() => router.push(item.capabilities.canEdit ? `/hittingar/${item.id}/manage` as Href : `/hittingar/${item.id}` as Href)} />
+            <HittingurCard item={item} onPress={() => router.push(item.capabilities.canEdit ? `/hittingar/${item.id}/manage` as Href : `/hittingar/${item.id}` as Href)} />
           </View>
         ))}
       </ScrollView>

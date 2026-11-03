@@ -16,6 +16,51 @@ test('manifest denies quarantine and path traversal',()=>{
  for(const update of [{bucket:'media-quarantine'},{file:'../secret'},{name:entry.name+'/../secret'},{bytes:52428801}])
   assert.throws(()=>validateRecoveryObject({...entry,...update}));
 });
+test('manifest preserves approved profile GIFs and rejects GIFs in other media buckets',()=>{
+ validateRecoveryObject({...entry, name:entry.name.replace(/\.jpg$/,'.gif'), contentType:'image/gif'});
+ for(const bucket of ['album-media','message-images','meetup-media','meetup-room-media','profile-videos','showcase-media'])
+  assert.throws(()=>validateRecoveryObject({...entry,bucket,contentType:'image/gif'}));
+});
+
+test('approved archived profile bytes remain recoverable until the owned reference is removed',async()=>{
+ let stored=null;
+ const archived={...entry}; // Archiving changes visibility, not the referenced path or ownership.
+ assert.equal(await restoreRecoveryObject(archived,bytes,{sourceCurrent:async()=>true,targetCurrent:async()=>true,
+  existing:async()=>stored,upload:async(_entry,value)=>{stored=value;},remove:async()=>assert.fail('an archive is not deletion')}),'restored');
+ assert.deepEqual(stored,bytes);
+});
+
+test('feed backups admit approved normalized JPEGs and reject quarantined/video/GIF variants',async()=>{
+ const feed={...entry,bucket:'social-feed-media'};
+ validateRecoveryObject(feed);
+ for(const contentType of ['video/mp4','image/gif','image/png']) assert.throws(()=>validateRecoveryObject({...feed,contentType}));
+ assert.equal(await restoreRecoveryObject(feed,bytes,{sourceCurrent:async()=>false,targetCurrent:async()=>true,
+  upload:async()=>assert.fail('deleted or moderated feed images must stay excluded')}),'excluded');
+});
+
+test('showcase media recovery requires live source eligibility and respects deletion',async()=>{
+ const showcase={...entry,bucket:'showcase-media'};
+ validateRecoveryObject(showcase);
+ assert.equal(await restoreRecoveryObject(showcase,bytes,{sourceCurrent:async()=>false,targetCurrent:async()=>true,
+  upload:async()=>assert.fail('deleted showcase media must stay deleted')}),'excluded');
+ let stored=null;
+ assert.equal(await restoreRecoveryObject(showcase,bytes,{sourceCurrent:async()=>true,targetCurrent:async()=>true,
+  existing:async()=>stored,upload:async(_entry,value)=>{stored=value;},remove:async()=>assert.fail()}),'restored');
+});
+
+test('room media backup restores images, videos, and posters only while room references remain eligible',async()=>{
+ for(const [extension,contentType]of[['.jpg','image/jpeg'],['.mp4','video/mp4'],['-thumb.jpg','image/jpeg']]){
+  const roomMedia={...entry,bucket:'meetup-room-media',name:`${randomUUID()}/${randomUUID()}${extension}`,contentType};
+  validateRecoveryObject(roomMedia);
+  for(const [source,target]of[[false,true],[true,false]]){
+   assert.equal(await restoreRecoveryObject(roomMedia,bytes,{sourceCurrent:async()=>source,targetCurrent:async()=>target,
+    upload:async()=>assert.fail('ineligible room media must stay excluded')}),'excluded');
+  }
+  let stored=null;
+  assert.equal(await restoreRecoveryObject(roomMedia,bytes,{sourceCurrent:async()=>true,targetCurrent:async()=>true,
+   existing:async()=>stored,upload:async(_entry,value)=>{stored=value;},remove:async()=>assert.fail()}),'restored');
+ }
+});
 test('deleted source or target references exclude objects without a write',async()=>{
  for(const [source,target]of[[false,true],[true,false]]){
   const result=await restoreRecoveryObject(entry,bytes,{sourceCurrent:async()=>source,targetCurrent:async()=>target,upload:async()=>assert.fail('must not restore')});

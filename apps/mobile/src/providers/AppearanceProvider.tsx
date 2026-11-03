@@ -41,7 +41,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, [appearance, ready]);
   const value = useMemo<AppearanceContext>(() => ({
-    appearance, ready, storageError, reducedMotion: systemReducedMotion || appearance.reducedMotion,
+    // Preserve saved experiments without allowing them to override the restored design.
+    appearance: { ...appearance, darkPreset: 'forest', accent: 'pink', density: 'comfortable',
+      font: 'system', discoveryLayout: 'grid', chatBackground: 'plain', chatBubble: 'accent' },
+    ready, storageError, reducedMotion: systemReducedMotion || appearance.reducedMotion,
     updateAppearance: patch => { canPersist.current = true; setAppearance(current => parseAppearance({ ...current, ...patch })); },
     resetAppearance: () => { canPersist.current = true; setAppearance({ ...defaultAppearance }); },
   }), [appearance, ready, storageError, systemReducedMotion]);
