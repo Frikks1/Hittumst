@@ -41,11 +41,8 @@ describe('community demo integration', () => {
     expect(await community.listFollowing()).toHaveLength(1);
     expect((await new DemoCommunityApi(new MockRummalApi()).getState(event.id)).follows.event.count).toBe(0);
   });
-  it('keeps sponsorship priority tied to an active event contribution', () => {
-    const api=new MockRummalApi();api.commerce.state.contributions.test={id:'test',eventId:'event',memberId:'demo-me',amount:500,lotIds:[],reversed:false};
-    expect(api.communityDemo.sponsored('event','demo-me')).toBe(true);
-    expect(api.communityDemo.sponsored('other','demo-me')).toBe(false);
-    api.commerce.state.contributions.test.reversed=true;
-    expect(api.communityDemo.sponsored('event','demo-me')).toBe(false);
+  it('gives no member paid priority', () => {
+    const api = new MockRummalApi();
+    expect(api.communityDemo.sponsored('event', 'demo-me')).toBe(false);
   });
 });

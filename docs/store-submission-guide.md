@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Store submission package
 
 Prepared 21 September 2026; health-data worksheet updated 27 September. Draft for owner review; no app has been submitted. See the [Google Play launch status](google-play-launch.md) for current deployment and test-build progress. Preserve name **Hittumst**, version 0.1.0, scheme rummal and both app identifiers **is.rummal.app**. The demo APK is not a Play Store production artifact.

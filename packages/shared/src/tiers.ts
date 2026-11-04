@@ -5,6 +5,8 @@ export type TierId = z.infer<typeof tierIdSchema>;
 export const TIER_IDS = tierIdSchema.options;
 export const ALBUM_MAX_BYTES = 30 * 1024 * 1024;
 export const ALBUM_VIDEO_MAX_MS = 15_000;
+export const FREE_MEMBER_LIMITS = { albums: 6, photos: 30, videos: 3, occurrences: 10, joins: 15 } as const;
+// Legacy IDs are retained for old records; all members have the same free access.
 export const TIERS = {
   plebbi: {
     name: 'plebbi',
@@ -88,8 +90,8 @@ export function freeEntitlement(sandbox = false): Entitlement {
     albumsUsed: 0,
     occurrencesUsed: 0,
     joinsUsed: 0,
-    joinsLimit: 1,
-    joinsRemaining: 1,
+    joinsLimit: FREE_MEMBER_LIMITS.joins,
+    joinsRemaining: FREE_MEMBER_LIMITS.joins,
     month: monthInIceland(),
     purchasesEnabled: false,
     moneyEnabled: false,
@@ -101,7 +103,7 @@ export function requireAlbumCapacity(
   counts: { albums: number; photos?: number; videos?: number },
   kind: 'album' | 'image' | 'video',
 ) {
-  const limits = TIERS[tier];
+  const limits = FREE_MEMBER_LIMITS;
   if (kind === 'album' && counts.albums >= limits.albums) throw new Error('album_limit_reached');
   if (kind !== 'album' && counts.albums > limits.albums) throw new Error('album_downgrade_limit');
   if (kind === 'image' && (counts.photos ?? 0) >= limits.photos)

@@ -65,7 +65,7 @@ export function EventReviews({ detail }: { detail: Pick<MeetupDetail, 'id'> & Pa
         {feedback.attendanceReviewStatus === 'pending' ? <Text style={{ color: theme.colors.textMuted }}>{c('Beiðni um staðfestingu mætingar bíður yfirferðar.', 'Your missed check-in request is awaiting review.')}</Text> : feedback.attendanceReviewStatus === 'rejected' ? <Text style={{ color: theme.colors.textMuted }}>{c('Beiðni um staðfestingu mætingar var hafnað.', 'Your missed check-in request was declined.')}</Text> : <>
           <Button variant="secondary" label={c('Mætti en gleymdi innritun', 'Attended but missed check-in')} onPress={() => setRequestOpen(!requestOpen)} />
           {requestOpen && <>
-            <Text style={{ color: theme.colors.textMuted }}>{c('Þjónustuteymið fer yfir beiðnina. Samþykki veitir rétt til umsagnar; það breytir ekki greiðslum.', 'The moderation team will review your request. Approval enables a review and does not change payments.')}</Text>
+            <Text style={{ color: theme.colors.textMuted }}>{c('Þjónustuteymið fer yfir beiðnina. Samþykki veitir rétt til umsagnar.', 'The moderation team will review your request. Approval enables a review.')}</Text>
             <Field label={c('Lýstu mætingunni (að minnsta kosti 20 stafir)', 'Describe your attendance (at least 20 characters)')} value={reason} onChangeText={setReason} multiline maxLength={2000} />
             <Button label={c('Óska eftir yfirferð', 'Request review')} loading={busy} disabled={reason.trim().length < 20} onPress={() => void run(() => communityApi.requestAttendanceReview(detail.id, reason.trim()))} />
           </>}

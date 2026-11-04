@@ -200,6 +200,14 @@ try {
   record('Readiness requires operator authorization', readyDenied.status === 401);
   const readinessResponse = await fetch(origin + '/api/operations/ready', {headers:{Authorization:'Bearer ' + cronSecret}});
   record('Missing backend cannot report ready', readinessResponse.status === 503 && (await readinessResponse.json()).status === 'degraded');
+  for (const endpoint of ['/api/commerce', '/api/billing/sync', '/api/finance/review', '/api/jobs/commerce', '/api/jobs/billing', '/api/webhooks/revenuecat']) {
+    for (const method of ['GET', 'POST']) {
+      const response = await fetch(origin + endpoint, { method, redirect: 'manual' });
+      const body = await response.json();
+      record(endpoint + ' ' + method + ' rejects retired money operations',
+        response.status === 410 && body.error === 'money_features_removed');
+    }
+  }
   const financeDenied = await fetch(origin + '/finance', {redirect:'manual'});
   record('Finance console requires a staff session', [302,303,307,308].includes(financeDenied.status) && (financeDenied.headers.get('location')??'').includes('/login'));
   const unauthorized = await fetch(origin + '/api/operations/health');

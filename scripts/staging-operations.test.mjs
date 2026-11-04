@@ -26,7 +26,6 @@ function verifiedFetch(worker) {
 const successfulBodies = [
   { complete: 1, retry: 0 },
   { processed: 1, approved: true, cleanup: { cleaned: 1, retry: 0 } },
-  { processed: true, sandbox: true },
   { ok: true, sent: { deliveries: 2 }, receipts: { requested: 1, received: 1 } },
 ];
 test('explicit isolated staging worker configuration is accepted', () =>
@@ -60,11 +59,11 @@ test('valid responses execute all jobs with redirect refusal and credential sepa
     }),
   });
   assert.equal(result.passed, true);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 3);
   for (const { options } of calls) assert.equal(options.redirect, 'error');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer ' + env.STAGING_CRON_SECRET);
-  assert.equal(calls[3].options.headers.Authorization, undefined);
-  assert.equal(calls[3].options.headers['x-worker-secret'], env.STAGING_PUSH_WORKER_SECRET);
+  assert.equal(calls[2].options.headers.Authorization, undefined);
+  assert.equal(calls[2].options.headers['x-worker-secret'], env.STAGING_PUSH_WORKER_SECRET);
   assert.equal(JSON.stringify(result).includes(env.STAGING_CRON_SECRET), false);
 });
 test('retry counts, malformed success, wrong commerce mode and failures keep the monitor red', async () => {
@@ -72,14 +71,13 @@ test('retry counts, malformed success, wrong commerce mode and failures keep the
   const bodies = [
     { complete: 0, retry: 1 },
     { hello: true },
-    { processed: true, sandbox: false },
     { ok: false },
   ];
   const result = await runStagingOperations(stagingOperationsConfig(env), {
     fetchImpl: verifiedFetch(async () => Response.json(bodies[call++])),
   });
   assert.equal(result.passed, false);
-  assert.equal(result.jobs.filter((job) => job.status === 'failed').length, 4);
+  assert.equal(result.jobs.filter((job) => job.status === 'failed').length, 3);
 });
 test('reports omit arbitrary provider bodies, tokens, member identifiers and exception text', async () => {
   let call = 0;
@@ -96,7 +94,7 @@ test('reports omit arbitrary provider bodies, tokens, member identifiers and exc
   });
   assert.equal(result.passed, false);
   assert.equal(JSON.stringify(result).includes(secret), false);
-  assert.equal(result.jobs.length, 4);
+  assert.equal(result.jobs.length, 3);
 });
 
 test('a mislabeled deployment cannot run even one mutating worker', async () => {

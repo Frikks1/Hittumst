@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateReadiness } from './operations-readiness';
 function snapshot() { return {
- workers: Object.fromEntries(['account-deletion','media','commerce','push','voice','billing'].map(name => [name, {state:'passed', ageSeconds:2, successAgeSeconds:2}])),
- queues: Object.fromEntries(['media','cleanup','accountDeletion','push','billing'].map(name => [name,{pending:0,overdue:0,failed:0}])),
+ workers: Object.fromEntries(['account-deletion','media','push','voice'].map(name => [name, {state:'passed', ageSeconds:2, successAgeSeconds:2}])),
+ queues: Object.fromEntries(['media','cleanup','accountDeletion','push'].map(name => [name,{pending:0,overdue:0,failed:0}])),
 }; }
 describe('operational readiness', () => {
  it('requires actual backend metrics and all intended workers', () => {

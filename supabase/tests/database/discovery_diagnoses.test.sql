@@ -7,8 +7,6 @@ update public.profiles set profile_tags=array['gaming'] where id='10000000-0000-
 update public.profiles set profile_tags=array['hiking'] where id='10000000-0000-0000-0000-000000000003';
 update public.profiles set is_profile_visible=false where id='90000000-0000-0000-0000-000000000001';
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true;
-update private.commerce_configuration set mode='sandbox';
-insert into private.member_subscriptions(account_id,tier,paid_until,source) select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
 select ok(not has_table_privilege('authenticated','private.diagnosis_submissions','SELECT'),'members cannot read private records directly');
 select ok(not has_function_privilege('anon','public.diagnosis_action(text,jsonb)','EXECUTE'),'anonymous submissions denied');
 select ok(not has_function_privilege('authenticated','public.claim_diagnosis_cleanup(uuid)','EXECUTE'),'members cannot claim erasure work');

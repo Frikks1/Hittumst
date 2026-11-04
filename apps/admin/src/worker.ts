@@ -3,10 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { GET as media } from './app/api/jobs/media/route';
 import { GET as deletion } from './app/api/jobs/account-deletion/route';
 import { POST as voice } from './app/api/jobs/voice/route';
-import { GET as billing } from './app/api/jobs/billing/route';
-import { GET as commerce } from './app/api/jobs/commerce/route';
 import { operationsHealth } from './lib/operations';
-import { drainWorker, workerNames, type WorkerName } from './lib/jobs/runner';
+import { drainWorker, workerNames, type ActiveWorkerName as WorkerName } from './lib/jobs/runner';
 
 const env = process.env;
 if (env.WORKER_EXECUTION_ROLE !== 'worker' || env.WORKER_SCHEDULER !== 'render')
@@ -32,7 +30,7 @@ const pause = (milliseconds: number) => new Promise<void>(resolve => {
   const timer = setTimeout(done, milliseconds);
   wake.add(done);
 });
-const intervals: Record<WorkerName, number> = { media: 5000, 'account-deletion': 15000, commerce: 30000, push: 60000, voice: 10000, billing: 30000 };
+const intervals: Record<WorkerName, number> = { media: 5000, 'account-deletion': 15000, push: 60000, voice: 10000 };
 async function heartbeat(name: WorkerName, state: 'running' | 'passed' | 'failed', batches = 0) {
   const { error } = await supabase.rpc('record_worker_heartbeat', { worker_name: name, worker_state: state, batches });
   if (error) throw new Error('heartbeat_unavailable');
@@ -49,11 +47,10 @@ async function invoke(name: WorkerName) {
   const request = new Request('http://worker.internal/api/jobs/' + name,
     { method: name === 'voice' ? 'POST' : 'GET',
       headers: { Authorization: 'Bearer ' + (name === 'voice' ? env.VOICE_WORKER_SECRET : env.CRON_SECRET) } });
-  const handler = name === 'media' ? media : name === 'account-deletion' ? deletion : name === 'voice' ? voice : name === 'billing' ? billing : commerce;
+  const handler = name === 'media' ? media : name === 'account-deletion' ? deletion : voice;
   const response = await handler(request);
   const body = await response.json();
-  if ((name === 'commerce' || name === 'billing') && env.HITTUMST_APP_ENV === 'production' && body.sandbox !== false)
-    return { ok: false, body: {} };
+
   return { ok: response.ok, body };
 }
 async function loop(name: WorkerName) {

@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Hittumst release checklist —0.1.0
 
 **Release decision: blocked; not launch-ready.** The requested source changes and local tests are implementation work. The current feature inventory is [feature-verification.md](feature-verification.md); the owner setup sequence is [START-HERE.md](START-HERE.md). Do not promote a historical local test or a demo APK into launch approval.

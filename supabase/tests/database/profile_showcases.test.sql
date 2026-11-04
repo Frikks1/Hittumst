@@ -69,7 +69,7 @@ select throws_ok($$select public.showcase_get(current_setting('test.sc.people'):
 select throws_ok($$select public.showcase_get(current_setting('test.sc.people')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: curated projection contains no protected event data');
 reset role;
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at,series_id,occurrence_index)
-values(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000001','Another occurrence','Synthetic','community',now()-interval '3 days',now()-interval '2 days','open','protected','reykjavik',now(),'published',now(),'97900000-0000-0000-0000-000000000001',3);
+values(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000001','Another occurrence','Synthetic gathering','community',now()-interval '3 days',now()-interval '2 days','open','protected','reykjavik',now(),'published',now(),'97900000-0000-0000-0000-000000000001',3);
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000002','moderator'),(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000003','moderator');
 set local role authenticated;
@@ -114,9 +114,11 @@ set local role authenticated;
 select pg_temp.sc_member(2);
 select set_config('test.sc.reuse',(public.showcase_save(null,0,'hittingar','Selected media reuse','','gallery',null,jsonb_build_array(pg_temp.sc_entry(8,'event',jsonb_build_object(
 'meetupIds',jsonb_build_array(pg_temp.sc_event(3)),'media',jsonb_build_array(jsonb_build_object('id','97400000-0000-0000-0000-000000000002','sourceUploadId','97400000-0000-0000-0000-000000000001','kind','photo','caption','Only this picture'))))))->>'id'),true);
-select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),0,'selecting borrowed private gallery media in a draft does not unlock its bytes');
+-- Original event access and a new showcase reuse grant are separate permissions.
+select ok(private.can_read_meetup_media(pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'event history retains original gallery access independently of showcase reuse');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'selecting borrowed private gallery media in a draft does not unlock its bytes');
 select lives_ok($$select public.showcase_publish(current_setting('test.sc.reuse')::uuid,'everyone',1)$$,'selected source reuse requests scoped consent');
-select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),0,'pending source reuse cannot be signed by the showcase creator');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'pending source reuse cannot be signed by the showcase creator');
 select pg_temp.sc_member(1);
 select is((select value->'snapshot'->'media'->0->>'storagePath' from jsonb_array_elements(public.showcase_list_approvals()) where value->>'showcaseId'=current_setting('test.sc.reuse') and value->>'role'='media'),pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg','uploader preview contains the exact approved source bytes');
 select lives_ok($$select public.showcase_respond_approval((select (value->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) where value->>'showcaseId'=current_setting('test.sc.reuse') and value->>'role'='host'),'approve')$$,'host can approve private context separately');
@@ -124,14 +126,14 @@ select throws_ok($$select public.showcase_get(current_setting('test.sc.reuse')::
 select lives_ok($$select public.showcase_respond_approval((select (value->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) where value->>'showcaseId'=current_setting('test.sc.reuse') and value->>'role'='media'),'approve')$$,'uploader approves only the selected source reuse');
 select throws_ok($$select public.showcase_get(current_setting('test.sc.reuse')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: consented source renders chosen caption');
 select pg_temp.sc_member(2);
-select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),0,'parked showcases cannot unlock borrowed private event media after historical consent');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'parked showcases cannot unlock borrowed private event media after historical consent');
 reset role;
 update private.media_uploads set status='rejected' where id='97400000-0000-0000-0000-000000000001';
 set local role authenticated;
 select pg_temp.sc_member(1);
 select throws_ok($$select public.showcase_get(current_setting('test.sc.reuse')::uuid)$$,'42501','showcase_unavailable','source moderation withdrawal revokes the entry');
 select pg_temp.sc_member(3);
-select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),0,'withdrawn source cannot be newly signed through a showcase');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'withdrawn source cannot be newly signed through a showcase');
 select pg_temp.sc_member(2);
 select set_config('test.sc.group',(public.showcase_save(null,0,'groups','My community','','list',null,jsonb_build_array(pg_temp.sc_entry(5,'group',jsonb_build_object(
 'groupId','97600000-0000-0000-0000-000000000001','groupName','Custom community name','requirements',jsonb_build_object('minAge',21,'maxAge',60,'memberType','Plebb','meetupId',pg_temp.sc_event(4),'text','Informational joining guide')))))->>'id'),true);
@@ -189,7 +191,7 @@ select set_config('test.sc.admin_group',(public.showcase_save(null,0,'groups','A
 select lives_ok($$select public.showcase_publish(current_setting('test.sc.admin_group')::uuid,'everyone',1)$$,'member can request group admin review');
 select pg_temp.sc_member(3);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sc.admin_group') and a->>'role'='group'),1,'active admin receives group request addressed originally to owner');
-select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),0,'pending admin cannot sign another uploader media before exact reuse consent');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sc_event(3)::text||'/97400000-0000-0000-0000-000000000001.jpg'),'pending admin cannot sign another uploader media before exact reuse consent');
 select lives_ok($$select public.showcase_respond_approval((select (value->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) where value->>'showcaseId'=current_setting('test.sc.admin_group') and value->>'role'='group'),'approve')$$,'active admin other than group owner can approve exact revision');
 select is((select value->>'recipientId' from jsonb_array_elements(public.showcase_list_approvals()) where value->>'showcaseId'=current_setting('test.sc.admin_group') and value->>'role'='group'),'10000000-0000-0000-0000-000000000003','group consent identifies the actual approving admin');
 select pg_temp.sc_member(1);

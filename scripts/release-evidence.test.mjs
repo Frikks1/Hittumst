@@ -34,15 +34,15 @@ test('complete evidence matches exact candidate and artifact bytes', (t) => {
   const { gates, context } = fixture(t);
   assert.deepEqual(inspectEvidence(gates, context), []);
 });
-test('unverified subscriptions, commerce and voice cannot silently leave the launch scope', (t) => {
+test('retired money gates are excluded while voice remains required', (t) => {
   const { gates, context } = fixture(t);
   delete gates.subscriptions;
   delete gates.commerce;
   delete gates.voice;
   const issues = inspectEvidence(gates, context);
-  assert.equal(issues.length, 3);
-  assert.ok(issues.some((issue) => issue.includes('subscriptions')));
-  assert.ok(issues.some((issue) => issue.includes('commerce')));
+  assert.equal(issues.length, 1);
+  assert.ok(!issues.some((issue) => issue.includes('subscriptions')));
+  assert.ok(!issues.some((issue) => issue.includes('commerce')));
   assert.ok(issues.some((issue) => issue.includes('voice')));
 });
 test('stale, future, wrong-version and wrong-source evidence is rejected', (t) => {

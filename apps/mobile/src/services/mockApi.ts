@@ -1,8 +1,7 @@
 import { decorateDemoCommunity, DemoCommunityStore, refreshDemoQueue, notifyDemoCommunity, demoEventFollowers, type DemoCommunityBridge } from './communityDemo';
 import { activityRank, matchesActivity, profileOrientationTagsSchema, requiredSexualOrientationSelectionSchema } from '@rummal/shared';
 import { validMessageBody } from '@/utils/chatDelivery';
-import { getPoolSummary, settleEvent, TIERS, type MeetupSponsorship, activeTier, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId, sponsorSupportHistory, meetupSponsorsSchema } from '@rummal/shared';
-import { CommerceDemo } from './commerceDemo';
+import { FREE_MEMBER_LIMITS, type MeetupSponsorship, freeEntitlement, requireAlbumCapacity, requireAlbumMedia, type FinanceCommand, type TierId } from '@rummal/shared';
 import * as Crypto from 'expo-crypto';
 import { mockConversations, mockMessages, mockOwnProfile, mockProfiles } from '@/data/mock';
 import { profileTags } from '@/data/profileTags';
@@ -50,7 +49,7 @@ export class MockRummalApi implements RummalApi {
   private notificationPreferences: NotificationPreferences = { ...defaultNotificationPreferences, mutedConversationIds: [] };
   readonly demoCommunityStore = new DemoCommunityStore();
   readonly communityDemo: DemoCommunityBridge = {
-    sponsored: (id, profileId) => Object.values(this.commerce.state.contributions).some(row => row.eventId === id && row.memberId === profileId && row.amount > 0 && !row.reversed && !row.refundReason),
+    sponsored: () => false,
     feedbackEvent: async id => {
       if (!this.demoCommunityStore.receipts.get(id)?.has(this.own.id) && !this.demoCommunityStore.appeals.get(id)?.has(this.own.id)) return this.getMeetup(id);
       return this.meetupService.get(id);
@@ -66,62 +65,23 @@ export class MockRummalApi implements RummalApi {
     },
     participants: id => this.meetupService.communityParticipants(id),
   };
-  readonly commerce = new CommerceDemo();
-  private get tier(): TierId { const member = this.commerce.state.members['demo-me']!; return activeTier(member.tier, member.paidUntil); }
+  private get tier(): TierId { return 'plebbi'; }
   async getEntitlement() {
-    return { ...freeEntitlement(true), tier: this.tier, paidUntil: this.commerce.state.members['demo-me']!.paidUntil,
-      premiumMonths: this.commerce.state.members['demo-me']!.premiumMonths,
-      albumsUsed: this.albums.filter(a => a.ownerId === this.own.id).length,
+    return { ...freeEntitlement(), albumsUsed: this.albums.filter(a => a.ownerId === this.own.id).length,
       occurrencesUsed: this.meetupService.hostedUsage(), joinsUsed: this.meetupService.joinedUsage(),
-      joinsLimit: TIERS[this.tier].joins, joinsRemaining: Math.max(0, TIERS[this.tier].joins - this.meetupService.joinedUsage()) };
+      joinsRemaining: Math.max(0, FREE_MEMBER_LIMITS.joins - this.meetupService.joinedUsage()) };
   }
-  async setSandboxTier(tier: TierId) { this.commerce.setTier(tier); return this.getEntitlement(); }
-  async getWallet() { return this.commerce.snapshot(); }
+  async setSandboxTier(_tier: TierId): Promise<never> { throw new Error('money_features_removed'); }
+  async getWallet(): Promise<never> { throw new Error('money_features_removed'); }
   async getPendingFinanceCommand() { return null; }
   async listMediaUploads(_albumId: string) { return []; }
   async appealMediaUpload(_id: string) { throw new Error('appeal_unavailable'); }
-  private premiumProfile={effect:false,badge:false};
-  async getPremiumProfile(id:string) { if(id!==this.own.id){await this.getProfile(id);return {effect:false,badge:false,months:0};} const premium=this.tier==='plebba_kongur';return {effect:premium&&this.premiumProfile.effect,badge:premium&&this.premiumProfile.badge,months:premium&&this.premiumProfile.badge?this.commerce.state.members[this.own.id]!.premiumMonths:0}; }
-  async setPremiumProfile(effect:boolean,badge:boolean) {if((effect||badge)&&this.tier!=='plebba_kongur')throw new Error('premium_required');this.premiumProfile={effect,badge};}
-  async walletCommand(command: FinanceCommand) {
-    // Return a committed receipt before checking today's event state or membership.
-    if (this.commerce.state.requests[this.own.id + ':' + command.requestId]) return this.commerce.command(command);
-    if(command.action==='gift') {await this.getProfile(command.recipientId);this.commerce.state.members[command.recipientId]??={tier:'plebbi',paidUntil:null,premiumMonths:0,payoutIdentity:`sandbox:${command.recipientId}`,suspended:false};}
-    const eventId = 'meetupId' in command ? command.meetupId : command.action === 'reverse' ? this.commerce.state.contributions[command.contributionId]?.eventId : undefined;
-    if (eventId) {
-      const meetup = await this.meetupService.get(eventId);
-      const draftAllowed = meetup.status === 'draft' && meetup.host.id === this.own.id && ['contribution_quote', 'pool_info', 'publish_sponsored'].includes(command.action);
-      if (meetup.status !== 'published' && !draftAllowed && command.action !== 'pool_info') throw new Error('pool_closed');
-      if (command.action === 'publish_sponsored' && meetup.host.id !== this.own.id) throw new Error('meetup_forbidden');
-      const old = this.commerce.state.events[meetup.id];
-      this.commerce.state.members[meetup.host.id] ??= { tier: 'plebbi', paidUntil: null, premiumMonths: 0, payoutIdentity: null, suspended: false };
-      this.commerce.state.events[meetup.id] = { ...old, id: meetup.id, hostId: meetup.host.id, startsAt: meetup.startsAt, endsAt: meetup.effectiveEnd,
-        cancelled: meetup.status !== 'published' && !draftAllowed, eligibleAttendees: ['joined','approved'].includes(meetup.viewerState.participationStatus) ? [this.own.id] : [],
-        hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null, review: old?.review ?? 'pending', settled: old?.settled ?? false };
-    }
-    if (command.action === 'publish_sponsored') {
-      let result: unknown;
-      await this.meetupService.publishFunded(command.meetupId, () => { result = this.commerce.command(command); });
-      return result;
-    }
-    return this.commerce.command(command);
-  }
-  private readonly meetupService = new DemoMeetupService(new Date(), () => this.tier, event => {
-    const old = this.commerce.state.events[event.id];
-    const projected = { ...old, id: event.id, hostId: event.hostId, startsAt: event.startsAt, endsAt: event.endsAt,
-      cancelled: event.status === 'cancelled', eligibleAttendees: old?.eligibleAttendees ?? [],
-      hostBps: old?.hostBps ?? null, checkedIn: old?.checkedIn ?? {}, code: old?.code ?? null,
-      review: old?.review ?? 'pending' as const, settled: old?.settled ?? false };
-    const pool = getPoolSummary({ ...this.commerce.state, events: { ...this.commerce.state.events, [event.id]: projected } }, event.id);
-    if (Date.now() < Date.parse(event.startsAt)) {
-      pool.eligibleParticipantCount = event.participantCount;
-      pool.estimatedParticipantReward = event.participantCount > 0 && !['paid_out', 'refunded'].includes(pool.status) ? Math.floor((pool.total - Math.floor(pool.total * pool.hostBps / 10000)) / event.participantCount) : null;
-    }
-    return pool;
-  }, {
-    now: () => new Date(),
-    sponsored: (id, profileId) => this.communityDemo.sponsored(id, profileId),
-    reservedSeats: (event, excluding) => refreshDemoQueue(this.demoCommunityStore, event, Date.now(), profileId => this.communityDemo.eligible(event.id, profileId), profileId => this.communityDemo.sponsored(event.id, profileId))
+  async getPremiumProfile(_id: string) { return { effect: false, badge: false, months: 0 }; }
+  async setPremiumProfile(_effect: boolean, _badge: boolean): Promise<never> { throw new Error('money_features_removed'); }
+  async walletCommand(_command: FinanceCommand): Promise<never> { throw new Error('money_features_removed'); }
+  private readonly meetupService = new DemoMeetupService(new Date(), () => this.tier, undefined, {
+    now: () => new Date(), sponsored: () => false,
+    reservedSeats: (event, excluding) => refreshDemoQueue(this.demoCommunityStore, event, Date.now(), profileId => this.communityDemo.eligible(event.id, profileId))
       .filter(row => row.status === 'offered' && row.profileId !== excluding).length,
   });
   private own: OwnProfile = {
@@ -606,20 +566,7 @@ export class MockRummalApi implements RummalApi {
   async listMyMeetups() { await delay(); return (await this.meetupService.listMine()).filter(event => !this.blocked.has(event.host.id)).map(event => decorateDemoCommunity(event, this.own.id, this.demoCommunityStore)); }
   async listMeetupRequests(id: string) { await delay(); return this.meetupService.listRequests(id); }
   async listMeetupParticipants(id: string) { await delay(); return this.meetupService.listParticipants(id); }
-  async listMeetupSponsors(id: string) {
-    const event = await this.getMeetup(id);
-    if (event.status !== 'published' || event.requiresDiagnosisVerification) return [];
-    const visible = (await this.communityDemo.all()).filter(item => item.status === 'published' && !item.requiresDiagnosisVerification);
-    const scope = event.seriesId ? visible.filter(item => item.seriesId === event.seriesId).map(item => item.id) : [id];
-    const rows = sponsorSupportHistory(this.commerce.state, id, scope).flatMap(({ memberId, ...support }) => {
-      if (this.blocked.has(memberId) || memberId === this.own.id && this.sponsorConsentWithdrawn) return [];
-      const profile = memberId === this.own.id ? this.own : this.profiles.find(item => item.id === memberId);
-      if (!profile) return [];
-      const visibleProfile = memberId === this.own.id ? !this.own.isHidden : this.discoveryFixture(memberId).visible;
-      return [{ ...support, profile: visibleProfile ? { id: profile.id, displayName: profile.displayName, ...(profile.photos[0]?.url ? { avatarUrl: profile.photos[0].url } : {}) } : null }];
-    });
-    return meetupSponsorsSchema.parse(rows);
-  }
+  async listMeetupSponsors(id: string) { await this.getMeetup(id); return []; }
   async getMeetupGender(id: string) { return this.meetupService.getGender(id); }
   async setMeetupGender(id: string, gender: string | null) { return this.meetupService.setGender(id, gender); }
   async listMeetupMedia(id: string) { await this.getMeetup(id); return this.meetupService.listMedia(id); }
@@ -636,8 +583,7 @@ export class MockRummalApi implements RummalApi {
   async publishMeetup(id: string, sponsorship?: MeetupSponsorship) {
     await delay();
     if (!sponsorship) { const event = await this.meetupService.publish(id); notifyDemoCommunity(this.demoCommunityStore, event, 'community_published', 'published', demoEventFollowers(this.demoCommunityStore, event)); return event; }
-    await this.walletCommand({ action: 'publish_sponsored', meetupId: id, ...sponsorship });
-    const event = await this.meetupService.get(id); notifyDemoCommunity(this.demoCommunityStore, event, 'community_published', 'published', demoEventFollowers(this.demoCommunityStore, event)); return event;
+    throw new Error('money_features_removed');
   }
   async deleteMeetupDraft(id: string) { await this.meetupService.deleteDraft(id); await delay(); }
   async joinMeetup(id: string) { await this.getMeetup(id); return this.meetupService.join(id); }
@@ -655,10 +601,7 @@ export class MockRummalApi implements RummalApi {
   }
   async cancelMeetup(id: string) {
     await this.meetupService.cancel(id);
-    if (this.commerce.state.events[id]) {
-      this.commerce.state.events[id]!.cancelled = true;
-      this.commerce.state = settleEvent(this.commerce.state, id, new Date().toISOString());
-    }
+
     await delay();
   }
   async reportMeetup(id: string, input: MeetupReportInput) { await delay(); return this.meetupService.report(id, input); }

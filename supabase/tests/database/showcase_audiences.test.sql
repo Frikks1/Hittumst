@@ -25,8 +25,11 @@ insert into public.group_members(group_id,profile_id,role,status) values
 insert into public.albums(id,owner_id,name) values
 (pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','Private collection title'),
 (pg_temp.sv_id(202),'10000000-0000-0000-0000-000000000001','Someone else collection');
+-- Operator fixtures must not inherit the preceding member's quota context.
+select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claims','{}',true);
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000001','Shared occurrence '||n,'Synthetic','community',
+select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000001','Shared occurrence '||n,'Synthetic gathering','community',
 now()-interval '2 days',now()-interval '1 day','open','protected','reykjavik',now(),'published',now() from generate_series(1,53) n;
 insert into private.community_attendance(meetup_id,profile_id,source)
 select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000002','moderator' from generate_series(1,53) n;
@@ -127,8 +130,12 @@ select pg_temp.sv_member(1);
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: unauthorized viewer cannot learn private album IDs');
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: unauthorized viewer cannot learn title or album link');
 reset role;
-insert into public.album_shares(id,album_id,owner_id,recipient_id,status,expires_at,access_mode)
-values(pg_temp.sv_id(211),pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','accepted',now()+interval '1 hour','indefinite');
+insert into public.conversations(id,participant_low,participant_high,created_by)
+values(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002');
+insert into public.conversation_members(conversation_id,user_id)
+values(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000001'),(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000002') on conflict do nothing;
+insert into public.album_shares(id,album_id,owner_id,recipient_id,conversation_id,status,expires_at,access_mode,shared_version,accepted_at)
+values(pg_temp.sv_id(211),pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',pg_temp.sv_id(210),'accepted',now()+interval '1 hour','indefinite',1,now());
 set local role authenticated;
 select pg_temp.sv_member(1);
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: authorized viewer receives existing share route identifier');
@@ -208,8 +215,11 @@ select ok(public.export_account()?'showcaseGroupMemberPreferences','account expo
 reset role;
 insert into public.friendships(requester_id,addressee_id,status,responded_at)
 values('10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003','accepted',now()) on conflict do nothing;
+-- Operator fixtures must not inherit the preceding member's quota context.
+select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claims','{}',true);
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-values(pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000001','Private journal source','Synthetic','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
+values(pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000001','Private journal source','Synthetic gathering','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000002','moderator'),
 (pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000003','moderator');
@@ -242,8 +252,11 @@ insert into public.group_members(group_id,profile_id,role,status) values
 (pg_temp.sv_id(104),'10000000-0000-0000-0000-000000000001','owner','active'),
 (pg_temp.sv_id(104),'10000000-0000-0000-0000-000000000002','member','active'),
 (pg_temp.sv_id(104),'10000000-0000-0000-0000-000000000003','member','active');
+-- Operator fixtures must not inherit the preceding member's quota context.
+select set_config('request.jwt.claim.sub','',true);
+select set_config('request.jwt.claims','{}',true);
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-values(pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000001','Private contributor source','Synthetic','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
+values(pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000001','Private contributor source','Synthetic gathering','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000002','moderator');
 insert into private.media_uploads(id,owner_id,target_type,target_id,media_type,object_path,status,normalized_path)
@@ -264,7 +277,10 @@ and scope='member:10000000-0000-0000-0000-000000000003'),true);
 set local role authenticated;
 select pg_temp.sv_member(3);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member')),0,'roster reviewer without original outing access gets no private context before host consent');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'pending roster request cannot unlock private borrowed media');
+-- Published event galleries have their own community access policy. Test the
+-- showcase grant separately so existing gallery access cannot mask reuse leaks.
+select is((select count(*)::int from storage.objects where bucket_id='meetup-media' and name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),1,'published event gallery remains readable independently of showcase approval');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'pending roster request cannot unlock private borrowed media');
 select throws_ok($$select public.showcase_respond_approval(current_setting('test.sv.member_grant')::uuid,'approve')$$,'42501','showcase_approval_unavailable','unknown private context cannot be approved through a guessed request ID');
 select pg_temp.sv_member(1);
 select ok(exists(select 1 from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member') and a->>'role'='host'),'original host retains its private-context review request');
@@ -272,39 +288,39 @@ select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(55
 select public.showcase_respond_approval((select (a->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member') and a->>'role'='host'),'approve');
 select pg_temp.sv_member(3);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member')),1,'host-approved private excerpt becomes available to current opted-in roster reviewer');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'host context consent does not substitute for uploader media consent');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'host context consent does not substitute for uploader media consent');
 select pg_temp.sv_member(1);
 select set_config('test.sv.uploader_grant',(select a->>'id' from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member') and a->>'role'='media'),true);
 select public.showcase_respond_approval(current_setting('test.sv.uploader_grant')::uuid,'approve');
 select pg_temp.sv_member(3);
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'parked showcase roster review cannot unlock borrowed media after uploader consent');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'parked showcase roster review cannot unlock borrowed media after uploader consent');
 select throws_ok($$select public.showcase_get(current_setting('test.sv.pending_member')::uuid)$$,'42501','showcase_unavailable','pending manager approval prevents ordinary public story access');
 select pg_temp.sv_member(1);
 select public.showcase_respond_approval(current_setting('test.sv.uploader_grant')::uuid,'revoke');
 select pg_temp.sv_member(3);
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'uploader withdrawal revokes scoped roster media signing');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'uploader withdrawal revokes scoped roster media signing');
 select pg_temp.sv_member(1);
 select public.showcase_respond_approval(current_setting('test.sv.uploader_grant')::uuid,'approve');
 select public.showcase_respond_approval((select (a->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member') and a->>'role'='host'),'revoke');
 select pg_temp.sv_member(3);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member')),0,'host withdrawal removes the private excerpt from pending roster inbox');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'host withdrawal prevents private context media preview even with uploader approval');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'host withdrawal prevents private context media preview even with uploader approval');
 select pg_temp.sv_member(1);
 select public.showcase_respond_approval((select (a->>'id')::uuid from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member') and a->>'role'='host'),'approve');
 select pg_temp.sv_member(3);
 select public.showcase_set_group_member_visibility(pg_temp.sv_id(104),false);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member')),0,'member opt-out removes its pending excerpt request');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'opted-out member has no scoped approval media access');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'opted-out member has no scoped approval media access');
 select throws_ok($$select public.showcase_respond_approval(current_setting('test.sv.member_grant')::uuid,'approve')$$,'42501','showcase_approval_unavailable','opted-out member cannot reactivate private preview consent');
 select public.showcase_set_group_member_visibility(pg_temp.sv_id(104),true);
 select public.showcase_respond_approval(current_setting('test.sv.member_grant')::uuid,'approve');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'renewing old preview permission cannot reopen parked showcase media');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'renewing old preview permission cannot reopen parked showcase media');
 reset role;
 update public.group_members set status='removed' where group_id=pg_temp.sv_id(104) and profile_id='10000000-0000-0000-0000-000000000003';
 set local role authenticated;
 select pg_temp.sv_member(3);
 select is((select count(*)::int from jsonb_array_elements(public.showcase_list_approvals()) a where a->>'showcaseId'=current_setting('test.sv.pending_member')),0,'leaving group removes stale roster approval request');
-select is((select count(*)::int from storage.objects where name=pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),0,'former member cannot sign media through stale roster approval');
+select ok(not private.showcase_can_read_media('meetup-media',pg_temp.sv_id(556)::text||'/'||pg_temp.sv_id(701)::text||'.jpg'),'former member cannot sign media through stale roster approval');
 select throws_ok($$select public.showcase_respond_approval(current_setting('test.sv.member_grant')::uuid,'approve')$$,'42501','showcase_approval_unavailable','former member cannot respond through stale request identifier');
 select finish();
 rollback;

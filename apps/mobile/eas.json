@@ -22,7 +22,8 @@
         "EXPO_PUBLIC_APP_ENV": "staging",
         "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
         "EXPO_PUBLIC_HITTINGAR_ENABLED": "true",
-        "EXPO_NO_DOTENV": "1"
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "Fridrikmg3@gmail.com"
       }
     },
     "play-testing": {
@@ -50,7 +51,8 @@
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_DEV_BYPASS_AUTH": "false",
         "EXPO_PUBLIC_HITTINGAR_ENABLED": "true",
-        "EXPO_NO_DOTENV": "1"
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "Fridrikmg3@gmail.com"
       }
     }
   },

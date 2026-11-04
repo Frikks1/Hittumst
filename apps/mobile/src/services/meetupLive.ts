@@ -181,10 +181,10 @@ function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unkno
       ? normalizeMeetupRegion(generalArea.region)
       : null;
   return {
-    feeIsk: row.feeIsk ?? undefined,
-    admissionMode: row.admissionMode,
-    priceMinor: row.priceMinor,
-    currency: row.currency,
+    feeIsk: 0,
+    admissionMode: 'free',
+    priceMinor: null,
+    currency: null,
     eventProfile: row.eventProfile,
     cover: row.cover, follows: row.follows,
     diagnosisRestricted: row.diagnosisRestricted, requiresDiagnosisVerification: row.requiresDiagnosisVerification,
@@ -213,7 +213,7 @@ function normalizeMeetupRecord(value: unknown, urls: Map<string, string>): unkno
     releasePolicy: row.releasePolicy,
     participantCount: row.participantCount,
     reservedPlaces: row.reservedPlaces ?? 0,
-    ...(row.pool !== undefined ? { pool: row.pool } : {}),
+
     capacity: row.capacity ?? null,
     isFull: row.isFull,
     isExplicit: row.isExplicit,
@@ -463,23 +463,8 @@ export class LiveMeetupService {
   }
 
   async listSponsors(id: string): Promise<MeetupSponsor[]> {
-    const client = supabase as unknown as { rpc: (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: unknown }> };
-    const { data, error } = await client.rpc('list_meetup_sponsors', { meetup_id: id });
-    if (error) throw error;
-    // The server removes hidden identities before this media-signing boundary.
-    if (!Array.isArray(data)) throw new Error('invalid_meetup_sponsors');
-    const rows = data;
-    const paths = rows.flatMap(candidate => {
-      const profile = asRecord(asRecord(candidate)?.profile);
-      return typeof profile?.avatarPath === 'string' ? [profile.avatarPath] : [];
-    });
-    const urls = await signedProfileUrls(paths);
-    return meetupSponsorsSchema.parse(rows.map(candidate => {
-      const row = asRecord(candidate);
-      const profile = asRecord(row?.profile);
-      const avatarUrl = profile && typeof profile.avatarPath === 'string' ? urls.get(profile.avatarPath) : undefined;
-      return { ...row, profile: profile ? { id: profile.id, displayName: profile.displayName, ...(avatarUrl ? { avatarUrl } : {}) } : null };
-    }));
+    await this.get(id);
+    return [];
   }
 
   async createDraft(input: MeetupDraftInput) {

@@ -1,7 +1,7 @@
 {
   "backend": {
     "status": "blocked",
-    "reason": "All 43 source migrations are installed in isolated hosted staging with matching history; all 97 application tables have RLS and all storage buckets are private. Local database regression passed 1,108 assertions on 27 September. Render staging web/worker were deployed on 28 September, with HTTP liveness/login and all six database heartbeats verified after the owner supplied the server key. The account-deletion loop passed only an empty-queue check; media, push, voice, commerce and billing remain unready. Notification/place-search v2 error-handling repairs are deployed and unauthorized-access checks passed. The owner confirmed AWS, MapTiler and LiveKit are not set up. Function secrets/providers, authenticated hosted workflows, recovery and reconciliation of the preserved original hosted baseline are still required; see google-play-launch.md."
+    "reason": "Verified 4 November 2026: staging symsotzagpwzmiyawkpm is ACTIVE_HEALTHY with 43 migrations, 97 application tables and zero users, events or stored objects. Nineteen source migrations are pending, including the free-app migration. The first apply_migration confirmation expired without changes. Apply and verify the full staging upgrade before production. Connected login, media, maps, push, voice and recovery tests remain required."
   },
   "privacy": {
     "status": "pending",
@@ -13,15 +13,15 @@
   },
   "deviceTesting": {
     "status": "pending",
-    "reason": "A development-signed standalone Android demo APK is built and its signature, app identity, bundled code and native alignment are verified. This is separate from a connected release candidate. Physical iPhone, Android and supported iPad tests of authentication, media, calls, purchases, notifications, accessibility and recovery remain unverified."
+    "reason": "A development-signed standalone Android demo APK is built and its signature, app identity, bundled code and native alignment are verified. This is separate from a connected release candidate. Physical iPhone, Android and supported iPad tests of authentication, media, calls, notifications, accessibility and recovery remain unverified."
   },
   "storeMetadata": {
     "status": "pending",
-    "reason": "Brand icons, localized Play feature graphics, descriptions, privacy worksheet and reviewer instructions are prepared. Actual signed-device screenshots, public policy/contact URLs, age declarations and geographically usable review accounts remain required."
+    "reason": "Owner confirmed 4 November 2026: Google Play account is created with verification pending. Fridrikmg3@gmail.com is the available contact address and is recorded for support. Publisher legal name, address, domain, designated safety contact, signed-device screenshots, declarations and reviewer access remain required."
   },
   "recovery": {
     "status": "pending",
-    "reason": "Encrypted media backup/restore, independent deletion tombstones, account quarantine and rollback tooling are implemented. Hosted PITR plus Storage recovery, signing-key rotation, financial reconciliation, alerts and the eight-hour RTO/24-hour general-data RPO drill remain unverified."
+    "reason": "Encrypted media backup/restore, independent deletion tombstones, account quarantine and rollback tooling are implemented. Hosted PITR plus Storage recovery, signing-key rotation, alerts and the eight-hour RTO/24-hour general-data RPO drill remain unverified."
   },
   "hittingar": {
     "status": "pending",
@@ -37,19 +37,11 @@
   },
   "accountLifecycle": {
     "status": "pending",
-    "reason": "Hosted export/deletion, Apple encrypted token custody/revocation, RevenueCat erasure, live-session denial and deletion-aware recovery are implemented with local checks. Connected-provider erasure, physical file sharing, approved retention and full hosted recovery remain required."
+    "reason": "Hosted export/deletion, Apple encrypted token custody/revocation, live-session denial and deletion-aware recovery are implemented with local checks. Connected-provider erasure, physical file sharing, approved retention and full hosted recovery remain required."
   },
   "operations": {
     "status": "blocked",
-    "reason": "Render staging/production configuration, a separate continuous worker, readiness/backlog checks, minimal EU diagnostics and an operator handbook are prepared. Domain, public operator name, monitored support/safety addresses and backup moderator are not chosen. Provisioning, alert delivery and operational drills remain required."
-  },
-  "subscriptions": {
-    "status": "blocked",
-    "reason": "Native store purchase/restore and server-authoritative RevenueCat reconciliation cover renewal, refund, transfer, alias and billing issues. Production sales are closed until accepted providers fund promised cash benefits. Genuine store/RevenueCat sandbox receipts and device lifecycle verification remain required."
-  },
-  "commerce": {
-    "status": "blocked",
-    "reason": "Sandbox wallet, pools, withdrawals, reserves and supplier contracts exist. Written acceptance of the complete funds flow must precede provider-specific production collection, identity, payout, voucher, dispute and reconciliation adapters. No production balances or provider approval are claimed."
+    "reason": "Verified 4 November 2026: Render My Workspace was accessible but listed no services; the recorded staging web service ID returned 404 and the recorded web origin returned HTTP 503. Hosting must be restored or recreated after confirming the account, resource and price. Publisher identity, domain, monitored safety contact, backup moderation, provider configuration, delivered alerts and operational drills remain required."
   },
   "voice": {
     "reason": "LiveKit group audio, member-authorized grants, muted join, leave, moderation/removal, reporting, short leases, reconnect and interruption handling are implemented. Separate EU LiveKit projects and actual signed-device audio/revocation tests remain required; recording and transcription stay disabled.",

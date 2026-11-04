@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Hittumst implementation and release plan
 
 Updated 14 October 2026. This replaces the earlier scope and cost assumptions. The owner's current setup sequence is [START-HERE](START-HERE.md); exact feature acceptance is in the [mobile inventory](feature-verification.md) and [admin inventory](admin-feature-verification.md).

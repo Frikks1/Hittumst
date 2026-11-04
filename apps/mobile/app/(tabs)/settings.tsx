@@ -34,8 +34,6 @@ export default function SettingsScreen() {
       <Text accessibilityRole="header" style={[styles.label,{color:theme.colors.text}]}>{t('settings.chooseAppearance')}</Text>
       <View style={styles.choices}>{(['system','light','dark'] as const).map(mode=><ChoiceChip key={mode} label={t(`settings.${mode}`)} selected={themeMode===mode} onPress={()=>setThemeMode(mode)} />)}</View>
       {notifications.supported && <><Button variant="secondary" icon="notifications-outline" loading={notifications.busy} label={notifications.status === 'enabled' ? (locale === 'is' ? 'Tilkynningar virkar' : 'Notifications enabled') : (locale === 'is' ? 'Virkja tilkynningar' : 'Enable notifications')} onPress={() => void notifications.enable()} />{notifications.status === 'error' && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('privacy.actionFailed')}</Text>}{notifications.status === 'denied' && <Button variant="secondary" label={locale === 'is' ? 'Opna stillingar tilkynninga' : 'Open notification settings'} onPress={() => void Linking.openSettings().catch(() => setError(true))} />}</>}
-      <SettingRow icon="ribbon-outline" title={locale==='is'?'Áskrift og fríðindi':'Membership'} href={'/membership' as Href} />
-      <SettingRow icon="wallet-outline" title={locale==='is'?'Veski':'Wallet'} href={'/wallet' as Href} />
     </View>
     <View style={[styles.group,{backgroundColor:theme.colors.surface,borderColor:theme.colors.border}]}><NotificationSettings /></View>
     <Text style={[textStyles.eyebrow,styles.section,{color:theme.colors.textMuted}]}>{t('settings.privacy')}</Text>

@@ -1,5 +1,5 @@
-const requiredWorkers = ['account-deletion', 'media', 'commerce', 'push', 'voice', 'billing'] as const;
-const queueNames = ['media', 'cleanup', 'accountDeletion', 'push', 'billing'] as const;
+const requiredWorkers = ['account-deletion', 'media', 'push', 'voice'] as const;
+const queueNames = ['media', 'cleanup', 'accountDeletion', 'push'] as const;
 type RecordValue = Record<string, unknown>;
 function object(value: unknown): RecordValue { return value && typeof value === 'object' && !Array.isArray(value) ? value as RecordValue : {}; }
 function count(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 0; }

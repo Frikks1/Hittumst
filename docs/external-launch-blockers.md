@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Launch blockers — current record
 
 Updated 28 September 2026. The agreed scope is [feature-verification.md](feature-verification.md); older audits are historical. **Engineering complete and launch verified are both unconfirmed.** The [Google Play launch record](google-play-launch.md) contains the current staging deployment and verification evidence. Source code and local tests do not establish provider approval or a signed-device result.

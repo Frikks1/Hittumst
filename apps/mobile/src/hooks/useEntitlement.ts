@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { type Entitlement, TIERS } from '@rummal/shared';
+import { type Entitlement, FREE_MEMBER_LIMITS } from '@rummal/shared';
 import { api } from '@/services';
 import { useApp } from '@/providers/AppProvider';
 
@@ -28,5 +28,5 @@ export function useEntitlement() {
     void reload();
     return () => { revision.current += 1; };
   }, [reload]));
-  return { entitlement, limits: TIERS[entitlement?.tier ?? 'plebbi'], error, reload };
+  return { entitlement, limits: FREE_MEMBER_LIMITS, error, reload };
 }

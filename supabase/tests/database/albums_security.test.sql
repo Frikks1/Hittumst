@@ -2,11 +2,7 @@ begin;
 -- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
 insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
 insert into auth.sessions(id,user_id) values('99000000-0000-4000-8000-000000000001','90000000-0000-0000-0000-000000000001');
--- These privacy/participation fixtures need several albums or occurrences.
-update private.commerce_configuration set mode='sandbox';
-insert into private.member_subscriptions(account_id,tier,paid_until,source)
-select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles
-on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
+-- Common free allowances cover these privacy/participation fixtures.
 update private.private_locations set verified_at=now() where profile_id::text like '10000000-%';
 set local search_path = extensions, public, private;
 
@@ -226,11 +222,11 @@ insert into public.album_items (album_id, owner_id, storage_path, media_type, po
 select '30000000-0000-0000-0000-000000000001', auth.uid(),
   '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/fill-' || position || '.jpg',
   'image', position, 1000
-from unnest(array[1,4,5,6,7,8,9,10]) position;
+from generate_series(1,30) position where position not in (2,3);
 set local role authenticated;
 select throws_ok($$insert into public.album_items (album_id, owner_id, storage_path, media_type, position, byte_size)
-    values ('30000000-0000-0000-0000-000000000001', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/eleventh.jpg', 'image', 11, 1000)$$,
-  '23514', 'album_photo_limit_reached', 'the database enforces ten photos per album'
+    values ('30000000-0000-0000-0000-000000000001', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000001/thirty-first.jpg', 'image', 31, 1000)$$,
+  '23514', 'album_photo_limit_reached', 'the database enforces thirty photos per album for every member'
 );
 select throws_ok(
   $$insert into public.album_items (album_id, owner_id, storage_path, media_type, position, byte_size, duration_ms)
@@ -239,10 +235,10 @@ select throws_ok($$insert into public.album_items (album_id, owner_id, storage_p
     values ('30000000-0000-0000-0000-000000000002', auth.uid(), '10000000-0000-0000-0000-000000000001/30000000-0000-0000-0000-000000000002/too-big.jpg', 'image', 2, 31457281)$$, null::text, null::text, 'files over 30 MB are rejected');
 
 insert into public.albums (owner_id, name)
-select auth.uid(), 'Limit ' || number from generate_series(1, 1) number;
+select auth.uid(), 'Limit ' || number from generate_series(1, 4) number;
 select throws_ok(
-  $$insert into public.albums (owner_id, name) values (auth.uid(), 'Eleventh album')$$,
-  '23514', 'album_limit_reached', 'the database enforces three active albums for Plus'
+  $$insert into public.albums (owner_id, name) values (auth.uid(), 'Seventh album')$$,
+  '23514', 'album_limit_reached', 'the database enforces six active albums for every member'
 );
 
 select * from finish();

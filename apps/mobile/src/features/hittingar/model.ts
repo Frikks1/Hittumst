@@ -138,14 +138,7 @@ export function generalAreaLabel(item: Pick<MeetupSummary, 'generalArea'>, local
   return locale === 'is' ? item.generalArea.labelIs : item.generalArea.labelEn;
 }
 
-export function meetupFeeLabel(item: Pick<MeetupSummary, 'feeIsk' | 'admissionMode' | 'priceMinor' | 'currency'>, locale: 'is' | 'en'): string {
-  const amount = item.feeIsk ?? (item.currency === 'ISK' ? item.priceMinor : null);
-  if (amount && amount > 0) return `${amount.toLocaleString(locale === 'is' ? 'is-IS' : 'en-GB')} kr.`;
-  if (item.admissionMode === 'paid' && item.priceMinor && item.currency) {
-    const formatter = new Intl.NumberFormat(locale === 'is' ? 'is-IS' : 'en-GB', { style: 'currency', currency: item.currency });
-    const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-    return formatter.format(item.priceMinor / 10 ** digits);
-  }
+export function meetupFeeLabel(_item: Pick<MeetupSummary, 'feeIsk' | 'admissionMode' | 'priceMinor' | 'currency'>, locale: 'is' | 'en'): string {
   return locale === 'is' ? 'Ókeypis' : 'Free';
 }
 
@@ -240,7 +233,7 @@ export function validateCreateStep(step: number, form: CreateHittingurForm): Tra
     }
   }
   if (step === 3) {
-    if (form.feeIsk && (!/^\d+$/.test(form.feeIsk) || Number(form.feeIsk) > 2_147_483_647)) errors.push('hittingar.create.error.fee');
+    if (form.feeIsk && form.feeIsk !== '0') errors.push('hittingar.create.error.fee');
     if (!form.prohibitedServicesAttested) {
       errors.push('hittingar.create.error.attestation');
     }

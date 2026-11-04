@@ -80,7 +80,7 @@ function draftInput(form: CreateHittingurForm): MeetupDraftInput {
       }
     : null;
   return {
-    ...(!form.preserveLegacyFee ? { feeIsk: Number(form.feeIsk || 0) } : {}),
+    feeIsk: 0,
     eventProfile: form.eventProfile,
     title: form.title.trim(),
     description: form.description.trim(),
@@ -130,7 +130,6 @@ export default function CreateHittingurScreen() {
   const [published, setPublished] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [step, setStep] = useState(0);
-  const [legacyFee, setLegacyFee] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [showAreas, setShowAreas] = useState(false);
   const [pendingMedia, setPendingMedia] = useState<PendingEventMedia[]>([]);
@@ -182,7 +181,6 @@ export default function CreateHittingurScreen() {
           if (!active) return;
           setPublished(detail.status !== 'draft');
           const start = utcToReykjavikFields(detail.startsAt);
-          setLegacyFee(detail.admissionMode === 'paid' && detail.currency && detail.currency !== 'ISK' ? meetupFeeLabel(detail, locale) : null);
           const end = utcToReykjavikFields(detail.endsAt);
           const exact =
             detail.location.state === 'public' || detail.location.state === 'protected_revealed'
@@ -213,8 +211,7 @@ export default function CreateHittingurScreen() {
             accessMode: detail.accessMode,
             locationVisibility: detail.locationVisibility,
             capacity: detail.capacity ? String(detail.capacity) : '',
-            feeIsk: detail.admissionMode === 'paid' && detail.currency !== 'ISK' ? '' : String(detail.feeIsk ?? detail.priceMinor ?? 0),
-            preserveLegacyFee: detail.admissionMode === 'paid' && detail.currency !== 'ISK',
+            feeIsk: '0',
             isExplicit: detail.isExplicit,
             releasePolicy: detail.releasePolicy,
             publicLocationConfirmed: detail.locationVisibility === 'public',
@@ -491,8 +488,6 @@ export default function CreateHittingurScreen() {
           <EventProfileFields value={form.eventProfile} section="admission" onChange={value => setForm(current => ({ ...current, eventProfile: value, accessMode: value.joinMode === 'request' ? 'private' : 'open' }))} />
           {form.eventProfile.joinMode === 'request' && form.applicationQuestions.length > 0 && <ApplicationQuestions value={form.applicationQuestions} onChange={value => update('applicationQuestions', value)} />}
           <Field label={t('hittingar.create.capacityLabel')} value={form.capacity} onChangeText={value => update('capacity', value.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder={t('hittingar.create.capacityPlaceholder')} />
-          {legacyFee ? <Text style={{ color: theme.colors.textMuted }}>{copy('Núverandi þátttökugjald', 'Existing participation fee')}: {legacyFee}</Text> : <><Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{copy('Þátttökugjald', 'Participation fee')}</Text><View style={styles.wrap}><ChoiceChip label={copy('Ókeypis', 'Free')} selected={!Number(form.feeIsk)} onPress={() => update('feeIsk', '0')} /><ChoiceChip label={copy('Gjald', 'Paid')} selected={Number(form.feeIsk) > 0} onPress={() => update('feeIsk', Number(form.feeIsk) > 0 ? form.feeIsk : '1000')} /></View>{form.feeIsk !== '0' && <Field label={copy('Heilar krónur (ISK)', 'Whole ISK amount')} value={form.feeIsk} onChangeText={value => update('feeIsk', value)} keyboardType="number-pad" />}</>}
-          {(legacyFee || Number(form.feeIsk) > 0) && <Text style={[styles.switchBody, { color: theme.colors.textMuted }]}>{copy('Greitt beint til gestgjafa.', 'Paid directly to the host.')}</Text>}
           <Button variant="ghost" icon="options-outline" label={t('hittingar.create.moreSettings')} onPress={() => setAdvanced(value => !value)} />
           {advanced && <View style={styles.form}>
             <Text style={[styles.fieldLabel, { color: theme.colors.text }]}>{t('hittingar.create.categoryLabel')}</Text><View style={styles.wrap}>{HITTINGUR_CATEGORIES.map(value => <ChoiceChip key={value} label={t('hittingar.category.' + value as TranslationKey)} selected={form.category === value} onPress={() => update('category', value)} />)}</View>

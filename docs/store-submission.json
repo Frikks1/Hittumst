@@ -9,11 +9,14 @@
     },
     "googlePlay": {
       "accountType": "personal",
-      "developerName": "Hittumst"
+      "developerName": "Hittumst",
+      "verificationStatus": "pending"
     }
   },
   "storeAvailability": {
-    "countries": ["IS"],
+    "countries": [
+      "IS"
+    ],
     "confirmedByOwner": true
   },
   "ios": {
@@ -51,7 +54,7 @@
   "publisher": {
     "legalName": null,
     "postalAddress": null,
-    "supportEmail": null,
+    "supportEmail": "Fridrikmg3@gmail.com",
     "childSafetyContact": null
   },
   "assets": {
@@ -73,7 +76,7 @@
   },
   "notes": [
     "Descriptions are drafts. Reconcile them with final deployed functionality and owner approval before use.",
-    "Commerce, subscriptions and voice remain intended launch scope with incomplete provider/deployment evidence; do not remove these features from the readiness gate merely because the draft description does not enumerate them.",
+    "Owner removed all money features on 3 November 2026. The app has no subscriptions, wallets, transfers, sponsorships, rewards, vouchers, withdrawals or host entry fees. Voice remains in scope.",
     "No store publication or submission is authorized by this file."
   ]
 }

@@ -3,9 +3,6 @@ set local search_path=extensions,public,private;
 select no_plan();
 insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users on conflict do nothing;
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true where id=1;
-update private.commerce_configuration set mode='sandbox';
-insert into private.member_subscriptions(account_id,tier,paid_until,source) select id,'plebba_kongur',now()+interval '1 month','sandbox' from public.profiles
-on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
 create function pg_temp.member(p_id uuid) returns void language plpgsql as $$begin
  perform set_config('request.jwt.claim.sub',p_id::text,true);
  perform set_config('request.jwt.claim.role','authenticated',true);
@@ -157,27 +154,7 @@ select pg_temp.member('10000000-0000-0000-0000-000000000001');
 select lives_ok($$select public.cancel_meetup(pg_temp.event(4))$$,'host cancels followed event');
 reset role;
 select is((select count(*) from public.notifications where meetup_id=pg_temp.event(4) and recipient_id='10000000-0000-0000-0000-000000000002' and kind='meetup_cancelled'),1::bigint,'event followers receive cancellation even after event leaves discovery');
--- Committed event sponsors have priority; amounts never buy a higher tier.
-reset role;
-insert into public.meetups(id,host_id,title,description,category,starts_at,access_mode,location_visibility,general_area,capacity,prohibited_services_attested_at,status,published_at)
-values(pg_temp.event(5),'10000000-0000-0000-0000-000000000001','Sponsor priority test','Synthetic waitlist ordering test','community',now()+interval '3 days','open','protected','reykjavik',1,now(),'published',now());
-insert into private.meetup_locations(meetup_id,exact_point,discovery_point) select pg_temp.event(5),exact_point,discovery_point from private.meetup_locations where meetup_id=pg_temp.event(1);
-insert into private.community_waitlist(meetup_id,profile_id,queued_at)
-select pg_temp.event(5),case when n=4 then '90000000-0000-0000-0000-000000000001'::uuid else ('10000000-0000-0000-0000-'||lpad(n::text,12,'0'))::uuid end,now()+(n*interval '1 second') from generate_series(2,4) n;
-update private.finance_state set state=jsonb_set(state,'{contributions}',coalesce(state->'contributions','{}')||jsonb_build_object(
- 'priority-small',jsonb_build_object('id','priority-small','eventId',pg_temp.event(5),'memberId','10000000-0000-0000-0000-000000000003','amount',500,'reversed',false),
- 'priority-large',jsonb_build_object('id','priority-large','eventId',pg_temp.event(5),'memberId','90000000-0000-0000-0000-000000000001','amount',5000,'reversed',false))) where id;
-select ok(not has_function_privilege('authenticated','private.community_sponsor_rank(uuid,uuid)','execute'),'sponsor identities cannot be queried through queue ranking');
-select is(private.community_state(pg_temp.event(5),'10000000-0000-0000-0000-000000000003')#>>'{waitlist,position}','1','sponsor precedes earlier nonsponsor');
-select is(private.community_state(pg_temp.event(5),'90000000-0000-0000-0000-000000000001')#>>'{waitlist,position}','2','larger contribution does not overtake earlier sponsor');
-select is(private.community_promote(pg_temp.event(5)),1,'only one place is reserved');
-select is((select status from private.community_waitlist where meetup_id=pg_temp.event(5) and profile_id='10000000-0000-0000-0000-000000000003'),'offered','first sponsor receives offer');
-update private.finance_state set state=jsonb_set(state,'{contributions,priority-large,reversed}','true') where id;
-select is(private.community_state(pg_temp.event(5),'10000000-0000-0000-0000-000000000002')#>>'{waitlist,position}','1','reversal removes priority for future offers');
-select is(private.community_promote(pg_temp.event(5)),0,'later sponsorship cannot displace a reserved offer');
-select is(private.community_sponsor_rank(pg_temp.event(1),'10000000-0000-0000-0000-000000000003'),1,'sponsorship only gives priority at its own occurrence');
-update private.community_waitlist set status='declined',offer_expires_at=null where meetup_id=pg_temp.event(5) and profile_id='10000000-0000-0000-0000-000000000003';
-select is(private.community_promote(pg_temp.event(5)),1,'declined sponsor offer releases the place');
-select is((select status from private.community_waitlist where meetup_id=pg_temp.event(5) and profile_id='10000000-0000-0000-0000-000000000002'),'offered','oldest nonsponsor is offered the released place');
+-- Historical contributions no longer grant queue priority.
+select is(private.community_sponsor_rank(pg_temp.event(1),'10000000-0000-0000-0000-000000000003'),1,'all members have the same queue rank');
 select * from finish();
 rollback;

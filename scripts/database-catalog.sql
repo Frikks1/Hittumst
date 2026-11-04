@@ -17,7 +17,9 @@ with relations as (
     left join pg_attrdef d on d.adrelid=r.oid and d.adnum=a.attnum
   union all
   select 'constraint/'||r.nspname||'.'||r.relname||'.'||c.conname,
-    jsonb_build_object('definition',pg_get_constraintdef(c.oid),'validated',c.convalidated)
+    -- PostgreSQL expands BETWEEN into nested AND terms; dump/restore flattens
+    -- them. Its own formatter removes redundant parentheses, preserving logic.
+    jsonb_build_object('definition',pg_get_constraintdef(c.oid,true),'validated',c.convalidated)
     from relations r join pg_constraint c on c.conrelid=r.oid
   union all
   select 'index/'||r.nspname||'.'||r.relname||'.'||i.relname,

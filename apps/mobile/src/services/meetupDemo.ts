@@ -1,6 +1,6 @@
 import type { MeetupPoolSummary } from '@rummal/shared';
 import type { MeetupMediaUpload } from './types';
-import { generateMeetupOccurrences, monthInIceland, TIERS, type TierId, type MeetupMedia, type MeetupReview } from '@rummal/shared';
+import { generateMeetupOccurrences, monthInIceland, FREE_MEMBER_LIMITS, type TierId, type MeetupMedia, type MeetupReview } from '@rummal/shared';
 import { defaultMeetupEventProfile, meetupEligibility, type MeetupEventProfile } from '@rummal/shared';
 import * as Crypto from 'expo-crypto';
 import {
@@ -706,7 +706,7 @@ export class DemoMeetupService {
       ...(draft.address ? { address: draft.address } : {}),
       ...(draft.arrivalInstructions ? { arrivalInstructions: draft.arrivalInstructions } : {}),
       capacity: draft.capacity ?? null,
-      feeIsk: draft.feeIsk ?? 0,
+      feeIsk: 0,
       baseParticipantCount: 0,
       isExplicit: draft.isExplicit,
       prohibitedServicesAttested: draft.prohibitedServicesAttested,
@@ -775,7 +775,7 @@ export class DemoMeetupService {
     }
     if (update.releasePolicy !== undefined) meetup.releasePolicy = update.releasePolicy;
     if ('capacity' in update) meetup.capacity = update.capacity ?? null;
-    if (update.feeIsk !== undefined) meetup.feeIsk = update.feeIsk;
+    meetup.feeIsk = 0;
     if (update.isExplicit !== undefined) meetup.isExplicit = update.isExplicit;
     if (resetsProhibitedServicesAttestation) {
       meetup.prohibitedServicesAttested = update.prohibitedServicesAttested === true;
@@ -858,7 +858,7 @@ export class DemoMeetupService {
 
   private checkJoinSlot(event: DemoMeetup, profileId: string, startsAt = event.startsAt) {
     const tier = profileId === this.viewerId ? this.tier() : 'plebbi';
-    if (profileId !== event.host.id && this.joinedUsage(monthInIceland(startsAt), profileId, event.id) >= TIERS[tier].joins)
+    if (profileId !== event.host.id && this.joinedUsage(monthInIceland(startsAt), profileId, event.id) >= FREE_MEMBER_LIMITS.joins)
       throw new Error('meetup_join_monthly_limit_reached');
   }
 
@@ -877,7 +877,7 @@ export class DemoMeetupService {
     }
     for (const start of starts) {
       const month = monthInIceland(start); const count = (used.get(month) ?? 0) + 1;
-      if (count > TIERS[this.tier()].occurrences) throw new Error('meetup_monthly_limit_reached');
+      if (count > FREE_MEMBER_LIMITS.occurrences) throw new Error('meetup_monthly_limit_reached');
       used.set(month, count);
     }
   }

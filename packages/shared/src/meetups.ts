@@ -599,7 +599,7 @@ export type MeetupSponsorship = {
 
 const meetupSummaryShape = {
   // ISK has no fractional participation units in this app: 1 stored unit = 1 króna.
-  feeIsk: z.number().int().min(0).max(2_147_483_647).optional(),
+  feeIsk: z.literal(0).optional(),
   admissionMode: z.enum(['free', 'paid']).optional(),
   priceMinor: z.number().int().positive().nullable().optional(),
   currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
@@ -706,7 +706,7 @@ export type MeetupDetail = z.infer<typeof meetupDetailSchema>;
 
 const meetupDraftInputObjectSchema = z
   .object({
-    feeIsk: z.number().int().min(0).max(2_147_483_647).optional(),
+    feeIsk: z.literal(0).optional(),
     title: z.string().trim().min(3).max(100),
     description: z.string().trim().min(10).max(4_000),
     category: meetupCategorySchema,
