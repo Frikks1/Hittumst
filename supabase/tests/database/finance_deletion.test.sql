@@ -15,7 +15,7 @@ select is((select state->'members'->'10000000-0000-0000-0000-000000000003'->'pay
 select is((select state->'events'->'fixture'->>'cancelled' from private.finance_state),'true','host deletion marks the shared pool for refund');
 select is((select revision from private.finance_state),1::bigint,'deletion invalidates in-flight ledger revisions');
 set local role service_role;
-select throws_ok($select public.finance_save(1,'{}'::jsonb)$,'42501',null,'retired financial writers cannot restore a deleted member');
+select throws_ok($$select public.finance_save(1,'{}'::jsonb)$$,'42501',null,'retired financial writers cannot restore a deleted member');
 reset role;
 delete from auth.users where id='10000000-0000-0000-0000-000000000003';
 select is((select state->'members'->'10000000-0000-0000-0000-000000000003'->>'suspended' from private.finance_state),'true','historical claims remain held after account erasure');
