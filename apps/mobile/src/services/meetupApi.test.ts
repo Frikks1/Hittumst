@@ -10,7 +10,7 @@ import { DemoMeetupService } from './meetupDemo';
 vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID() }));
 
 describe('MockRummalApi Hittingar', () => {
-  it('preserves fees across host edits and joins a paid meetup without payment gates', async () => {
+  it('keeps events free across host edits and participation', async () => {
     let viewerId = 'host-fee-test';
     const now = new Date();
     const service = new DemoMeetupService(now, () => 'flottari_plebbi', undefined, { viewerId: () => viewerId });
@@ -21,10 +21,10 @@ describe('MockRummalApi Hittingar', () => {
       accessMode: 'open', locationVisibility: 'protected', releasePolicy: 'immediate',
       generalAreaId: 'reykjavik', capacity: 3, isExplicit: false,
       prohibitedServicesAttested: true, publicLocationConfirmed: false,
-      latitude: 64.1466, longitude: -21.9426, feeIsk: 1500,
+      latitude: 64.1466, longitude: -21.9426, feeIsk: 0,
     });
-    expect(await service.publish(id)).toMatchObject({ feeIsk: 1500, currency: 'ISK' });
-    expect(await service.update(id, { capacity: 4 })).toMatchObject({ feeIsk: 1500 });
+    expect(await service.publish(id)).toMatchObject({ feeIsk: 0, currency: null });
+    expect(await service.update(id, { capacity: 4 })).toMatchObject({ feeIsk: 0 });
     viewerId = 'participant-fee-test';
     await expect(service.update(id, { feeIsk: 0 })).rejects.toThrow('meetup_forbidden');
     await expect(service.join(id)).resolves.toMatchObject({ status: 'joined' });
@@ -72,7 +72,6 @@ describe('MockRummalApi Hittingar', () => {
 
   it('creates a safe draft, publishes it, and accepts capacity one', async () => {
     const api = new MockRummalApi();
-    await api.setSandboxTier('flottari_plebbi');
     const startsAt = new Date(Date.now() + 86_400_000).toISOString();
     const input: MeetupDraftInput = {
       title: 'Lítill hittingur',

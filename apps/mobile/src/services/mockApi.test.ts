@@ -89,7 +89,6 @@ describe('MockRummalApi albums and tags', () => {
 
   it('keeps an outgoing view-once share recipient-only', async () => {
     const api = new MockRummalApi();
-    await api.setSandboxTier('flottari_plebbi');
     const album = await api.createAlbum('Private test');
     const { shareIds } = await api.shareAlbums('p-bjarni', [album.id], 'view_once');
     // The owner cannot open their outgoing share; this guards the recipient-only boundary.
@@ -98,7 +97,6 @@ describe('MockRummalApi albums and tags', () => {
 
   it('shares to several eligible profiles in one action and caps recipients at five', async () => {
     const api = new MockRummalApi();
-    await api.setSandboxTier('flottari_plebbi');
     const album = await api.createAlbum('Small circle');
     const result = await api.shareAlbums(['p-bjarni', 'p-elias'], [album.id], '1_hour');
     expect(Object.keys(result.conversationIds)).toEqual(['p-bjarni', 'p-elias']);

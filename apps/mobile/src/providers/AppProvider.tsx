@@ -1,5 +1,4 @@
 import { diagnosisReleaseEnabled } from '@/services/diagnoses';
-import { clearSubscriptionIdentity } from '@/services/subscriptions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { type Href, useRouter } from 'expo-router';
@@ -294,7 +293,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user && ready) void clearSubscriptionIdentity().catch(() => undefined);
   }, [user, ready]);
 
   const signOut = useCallback(async () => {

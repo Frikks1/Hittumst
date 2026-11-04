@@ -18,7 +18,7 @@ export default async function AttendanceReviewsPage({ searchParams }: { searchPa
     demo: 'Demo mode contains no private attendance cases.',
   };
   return <main className="page-shell">
-    <PageHeader eyebrow="Community" title="Missed check-ins" description="Review attendance claims using the available evidence. Decisions are audited and do not change sponsorship payments." />
+    <PageHeader eyebrow="Community" title="Missed check-ins" description="Review attendance claims using the available evidence. Decisions are audited." />
     {query.state && <p role="status">{messages[query.state] ?? 'Refresh the queue.'}</p>}
     {result.error || !parsed.success ? <p role="alert">The attendance review queue is unavailable. Please retry.</p>
       : !parsed.data.length ? <p>No attendance claims are waiting.</p>

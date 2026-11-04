@@ -1,5 +1,7 @@
-export const workerNames = ['account-deletion', 'media', 'commerce', 'push', 'voice', 'billing'] as const;
-export type WorkerName = (typeof workerNames)[number];
+export const workerNames = ['account-deletion', 'media', 'push', 'voice'] as const;
+// Legacy result parsers remain for reading historical diagnostics only.
+export type ActiveWorkerName = (typeof workerNames)[number];
+export type WorkerName = ActiveWorkerName | 'commerce' | 'billing';
 export type WorkerResult = { ok: boolean; busy: boolean; metrics: Record<string, number> };
 type Body = Record<string, unknown>;
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;

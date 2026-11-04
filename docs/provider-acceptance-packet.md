@@ -1,3 +1,5 @@
+> **Retired on 3 November 2026.** All money features were removed by the owner. This document is historical and is not a launch requirement. See [the current checklist](left-to-do-before-launch.md).
+
 # Hittumst — provider acceptance packet
 
 Updated 23 September 2026 for written provider assessment. **Not an approval, agreement, licence or claim that real-money integrations are complete.** The owner sends this through official provider channels; no inquiry was sent automatically.

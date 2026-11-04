@@ -1,3 +1,5 @@
+> **Retired on 3 November 2026.** All money features were removed by the owner. This document is historical and is not a launch requirement. See [the current checklist](left-to-do-before-launch.md).
+
 # Hittumst tiers and launch preparation — 8 September 2026
 
 **Historical delivery record.** The current membership and sponsorship offer is documented in [Hittingar sponsorships](hittingar-sponsorships.md); the historical tables and test evidence below describe the earlier implementation.

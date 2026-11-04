@@ -346,111 +346,11 @@ describe('feedback without excluded person ratings',()=>{
   });
 });
 
-describe('live sponsorship transport and pool contracts', () => {
-  const meetupId = 'c38df8a4-f792-4aa7-aec7-093140d54a04';
-  const requestId = '00000000-0000-4000-8000-000000000001';
-  const retryId = '00000000-0000-4000-8000-000000000002';
-  const pendingKey = 'hittumst:pending-finance:me';
-  const sponsorship = { quoteId: 'confirmed-quote', amount: 500, expectedHostBps: 2500, requestId };
-  const emptyPool: MeetupPoolSummary = {
-    hostBps: 2500, locked: false, total: 0, fundedTotal: 0, paidTotal: 0,
-    refundedTotal: 0, status: 'accepting', estimatedParticipantReward: 0, eligibleParticipantCount: 2,
-  };
-  const summary = {
-    id: meetupId, title: 'Community meetup', category: 'coffee_food', tags: [],
-    startsAt: '2026-10-01T12:00:00Z', effectiveEnd: '2026-10-02T00:00:00Z',
-    generalAreaId: 'reykjavik',
-    generalArea: { id: 'reykjavik', labelIs: 'Reykjavík', labelEn: 'Reykjavik', region: 'capital' },
-    host: { id: 'me', displayName: 'Member' }, accessMode: 'private',
-    locationVisibility: 'protected', releasePolicy: '24_hours_before',
-    participantCount: 2, capacity: null, isFull: false, isExplicit: false, status: 'published',
-    location: { state: 'protected_locked', generalAreaId: 'reykjavik',
-      marker: { latitude: 64.15, longitude: -21.94, isApproximate: true }, releaseAt: '2026-09-30T12:00:00Z' },
-    viewerState: { participationStatus: 'none', hasProtectedLocationAccess: false },
-    capabilities: { canViewExactLocation: false, canViewArrivalInstructions: false, canJoin: false,
-      canRequestAccess: true, canCancelRequest: false, canLeave: false, canEdit: false,
-      canManageRequests: false, canRemoveParticipants: false, canCancel: false, canDeleteDraft: false,
-      canReport: true, canBlockHost: true },
-  };
-  const detail = { ...summary, description: 'A welcoming community gathering.', pool: { ...emptyPool, total: 500, fundedTotal: 500, estimatedParticipantReward: 187 } };
-  const fetchMock = vi.fn();
-  const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
-  beforeEach(() => {
-    mock.storage.clear();
-    mock.getSession.mockResolvedValue({ data: { session: { access_token: 'verified-session-token' } } });
-    fetchMock.mockReset();
-    vi.stubGlobal('fetch', fetchMock);
-    mock.rpc.mockResolvedValue({ data: detail, error: null });
-  });
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('persists the confirmed quote before sending an atomic sponsored publication', async () => {
-    fetchMock.mockImplementation(async (_url, init) => {
-      const payload = JSON.parse(init.body).payload;
-      expect(JSON.parse(mock.storage.get(pendingKey)!)).toEqual(payload);
-      expect(payload).toEqual({ action: 'publish_sponsored', meetupId, ...sponsorship });
-      return response({ contributionId: 'funding-receipt' });
-    });
-    const api = new LiveRummalApi();
-    expect((await api.publishMeetup(meetupId, sponsorship)).pool?.total).toBe(500);
-    expect(fetchMock).toHaveBeenCalledWith('https://commerce.test/api/commerce', expect.objectContaining({
-      method: 'POST', headers: { Authorization: 'Bearer verified-session-token', 'Content-Type': 'application/json' },
-    }));
-    expect(mock.storeWrite).toHaveBeenCalledTimes(1);
-    expect(await api.getPendingFinanceCommand()).toBeNull();
-    expect(mock.rpc.mock.calls).toEqual([['get_meetup', { meetup_id: meetupId }]]);
-  });
-
-  it('keeps the original publication request through a lost acknowledgement and a new adapter instance', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('acknowledgement lost')).mockResolvedValueOnce(response({ contributionId: 'funding-receipt' }));
-    const api = new LiveRummalApi();
-    await expect(api.publishMeetup(meetupId, sponsorship)).rejects.toThrow('acknowledgement lost');
-    expect(await api.getPendingFinanceCommand()).toEqual({ action: 'publish_sponsored', meetupId, ...sponsorship });
-    expect(mock.rpc).not.toHaveBeenCalled();
-    const restarted = new LiveRummalApi();
-    await restarted.publishMeetup(meetupId, { ...sponsorship, requestId: retryId });
-    const payloads = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).payload);
-    expect(payloads).toEqual(Array(2).fill({ action: 'publish_sponsored', meetupId, ...sponsorship }));
-    expect(await restarted.getPendingFinanceCommand()).toBeNull();
-  });
-
-  it('preserves a definitive 422 business code, clears pending funding and permits a corrected quote', async () => {
-    fetchMock.mockResolvedValueOnce(response({ code: 'quote_changed' }, 422)).mockResolvedValueOnce(response({ contributionId: 'corrected-receipt' }));
-    const api = new LiveRummalApi();
-    const failed = api.publishMeetup(meetupId, sponsorship);
-    await expect(failed).rejects.toBeInstanceOf(FinancialCommandRejected);
-    await expect(failed).rejects.toThrow('quote_changed');
-    expect(await api.getPendingFinanceCommand()).toBeNull();
-    expect(mock.rpc).not.toHaveBeenCalled();
-    const corrected = { ...sponsorship, quoteId: 'new-confirmed-quote', requestId: retryId, amount: 1000 };
-    await api.publishMeetup(meetupId, corrected);
-    expect(JSON.parse(fetchMock.mock.calls[1]![1].body).payload).toEqual({ action: 'publish_sponsored', meetupId, ...corrected });
-  });
-
-  it('requests a source-specific quote without creating a pending financial mutation', async () => {
-    fetchMock.mockResolvedValue(response({ id: 'quote', creditAmount: 500, cashAmount: 500, serviceFee: 50, processingFee: 0, totalCash: 550 }));
-    const command = { action: 'contribution_quote' as const, meetupId, amount: 1000, fundingSource: 'mixed' as const, creditAmount: 500, requestId };
-    await new LiveRummalApi().walletCommand(command);
-    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ action: 'command', payload: command });
-    expect(mock.storeWrite).not.toHaveBeenCalled();
-    expect(mock.storage.size).toBe(0);
-  });
-
-  it.each([
-    ['legacy absence', undefined],
-    ['confirmed zero', emptyPool],
-    ['historical paid total and disclosed split', { ...emptyPool, hostBps: 2000, locked: true, status: 'paid_out', fundedTotal: 10000, paidTotal: 10000, estimatedParticipantReward: null }],
-  ] as const)('preserves %s in discovery and detail without a finance request per event', async (_case, pool) => {
-    const wireSummary = { ...summary, ...(pool === undefined ? {} : { pool }) };
-    mock.rpc.mockResolvedValueOnce({ data: [wireSummary], error: null })
-      .mockResolvedValueOnce({ data: { ...wireSummary, description: detail.description }, error: null });
-    const api = new LiveRummalApi();
-    const cards = await api.discoverMeetups(defaultMeetupFilters);
-    const event = await api.getMeetup(meetupId);
-    expect(cards[0]?.pool).toEqual(pool);
-    expect(event.pool).toEqual(pool);
-    if (pool === undefined) { expect(cards[0]).not.toHaveProperty('pool'); expect(event).not.toHaveProperty('pool'); }
-    expect(mock.rpc.mock.calls.map(([name]) => name)).toEqual(['discover_hittingar', 'get_meetup']);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+describe('retired money transport', () => {
+ it('rejects payments without calling providers', async () => {
+  const api = new LiveRummalApi();
+  await expect(api.getWallet()).rejects.toThrow('money_features_removed');
+  await expect(api.setSandboxTier('plebba_kongur')).rejects.toThrow('money_features_removed');
+  await expect(api.walletCommand({ action: 'purchase', amount: 1000, requestId: crypto.randomUUID() })).rejects.toThrow('money_features_removed');
+ });
 });

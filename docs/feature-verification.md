@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** Money features and paid memberships are retired. See [the current launch checklist](left-to-do-before-launch.md). Older financial verification entries below describe historical code.
+
 # Feature verification — current release inventory
 
 Updated 14 October 2026. This is the authoritative **mobile route and workflow inventory** for Hittumst 0.1.0. Older implementation ledgers are historical; their statements that permanent groups or voice are excluded, voice transport is absent, or subscriptions support only a test store are superseded here. Deployment, provider approval and signed-device results must still be recorded in the [release checklist](release-checklist.md).

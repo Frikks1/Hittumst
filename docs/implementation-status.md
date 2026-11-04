@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Hittumst implementation status
 
 Updated 21 September 2026. **The requested full launch remains blocked.** This is the current summary; September 7–8 audits retain historical evidence only. Current scope includes permanent groups and native group voice as well as the complete proposed money product. Explicit sexual media/events and attractiveness ratings are excluded by owner decision.

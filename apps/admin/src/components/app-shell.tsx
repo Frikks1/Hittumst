@@ -16,7 +16,6 @@ const navigation = [
   { href: "/reports", label: "Reports", icon: Icons.MessageSquareWarning },
   { href: "/photos", label: "Photo review", icon: Icons.ImageIcon },
   { href: "/media-appeals", label: "Media appeals", icon: Icons.ImageIcon },
-  { href: "/finance", label: "Finance review", icon: Icons.FileSearch },
   { href: "/audit", label: "Audit log", icon: Icons.FileSearch },
 ];
 

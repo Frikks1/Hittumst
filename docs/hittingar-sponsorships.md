@@ -1,3 +1,5 @@
+> **Retired on 3 November 2026.** All money features were removed by the owner. This document is historical and is not a launch requirement. See [the current checklist](left-to-do-before-launch.md).
+
 # Hittingar sponsorships — 21 September 2026
 
 > **Retired from the app — 14 October 2026:** Sjóður/event pools and sponsorship have been removed from the app's Hittingar creation, discovery, detail and management screens, and wallet sponsorship controls. The contract below is retained only as a historical legacy record for existing backend data and compatibility. It is not current product scope and does not authorize new sponsorship UI.

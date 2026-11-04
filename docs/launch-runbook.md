@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Hittumst launch runbook
 
 Updated 2026-09-08. Status: private source control, initial Linux CI and local clean/upgrade checks verified; public launch blocked.

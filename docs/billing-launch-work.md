@@ -1,3 +1,5 @@
+> **Retired on 3 November 2026.** All money features were removed by the owner. This document is historical and is not a launch requirement. See [the current checklist](left-to-do-before-launch.md).
+
 # Authoritative subscriptions and remaining money launch work
 
 Updated 2026-09-23. The repository contains a RevenueCat reconciliation backend and native purchase/restore integration. **Production purchases remain disabled in code.** Verified subscriptions update digital tier access. Production allowances remain unfunded pending liabilities. In the explicitly configured finance sandbox, the commerce worker reconciles verified SANDBOX paid periods into sponsorship-only credit against the simulated reserve. This is not real funding and does not satisfy the real-money launch gate.

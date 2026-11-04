@@ -3,8 +3,8 @@ begin;
 insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
 set local search_path=extensions,public,private;
 select no_plan();
-update private.commerce_configuration set mode='sandbox';
-select public.finance_save(0,'{"environment":"sandbox","members":{"10000000-0000-0000-0000-000000000003":{"tier":"plebbi","paidUntil":null,"premiumMonths":0,"suspended":false,"payoutIdentity":"sandbox-test"}},"journal":[],"balances":{},"events":{"fixture":{"hostId":"10000000-0000-0000-0000-000000000003","settled":false,"cancelled":false}}}'::jsonb);
+-- Seed historical state as the database owner, without reopening financial APIs.
+update private.finance_state set state='{"environment":"sandbox","members":{"10000000-0000-0000-0000-000000000003":{"tier":"plebbi","paidUntil":null,"premiumMonths":0,"suspended":false,"payoutIdentity":"sandbox-test"}},"journal":[],"balances":{},"events":{"fixture":{"hostId":"10000000-0000-0000-0000-000000000003","settled":false,"cancelled":false}}}'::jsonb where id;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003',true);
 select set_config('request.jwt.claims',(coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb||jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid))::text,true);

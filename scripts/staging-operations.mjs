@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const productionRef = 'yztxwdhajgoqvtsqmcdw';
-const jobNames = ['account-deletion', 'media', 'commerce', 'push'];
+const jobNames = ['account-deletion', 'media', 'push'];
 const allowedCounters = new Set([
   'complete',
   'retry',

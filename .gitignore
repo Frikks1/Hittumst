@@ -57,6 +57,7 @@ apps/mobile/ios/
 artifacts/
 work/
 *.keystore
+/apps/mobile/google-services.json
 *.apk
 *.aab
 *.ipa

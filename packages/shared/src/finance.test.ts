@@ -17,7 +17,7 @@ import {
   type SponsorshipFundingSource,
 } from './finance';
 import {
-  TIERS,
+  TIERS, FREE_MEMBER_LIMITS,
   TIER_IDS,
   requireAlbumCapacity,
   requireAlbumMedia,
@@ -127,7 +127,7 @@ describe('membership limits and cosmetic tenure', () => {
   });
   for (const tier of TIER_IDS)
     it(`${tier}: preserves album limits`, () => {
-      const limits = TIERS[tier];
+      const limits = FREE_MEMBER_LIMITS;
       expect(() =>
         requireAlbumCapacity(tier, { albums: limits.albums - 1 }, 'album'),
       ).not.toThrow();

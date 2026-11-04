@@ -28,10 +28,7 @@ import type { Database, Json } from '@/types/database';
 import type { OnboardingPayload, RummalApi } from './types';
 import { LiveMeetupService } from './meetupLive';
 import { supabase } from './supabase';
-import { entitlementSchema, financeCommandSchema, type FinanceCommand, type FinanceSnapshot, type TierId } from '@rummal/shared';
-import { runtimeEnv } from './env';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { sendFinancialCommand, pendingFinancialCommand, FinancialCommandRejected } from './financialOutbox';
+import { entitlementSchema, type FinanceCommand, type TierId } from '@rummal/shared';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type PhotoRow = Database['public']['Tables']['profile_photos']['Row'];
@@ -149,33 +146,15 @@ async function mapMessage(row: MessageRow): Promise<ChatMessage> {
 
 export class LiveRummalApi implements RummalApi {
   readonly isDemo = false;
-  private async commerceRequest(action: string, payload?: unknown): Promise<unknown> {
-    const { data } = await supabase!.auth.getSession();
-    if (!data.session || !runtimeEnv.websiteUrl) throw new Error('commerce_unavailable');
-    const response = await fetch(`${runtimeEnv.websiteUrl}/api/commerce`, { method: 'POST',
-      headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, payload }) });
-    if (response.status === 422) {
-      const body = await response.json().catch(() => null);
-      throw new FinancialCommandRejected(typeof body?.code === 'string' ? body.code : 'financial_request_rejected');
-    }
-    if (!response.ok) throw new Error('commerce_unavailable');
-    return response.json();
-  }
   async getEntitlement() {
     const {data,error}=await supabase!.rpc('get_my_entitlement');
     if(error)throw error;
     return entitlementSchema.parse(data);
   }
-  async setSandboxTier(tier: TierId) { return entitlementSchema.parse(await this.commerceRequest('sandbox_tier', { tier })); }
-  async getWallet() { return await this.commerceRequest('wallet') as FinanceSnapshot; }
-  async getPendingFinanceCommand() { return pendingFinancialCommand(AsyncStorage,await requireUserId()); }
-  async walletCommand(command: FinanceCommand) {
-    command=financeCommandSchema.parse(command);
-    if (['pool_info', 'checkin_code', 'quote', 'contribution_quote'].includes(command.action)) return this.commerceRequest('command', command);
-    const accountId=await requireUserId();
-    return sendFinancialCommand(AsyncStorage,accountId,command,pending=>this.commerceRequest('command',pending));
-  }
+  async setSandboxTier(_tier: TierId): Promise<never> { throw new Error('money_features_removed'); }
+  async getWallet(): Promise<never> { throw new Error('money_features_removed'); }
+  async getPendingFinanceCommand() { return null; }
+  async walletCommand(_command: FinanceCommand): Promise<never> { throw new Error('money_features_removed'); }
   async listMediaUploads(albumId: string) { const response = await supabase!.rpc('list_media_uploads', { album_id: albumId }); if (response.error) throw response.error; return response.data as { id: string; status: string; createdAt: string; reason: string | null }[]; }
   async appealMediaUpload(id: string) { const response = await supabase!.rpc('appeal_media_upload', { upload_id: id }); if (response.error) throw response.error; }
   async getPremiumProfile(id: string) { const response = await supabase!.rpc('get_premium_profile', { profile_id: id }); if (response.error) throw response.error; return response.data as {effect:boolean;badge:boolean;months:number}; }
@@ -795,7 +774,7 @@ export class LiveRummalApi implements RummalApi {
   async listMyMeetups() { return this.meetupService.listMine(); }
   async listMeetupRequests(id: string) { return this.meetupService.listRequests(id); }
   async listMeetupParticipants(id: string) { return this.meetupService.listParticipants(id); }
-  async listMeetupSponsors(id: string) { return this.meetupService.listSponsors(id); }
+  async listMeetupSponsors(id: string) { await this.meetupService.get(id); return []; }
   async getMeetupGender(id: string) { return this.meetupService.getGender(id); }
   async setMeetupGender(id: string, gender: string | null) { return this.meetupService.setGender(id, gender); }
   async listMeetupMedia(id: string) { return this.meetupService.listMedia(id); }
@@ -810,9 +789,8 @@ export class LiveRummalApi implements RummalApi {
   async createMeetupDraft(input: MeetupDraftInput) { return this.meetupService.createDraft(input); }
   async updateMeetup(id: string, input: MeetupUpdateInput) { return this.meetupService.update(id, input); }
   async publishMeetup(id: string, sponsorship?: MeetupSponsorship) {
-    if (!sponsorship) return this.meetupService.publish(id);
-    await this.walletCommand({ action: 'publish_sponsored', meetupId: id, ...sponsorship });
-    return this.meetupService.get(id);
+    if (sponsorship) throw new Error('money_features_removed');
+    return this.meetupService.publish(id);
   }
   async deleteMeetupDraft(id: string) { return this.meetupService.deleteDraft(id); }
   async joinMeetup(id: string) { return this.meetupService.join(id); }

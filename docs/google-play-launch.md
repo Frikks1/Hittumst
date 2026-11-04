@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Hittumst: Google Play launch
 
 Database verified 27 September 2026; Render setup updated 28 September. **The staging database is installed and the two Render staging services have been provisioned. The app is not yet submitted or publicly launched.** This record supplements [START-HERE.md](START-HERE.md); the release gates in [launch-readiness.json](launch-readiness.json) remain closed.

@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Render and AWS deployment
 
 Prepared 2026-09-21. These files do not create accounts or deploy anything. The application still requires all release gates, real provider credentials, staged verification and store review.

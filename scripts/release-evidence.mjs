@@ -14,8 +14,6 @@ export const launchGates = Object.freeze([
   'media',
   'accountLifecycle',
   'operations',
-  'subscriptions',
-  'commerce',
   'voice',
 ]);
 

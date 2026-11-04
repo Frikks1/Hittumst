@@ -1,3 +1,5 @@
+> **Current product scope (3 November 2026):** Hittumst is free. Money features and paid memberships have been removed. See [the current launch checklist](docs/left-to-do-before-launch.md).
+
 # Hittumst
 
 **Tæknileg yfirferð / reviewer handoff (3. nóvember 2026): [Íslensk afhendingarskýrsla](docs/YFIRFERD-IS.md) · [Ferskar prófunarniðurstöður](docs/YFIRFERD-PROFANIR-2026-11-03.md).** Byrja hér til að skilja nýjustu stöðu; eldri launch-skjöl innihalda dagsettar sögulegar niðurstöður.

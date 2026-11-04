@@ -32,6 +32,7 @@ export function mobileBuildSourceHash(root) {
     'package-lock.json',
     'packages/shared/package.json',
     'apps/mobile/app.json',
+    'apps/mobile/app.config.js',
     'apps/mobile/package.json',
     'apps/mobile/babel.config.js',
     'apps/mobile/metro.config.js',

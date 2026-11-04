@@ -1,3 +1,5 @@
+> **Scope updated 3 November 2026:** The owner removed all money features. Follow [the current launch checklist](left-to-do-before-launch.md). Financial, subscription, sponsorship, voucher and payout requirements below are superseded; voice and the other nonfinancial release checks remain required.
+
 # Launching Hittumst: your setup guide
 
 **Start with [Everything left to do before Google Play launch](left-to-do-before-launch.md).** It is the complete ordered checklist: account setup, remaining engineering, every feature's connected tests, production, Google Play review and the final launch decision. Each step names who does the work and what proves it is complete. The owner notes below are supporting detail; account registration alone does not satisfy the full checklist.

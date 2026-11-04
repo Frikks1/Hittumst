@@ -31,20 +31,20 @@ const completeForm = (overrides: Partial<CreateHittingurForm> = {}): CreateHitti
 });
 
 describe('Hittingar UI behavior', () => {
-  it('uses whole ISK fee labels and preserves legacy foreign-currency labels', () => {
+  it('shows free admission without paid prices', () => {
     expect(meetupFeeLabel({ feeIsk: 0 }, 'en')).toBe('Free');
     expect(meetupFeeLabel({ feeIsk: 0 }, 'is')).toBe('Ókeypis');
-    expect(meetupFeeLabel({ feeIsk: 1500 }, 'en')).toBe('1,500 kr.');
-    expect(meetupFeeLabel({ admissionMode: 'paid', priceMinor: 450, currency: 'EUR' }, 'en')).toBe('€4.50');
+
+    expect(meetupFeeLabel({ admissionMode: 'paid', priceMinor: 450, currency: 'EUR' }, 'en')).toBe('Free');
   });
 
   it.each(['-1', '1.5', '1e3', '2147483648'])('rejects invalid whole-ISK fee %s', feeIsk => {
     expect(validateCreateHittingur(completeForm({ feeIsk }))).toContain('hittingar.create.error.fee');
   });
 
-  it('accepts free and whole-ISK participation fees', () => {
+  it('accepts only free participation', () => {
     expect(validateCreateHittingur(completeForm({ feeIsk: '0' }))).toEqual([]);
-    expect(validateCreateHittingur(completeForm({ feeIsk: '1500' }))).toEqual([]);
+    expect(validateCreateHittingur(completeForm({ feeIsk: '1500' }))).toContain('hittingar.create.error.fee');
   });
   it('chooses an action from server capabilities and participation state', () => {
     expect(primaryHittingurAction(baseItem).kind).toBe('join');

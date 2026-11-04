@@ -153,7 +153,7 @@ function HittingurDetailSession({ id }: DetailParams) {
   return (
     <Screen back title={t('hittingar.detail.title')}>
       <View style={styles.page}>
-        {actionError && <View style={{ gap: 8 }}><Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) ? (locale === 'is' ? 'Þú hefur náð þátttökumörkum fyrir mánuð þessa hittings.' : 'You have reached your joining allowance for this event’s month.') : t('hittingar.actionFailed')}</Text>{/join.*(limit|quota)|(limit|quota).*join/i.test(actionError) && <Button label={locale === 'is' ? 'Skoða áskriftir' : 'View memberships'} onPress={() => router.push('/membership' as Href)} />}</View>}
+        {actionError && <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>{t('hittingar.actionFailed')}</Text>}
         {detail.status !== 'published' && <StatusPill label={t(`hittingar.status.${detail.status}`)} tone={detail.status === 'cancelled' || detail.status === 'moderation_hidden' ? 'danger' : 'warning'} />}
         <EventCover cover={community?.cover ?? detail.cover} title={detail.title} />
         <Text accessibilityRole="header" style={[textStyles.title, { color: theme.colors.text }]}>{detail.title}</Text>
@@ -173,7 +173,6 @@ function HittingurDetailSession({ id }: DetailParams) {
         {detail.diagnosisRestricted && <View style={{ gap: 8 }}><Text style={{ color: theme.colors.text }}>{t('diagnosis.required')}</Text>{detail.requiresDiagnosisVerification && <Button variant="secondary" label={t('diagnosis.title')} onPress={() => router.push('/diagnoses' as Href)} />}</View>}
         {detail.eventProfile && (detail.eventProfile.minAge > 18 || detail.eventProfile.maxAge !== null) && <Text style={{ color: theme.colors.textMuted }}>{t('event.ages')}: {detail.eventProfile.minAge}–{detail.eventProfile.maxAge ?? '120'}</Text>}
         {Boolean(detail.eventProfile?.genderLimits.length) && detail.viewerState.participationStatus !== 'host' && <EventGender id={detail.id} onSaved={() => { void load(); }} />}
-        <InfoRow icon="cash-outline" title={meetupFeeLabel(detail, locale)} body={detail.feeIsk || detail.admissionMode === 'paid' ? (locale === 'is' ? 'Greitt beint til gestgjafa.' : 'Paid directly to the host.') : undefined} />
         {detail.venueMode !== 'online' && detail.location.state === 'protected_locked' && <SafetyNotice title={t('hittingar.location.lockedTitle')}><Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t(detail.viewerState.participationStatus === 'pending' ? 'hittingar.location.pendingBody' : 'hittingar.location.lockedBody')}</Text><Text style={[styles.releaseAt, { color: theme.colors.text }]}>{t('hittingar.location.releasesAt', { value: formatHittingurDate(detail.location.releaseAt, locale) })}</Text></SafetyNotice>}
         {exactLocation && arrivalInstructions && <Text style={[textStyles.body, { color: theme.colors.textMuted }]}>{arrivalInstructions}</Text>}
         {detail.location.state === 'protected_revealed' && <Text style={[styles.noticeBody, { color: theme.colors.textMuted }]}>{t('hittingar.location.doNotShare')}</Text>}
