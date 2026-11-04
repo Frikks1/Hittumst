@@ -63,7 +63,7 @@ jobs:
       - run: deno check --node-modules-dir=none --config supabase/functions/deno.json supabase/functions/push-worker/index.ts supabase/functions/place-search/index.ts
 
   database:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -80,6 +80,15 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.117.0
+      - name: Prepare isolated database ports
+        run: |
+          if systemctl is-active --quiet postgresql.service; then
+            sudo systemctl stop postgresql.service
+          fi
+          if ss -ltnH 'sport = :54322' | grep -q .; then
+            sudo ss -ltnp 'sport = :54322'
+            exit 1
+          fi
       - run: supabase start
       - run: supabase db reset --local
         if: matrix.installation == 'clean'

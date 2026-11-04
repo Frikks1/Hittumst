@@ -9,7 +9,7 @@ Current verified position:
 - Google Play enrollment exists; owner verification is pending.
 - The existing Expo account is signed in. Staging has database and website settings; maps and Firebase/FCM still need configuration. The native configuration now accepts a GOOGLE_SERVICES_JSON file variable for Android package is.rummal.app.
 - Fridrikmg3@gmail.com is the available support address. Publisher name, address, domain and designated safety contact remain unresolved.
-- The free-app source is on a separate local codex/free-app-launch branch. Public upload and database CI are awaiting explicit approval after automatic review rejected the GitHub push.
+- The owner approved public upload. The free-app source is in draft PR #5 on codex/free-app-launch. Website, app and database CI run before merge; no deployment or store submission is implied by upload.
 
 The app is free. There are no paid memberships, wallets, top-ups, member transfers, gifts of money, sponsorship pools, cash rewards, vouchers, withdrawals, paid queue priority or host entry fees. Payment-provider approval, financial reserves, RevenueCat and store subscription products are no longer launch requirements. Group membership, consent withdrawal and community participation remain normal nonfinancial features.
 
