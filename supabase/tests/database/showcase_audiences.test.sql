@@ -127,8 +127,12 @@ select pg_temp.sv_member(1);
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: unauthorized viewer cannot learn private album IDs');
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: unauthorized viewer cannot learn title or album link');
 reset role;
-insert into public.album_shares(id,album_id,owner_id,recipient_id,status,expires_at,access_mode)
-values(pg_temp.sv_id(211),pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','accepted',now()+interval '1 hour','indefinite');
+insert into public.conversations(id,participant_low,participant_high,created_by)
+values(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002');
+insert into public.conversation_members(conversation_id,user_id)
+values(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000001'),(pg_temp.sv_id(210),'10000000-0000-0000-0000-000000000002') on conflict do nothing;
+insert into public.album_shares(id,album_id,owner_id,recipient_id,conversation_id,status,expires_at,access_mode,shared_version,accepted_at)
+values(pg_temp.sv_id(211),pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001',pg_temp.sv_id(210),'accepted',now()+interval '1 hour','indefinite',1,now());
 set local role authenticated;
 select pg_temp.sv_member(1);
 select throws_ok($$select public.showcase_get(current_setting('test.sv.albums')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: authorized viewer receives existing share route identifier');

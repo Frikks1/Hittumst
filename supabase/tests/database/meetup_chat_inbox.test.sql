@@ -81,7 +81,7 @@ select is((select count(*) from jsonb_array_elements(public.list_meetup_chats())
 select throws_ok($$select public.mark_meetup_room_read(current_setting('test.room')::uuid)$$,'42501','active_room_membership_required','blocking the host revokes read marker access');
 reset role;
 delete from public.blocks where blocker_id='10000000-0000-0000-0000-000000000003';
-update public.meetup_rooms set reading_closes_at=now() where id=current_setting('test.room')::uuid;
+update public.meetup_rooms set posting_closes_at=now()-interval '1 second',reading_closes_at=now() where id=current_setting('test.room')::uuid;
 set local role authenticated;
 select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims',jsonb_build_object('sub','10000000-0000-0000-0000-000000000001','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000001')::uuid)::text,true);
