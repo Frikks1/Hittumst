@@ -61,7 +61,7 @@ select set_config('request.jwt.claim.sub','10000000-0000-0000-0000-000000000003'
 select set_config('request.jwt.claims',jsonb_build_object('sub','10000000-0000-0000-0000-000000000003','session_id',md5('pgtap-session:10000000-0000-0000-0000-000000000003')::uuid)::text,true);
 select is((select item->>'id' from jsonb_array_elements(public.list_meetup_chats())item where item->>'meetupId'=current_setting('test.event')),current_setting('test.room'),'approval adds the attendee to the same room');
 reset role;
-update public.meetup_participations set status='joined' where meetup_id=current_setting('test.event')::uuid and profile_id='10000000-0000-0000-0000-000000000002';
+update public.meetup_participations set status='joined',joined_at=now(),responded_at=null,responded_by=null,left_at=null,removed_at=null where meetup_id=current_setting('test.event')::uuid and profile_id='10000000-0000-0000-0000-000000000002';
 set local role authenticated;
 insert into public.blocks(blocker_id,blocked_id) values((select auth.uid()),'10000000-0000-0000-0000-000000000002');
 select set_config('test.chat',(select item::text from jsonb_array_elements(public.list_meetup_chats())item where item->>'meetupId'=current_setting('test.event')),true);

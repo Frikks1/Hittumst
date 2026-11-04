@@ -69,7 +69,7 @@ select throws_ok($$select public.showcase_get(current_setting('test.sc.people'):
 select throws_ok($$select public.showcase_get(current_setting('test.sc.people')::uuid)$$,'42501','showcase_unavailable','parked showcase remains private: curated projection contains no protected event data');
 reset role;
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at,series_id,occurrence_index)
-values(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000001','Another occurrence','Synthetic','community',now()-interval '3 days',now()-interval '2 days','open','protected','reykjavik',now(),'published',now(),'97900000-0000-0000-0000-000000000001',3);
+values(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000001','Another occurrence','Synthetic gathering','community',now()-interval '3 days',now()-interval '2 days','open','protected','reykjavik',now(),'published',now(),'97900000-0000-0000-0000-000000000001',3);
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000002','moderator'),(pg_temp.sc_event(5),'10000000-0000-0000-0000-000000000003','moderator');
 set local role authenticated;

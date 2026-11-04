@@ -26,7 +26,7 @@ insert into public.albums(id,owner_id,name) values
 (pg_temp.sv_id(201),'10000000-0000-0000-0000-000000000002','Private collection title'),
 (pg_temp.sv_id(202),'10000000-0000-0000-0000-000000000001','Someone else collection');
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000001','Shared occurrence '||n,'Synthetic','community',
+select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000001','Shared occurrence '||n,'Synthetic gathering','community',
 now()-interval '2 days',now()-interval '1 day','open','protected','reykjavik',now(),'published',now() from generate_series(1,53) n;
 insert into private.community_attendance(meetup_id,profile_id,source)
 select pg_temp.sv_id(300+n),'10000000-0000-0000-0000-000000000002','moderator' from generate_series(1,53) n;
@@ -209,7 +209,7 @@ reset role;
 insert into public.friendships(requester_id,addressee_id,status,responded_at)
 values('10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003','accepted',now()) on conflict do nothing;
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-values(pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000001','Private journal source','Synthetic','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
+values(pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000001','Private journal source','Synthetic gathering','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000002','moderator'),
 (pg_temp.sv_id(555),'10000000-0000-0000-0000-000000000003','moderator');
@@ -243,7 +243,7 @@ insert into public.group_members(group_id,profile_id,role,status) values
 (pg_temp.sv_id(104),'10000000-0000-0000-0000-000000000002','member','active'),
 (pg_temp.sv_id(104),'10000000-0000-0000-0000-000000000003','member','active');
 insert into public.meetups(id,host_id,title,description,category,starts_at,ends_at,access_mode,location_visibility,general_area,prohibited_services_attested_at,status,published_at)
-values(pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000001','Private contributor source','Synthetic','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
+values(pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000001','Private contributor source','Synthetic gathering','community',now()-interval '2 days',now()-interval '1 day','private','protected','reykjavik',now(),'published',now());
 insert into private.community_attendance(meetup_id,profile_id,source) values
 (pg_temp.sv_id(556),'10000000-0000-0000-0000-000000000002','moderator');
 insert into private.media_uploads(id,owner_id,target_type,target_id,media_type,object_path,status,normalized_path)

@@ -1,11 +1,7 @@
 begin;
 -- Real synthetic sessions for member JWT fixtures; rows roll back with this test.
 insert into auth.sessions(id,user_id) select md5('pgtap-session:'||id::text)::uuid,id from auth.users;
--- These privacy/participation fixtures need several albums or occurrences.
-update private.commerce_configuration set mode='sandbox';
-insert into private.member_subscriptions(account_id,tier,paid_until,source)
-select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles
-on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
+-- Common free allowances cover these privacy/participation fixtures.
 set local search_path=extensions,public,private;
 select no_plan();
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true where id=1;

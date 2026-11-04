@@ -3,10 +3,6 @@ set local search_path=extensions,public,private;
 select no_plan();
 insert into auth.sessions(id,user_id) select md5('pgtap-community:'||id::text)::uuid,id from auth.users on conflict do nothing;
 update private.meetup_feature_config set enabled=true,expanded_launch_gates_passed=true where id=1;
-update private.commerce_configuration set mode='sandbox';
-insert into private.member_subscriptions(account_id,tier,paid_until,source)
-select id,'flottari_plebbi',now()+interval '1 month','sandbox' from public.profiles
-on conflict(account_id) do update set tier=excluded.tier,paid_until=excluded.paid_until;
 create function pg_temp.community_as(p_id uuid,p_aal text default 'aal1') returns void language plpgsql as $$
 begin
  perform set_config('request.jwt.claim.sub',p_id::text,true);
